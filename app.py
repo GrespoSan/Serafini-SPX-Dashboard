@@ -1,0 +1,208 @@
+"""Dashboard pubblicamente raggiungibile, dati privati, ruoli admin/lettore.
+NON ospitare chiavi nell'app o nel repository: solo Streamlit Secrets.
+"""
+import gzip
+import hashlib
+import hmac
+import io
+import json
+import re
+import threading
+import time
+import zipfile
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+import streamlit as st
+from storage import Store
+
+st.set_page_config(page_title='Serafini SPX — Archivio', page_icon='📊', layout='wide')
+
+
+@st.cache_resource
+def login_limiter():
+    # Protezione BASE per processo, non sostituisce un'autenticazione gestita.
+    return {'lock': threading.Lock(), 'failures': {}}
+
+
+def check_password(entered: str, expected: str) -> bool:
+    return bool(expected) and hmac.compare_digest(
+        hashlib.sha256(entered.encode()).digest(),
+        hashlib.sha256(expected.encode()).digest(),
+    )
+
+
+def week_choice() -> str:
+    today = datetime.now(ZoneInfo('Europe/Rome')).date()
+    iso = today.isocalendar()
+    week = st.text_input('Settimana ISO (AAAA-WNN)', value=f'{iso.year}-W{iso.week:02d}')
+    if not re.fullmatch(r'\d{4}-W(?:0[1-9]|[1-4]\d|5[0-3])', week):
+        st.error('Formato settimana non valido.')
+        st.stop()
+    return week
+
+
+st.title('Serafini · SPX — archivio Cboe')
+st.caption('Solo dati acquisiti. Nessun calcolo NET GAMMA applicato ai file originali.')
+
+try:
+    url = st.secrets['SUPABASE_URL']
+    service_key = st.secrets['SUPABASE_SERVICE_ROLE_KEY']
+    admin_password = st.secrets['ADMIN_PASSWORD']
+    viewer_password = st.secrets['FRIENDS_PASSWORD']
+    bucket = st.secrets.get('SUPABASE_BUCKET', 'spx-snapshots')
+    if not all([url, service_key, admin_password, viewer_password]):
+        raise ValueError('Missing config')
+    if hmac.compare_digest(admin_password, viewer_password):
+        raise ValueError('Same passwords')
+except Exception:
+    st.error('Configurazione incompleta: consulta README.md e imposta i Secrets prima dell’uso.')
+    st.stop()
+
+if 'role' not in st.session_state:
+    st.session_state.role = None
+
+if st.session_state.role not in ('admin', 'friend'):
+    st.subheader('Accesso riservato')
+    with st.form('auth', clear_on_submit=True):
+        password = st.text_input('Password', type='password')
+        submitted = st.form_submit_button('Accedi')
+    if submitted:
+        limiter = login_limiter()
+        # Chiave lato server per client session; blocco best-effort, NON IP-based.
+        session_id = st.session_state.get('login_id')
+        if not session_id:
+            import secrets
+            session_id = secrets.token_hex(16)
+            st.session_state.login_id = session_id
+        now = time.monotonic()
+        with limiter['lock']:
+            count, deadline = limiter['failures'].get(session_id, (0, 0))
+            locked = deadline > now
+        if locked:
+            st.error('Troppi tentativi. Riprova tra qualche minuto.')
+        else:
+            role = 'admin' if check_password(password, admin_password) else (
+                'friend' if check_password(password, viewer_password) else None
+            )
+            if role:
+                with limiter['lock']:
+                    limiter['failures'].pop(session_id, None)
+                st.session_state.role = role
+                st.rerun()
+            else:
+                with limiter['lock']:
+                    count += 1
+                    limiter['failures'][session_id] = (count, now + 300 if count >= 5 else 0)
+                st.error('Password non corretta.')
+    st.stop()
+
+role = st.session_state.role
+with st.sidebar:
+    st.write('**Accesso:** ' + ('Amministratore' if role == 'admin' else 'Lettore'))
+    if st.button('Esci'):
+        for key in ('role', 'archive', 'archive_week', 'manifest', 'archive_sha'):
+            st.session_state.pop(key, None)
+        st.rerun()
+    st.caption('Snapshot SPX archiviati in Supabase Storage privato.')
+
+# La connessione al bucket viene creata SOLO DOPO il controllo password.
+store = Store(url, service_key, bucket)
+week = week_choice()
+
+try:
+    snaps = store.list(f'{week}/snapshots/')
+    logs = store.list(f'{week}/logs/')
+except Exception:
+    st.error('Impossibile elencare gli snapshot. Controlla Secrets e bucket Supabase.')
+    st.stop()
+
+c1, c2 = st.columns(2)
+c1.metric('Snapshot distinti', len(snaps))
+c2.metric('Registri', len(logs))
+
+if logs:
+    rows = []
+    for obj in logs:
+        try:
+            value = json.loads(store.download(f"{week}/logs/{obj['name']}"))
+            rows.append({key: value.get(key, '') for key in
+                         ('download_utc', 'scheduled_slot', 'status', 'cboe_timestamp', 'spot_spx', 'contracts', 'file')})
+        except Exception:
+            rows.append({'status': 'Impossibile leggere un registro'})
+    st.dataframe(rows, use_container_width=True, hide_index=True)
+else:
+    st.info('Non sono presenti registri per questa settimana.')
+
+# Il file ZIP non contiene trasformazioni sui dati originali.
+if st.button('Prepara ZIP della settimana', disabled=not (snaps or logs)):
+    try:
+        with st.spinner('Lettura dei file e creazione ZIP...'):
+            out = io.BytesIO()
+            manifest = []
+            with zipfile.ZipFile(out, 'w', compression=zipfile.ZIP_STORED) as archive:
+                for folder, objects in [('snapshots', snaps), ('logs', logs)]:
+                    for obj in objects:
+                        name = obj['name']
+                        path = f'{week}/{folder}/{name}'
+                        content = store.download(path)
+                        if folder == 'snapshots':
+                            raw = gzip.decompress(content)
+                            payload = json.loads(raw)
+                            if not isinstance(payload.get('data', {}).get('options'), list):
+                                raise ValueError('Formato catena Cboe inatteso')
+                        else:
+                            json.loads(content)
+                        archive.writestr(path, content)
+                        manifest.append({'path': path, 'sha256': hashlib.sha256(content).hexdigest(),
+                                         'bytes': len(content)})
+                archive.writestr('manifest.json', json.dumps({'week': week, 'files': manifest}, indent=2))
+            data = out.getvalue()
+            st.session_state.archive = data
+            st.session_state.archive_week = week
+            st.session_state.manifest = manifest
+            st.session_state.archive_sha = hashlib.sha256(data).hexdigest()
+    except Exception:
+        st.error('ZIP non generato: un file è illeggibile o la connessione non è riuscita.')
+
+if st.session_state.get('archive_week') == week and st.session_state.get('archive'):
+    sha = st.session_state.archive_sha
+    st.success(f"ZIP pronto · {len(st.session_state.archive):,} byte · SHA256: {sha}")
+    st.download_button('Scarica ZIP', data=st.session_state.archive,
+                       file_name=f'Serafini_SPX_{week}.zip', mime='application/zip')
+    st.caption('Verifica sul tuo PC di poter aprire lo ZIP. Scaricare non elimina i file dal cloud.')
+
+if role == 'admin':
+    with st.expander('Amministrazione — cancellazione dei file cloud', expanded=False):
+        st.warning('Operazione irreversibile. Prima salva e verifica lo ZIP sul tuo PC.')
+        if st.session_state.get('archive_week') != week or not st.session_state.get('archive'):
+            st.info('Prepara lo ZIP prima di cancellare la settimana.')
+        else:
+            sha = st.session_state.archive_sha
+            typed = st.text_input('Inserisci SHA256 dello ZIP che hai verificato', key=f'sha_{week}')
+            confirmed = st.checkbox('Ho scaricato e verificato lo ZIP sul mio PC', key=f'confirmed_{week}')
+            ready = confirmed and hmac.compare_digest(typed.strip().lower(), sha)
+            if st.button('Elimina settimana da Supabase', disabled=not ready, type='secondary'):
+                exported = {entry['path']: entry['sha256'] for entry in st.session_state.manifest}
+                try:
+                    current = [f'{week}/{folder}/{o["name"]}'
+                               for folder in ('snapshots', 'logs') for o in store.list(f'{week}/{folder}/')]
+                    if set(current) != set(exported):
+                        st.error('Sono arrivati nuovi file dopo lo ZIP: rigenera l’archivio.')
+                    elif any(hashlib.sha256(store.download(path)).hexdigest() != exported[path]
+                             for path in current):
+                        st.error('Un file cloud è cambiato: rigenera l’archivio.')
+                    else:
+                        for i in range(0, len(current), 100):
+                            store.delete(current[i:i + 100])
+                        remaining = [f'{week}/{folder}/{o["name"]}'
+                                     for folder in ('snapshots', 'logs') for o in store.list(f'{week}/{folder}/')]
+                        if remaining:
+                            st.error('Cancellazione parziale: controlla il contenuto del bucket.')
+                        else:
+                            st.session_state.pop('archive', None)
+                            st.success('Settimana eliminata dal cloud. Conserva lo ZIP locale.')
+                except Exception:
+                    st.error('Impossibile completare la cancellazione. Controlla il bucket.')
+else:
+    st.caption('Accesso lettore: download consentito, cancellazione non disponibile.')
