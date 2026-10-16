@@ -55,37 +55,39 @@ def render(store, week, snaps, logs):
         records = [{**r, 'strike_es': r['strike_spx'] + offset if offset is not None else None} for r in result['rows']]
         import pandas as pd
         frame = pd.DataFrame(records)
-        # Visualizzazione a due componenti: Call a destra e Put a sinistra.
-        # I segni qui sono solo convenzione grafica: il calcolo NET GAMMA non cambia.
+        # Slide 144: profilo NET GAMMA, non componenti separate.
+        # Il lato della barra deriva esclusivamente dal segno del NET GAMMA calcolato.
+        # Nessun Gamma Flip imposto o stimato arbitrariamente.
         import plotly.graph_objects as go
         y = frame['strike_es' if offset is not None else 'strike_spx'].tolist()
-        calls = frame['call_gamma_component'].tolist()
-        puts = frame['put_gamma_component'].tolist()
+        net = frame['net_gamma'].astype(float).tolist()
+        colors = ['#2dbb72' if v >= 0 else '#e45757' for v in net]
         fig = go.Figure()
-        fig.add_bar(x=[-v for v in puts], y=y, orientation='h', name='PUT',
-                    marker_color='#e45757', customdata=puts,
-                    hovertemplate='Strike %{y:,.2f}<br>Put: %{customdata:,.2f}<extra></extra>')
-        fig.add_bar(x=calls, y=y, orientation='h', name='CALL',
-                    marker_color='#2dbb72',
-                    hovertemplate='Strike %{y:,.2f}<br>Call: %{x:,.2f}<extra></extra>')
-        max_val = max([abs(float(v)) for v in calls + puts] + [1.0])
-        ticks = [-max_val, -max_val / 2, 0, max_val / 2, max_val]
+        fig.add_bar(
+            x=net, y=y, orientation='h', name='NET GAMMA',
+            marker_color=colors,
+            customdata=frame[['call_gamma_component', 'put_gamma_component']].to_numpy(),
+            hovertemplate=(
+                'Strike %{y:,.2f}<br>NET GAMMA: %{x:,.3f}'
+                '<br>Call: %{customdata[0]:,.3f}'
+                '<br>Put: %{customdata[1]:,.3f}<extra></extra>'
+            ),
+        )
         fig.update_layout(
-            barmode='relative', height=max(520, len(y) * 15),
+            height=max(520, len(y) * 15),
             margin=dict(l=15, r=20, t=40, b=30),
-            title='CALL (verde) / PUT (rosso) per strike',
-            xaxis=dict(range=[-max_val * 1.08, max_val * 1.08],
-                       tickmode='array', tickvals=ticks,
-                       ticktext=[f'{abs(v):,.0f}' for v in ticks],
-                       title='Componente Gamma (valore assoluto)'),
+            title='NET GAMMA per strike — positivo a destra / negativo a sinistra',
+            xaxis=dict(title='NET GAMMA (unità della formula Serafini)', zeroline=True,
+                       zerolinewidth=1, zerolinecolor='#b7bec8'),
             yaxis=dict(title='Strike ES' if offset is not None else 'Strike SPX',
                        tickmode='array', tickvals=y,
                        ticktext=[f'{v:g}' for v in y], type='linear'),
-            legend=dict(orientation='h', y=1.04, x=0),
+            showlegend=False,
             template='plotly_dark',
         )
         fig.add_vline(x=0, line_width=1, line_color='#b7bec8')
-        st.plotly_chart(fig, use_container_width=True, key=f'gamma_split_{title}_{choice}')
+        st.plotly_chart(fig, use_container_width=True, key=f'gamma_net_{title}_{choice}')
+        st.caption('Gamma positivo (verde) e negativo (rosso) sono il segno del NET GAMMA per strike. Il Gamma Flip non viene calcolato né disegnato in questa versione: la sua definizione operativa resta da validare sul materiale Serafini.')
         st.dataframe(frame, use_container_width=True, hide_index=True)
         st.download_button(f'Scarica calcolo CSV {title}', profile_csv(result, offset),
                            file_name=f'NET_GAMMA_{title}_{day.isoformat()}_{choice}.csv', mime='text/csv', key=f'csv_{title}_{choice}')
