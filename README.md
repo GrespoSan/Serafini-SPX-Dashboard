@@ -26,3 +26,23 @@ FRIENDS_PASSWORD = "PASSWORD_FORTE_DIVERSA_PER_GLI_AMICI"
 - I download ZIP sono generati in RAM; l'app Free può avere limiti di memoria. Le due password devono essere diverse.
 - Non possiamo garantire che il file sia stato salvato sul PC: la cancellazione richiede conferma manuale, hash e controllo che i file cloud non siano cambiati. Non elimina automaticamente.
 - La lettura di snapshot SPX da Cboe, la programmazione e il metodo GEX restano invariati.
+
+## Aggiornamento v3 — NET GAMMA in verifica
+
+La dashboard conserva login amministratore/amici, elenco snapshot, ZIP e cancellazione con conferma. Aggiunge in fondo il pannello **NET GAMMA 0DTE / Weekly — modulo in verifica**.
+
+* `net_gamma.py`: parsing SPX/SPXW OCC, formula slide 132: `(OI_CALL + VOL_CALL)*GAMMA_CALL - (OI_PUT + VOL_PUT)*GAMMA_PUT` per strike.
+* `gamma_section.py`: scelta dello snapshot, riferimento alla chiusura SPX precedente, differenziale ES−SPX manuale facoltativo, profili 0DTE e venerdì settimanale separati, tabella e CSV.
+* Lo snapshot Cboe originale non viene modificato, il modulo fa SOLO lettura e NON cambia GitHub Actions, bucket, password o permessi di cancellazione.
+
+### Importante: metodo Serafini
+
+Le slide documentano 50 livelli intorno alla chiusura SPX, ma non il criterio algoritmico inequivocabile. **Al momento il programma prende i 50 strike disponibili con distanza assoluta più bassa dal riferimento**: implementazione tecnica ESPLICITAMENTE PROVVISORIA, NON attribuibile a Serafini finché non venga verificata sul video. Non usare i valori per negoziare prima della validazione. Le Weekly sono la singola scadenza del venerdì della settimana, **non** l'aggregato della settimana. In caso di festività/assenza di contratti nessun dato viene inventato. Per eventuali eccezioni servirà un'ulteriore verifica del metodo.
+
+### Pubblicazione
+
+Nel repository pubblico `Serafini-SPX-Dashboard` sostituire soltanto `app.py`, `requirements.txt` e caricare `net_gamma.py`, `gamma_section.py`; `storage.py`, `.gitignore` e i Secrets restano invariati. Non caricare file originali SPX, password o chiavi nel repository pubblico. Eseguire il test da Streamlit con uno snapshot già presente nella settimana 2026-W42.
+
+### Test locale effettuato
+
+Snapshot SPX del 15 ottobre 2026: 30.470 contratti nel file; per scadenza 2026-10-15 498 contratti e 249 strike disponibili; per 2026-10-16 2.060 contratti e 545 strike disponibili. Il modulo seleziona 50 strike per ciascuna scadenza se disponibili. Test di struttura e calcolo; nessuna verifica di corrispondenza con il grafico Overcharts/Serafini ancora eseguita.

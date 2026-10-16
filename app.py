@@ -206,3 +206,8 @@ if role == 'admin':
                     st.error('Impossibile completare la cancellazione. Controlla il bucket.')
 else:
     st.caption('Accesso lettore: download consentito, cancellazione non disponibile.')
+
+# Calcolo di sola lettura, anche per il ruolo amici. Nessuna cancellazione qui.
+with st.expander('NET GAMMA 0DTE / Weekly — modulo in verifica', expanded=False):
+    from gamma_section import render
+    render(store, week, snaps, logs)
