@@ -19,6 +19,40 @@ from storage import Store
 st.set_page_config(page_title='Serafini SPX — Archivio', page_icon='📊', layout='wide')
 
 
+def format_download_rome(value):
+    """Presentazione soltanto: i timestamp sorgente rimangono invariati."""
+    if not value:
+        return '—'
+    try:
+        # Gli snapshot attuali contengono timestamp ISO UTC con +00:00.
+        stamp = datetime.fromisoformat(str(value).strip().replace('Z', '+00:00'))
+        if stamp.tzinfo is None:
+            return f'{value} (fuso non indicato)'
+        rome = stamp.astimezone(ZoneInfo('Europe/Rome'))
+        return rome.strftime('%d/%m/%Y %H:%M:%S')
+    except (TypeError, ValueError, OverflowError):
+        return str(value)
+
+
+def describe_slot(slot):
+    """Non indovinare lo slot di vecchi registri privi di identificazione."""
+    name = str(slot or '').strip()
+    if name == '30 7 * * 1-5':
+        return 'Mattina 07:30'
+    if name == '30 15 * * 1-5':
+        return 'Pomeriggio 15:30'
+    if name == '45 7 * * 1-5':
+        return 'Recupero mattina 07:45'
+    if name == '45 15 * * 1-5':
+        return 'Recupero pomeriggio 15:45'
+    if name.lower() in ('manuale', 'manual', 'workflow_dispatch', 'test') or not name:
+        return 'Test manuale'
+    if name.lower() == 'automatico':
+        # Vecchia v1: usava questa etichetta anche nei test avviati a mano.
+        return 'Storico — slot non identificato'
+    return f'Altro — {name}'
+
+
 @st.cache_resource
 def login_limiter():
     # Protezione BASE per processo, non sostituisce un'autenticazione gestita.
@@ -126,10 +160,18 @@ if logs:
     for obj in logs:
         try:
             value = json.loads(store.download(f"{week}/logs/{obj['name']}"))
-            rows.append({key: value.get(key, '') for key in
-                         ('download_utc', 'scheduled_slot', 'status', 'cboe_timestamp', 'spot_spx', 'contracts', 'file')})
+            rows.append({
+                'Download (ora di Roma)': format_download_rome(value.get('download_utc')),
+                'Acquisizione': describe_slot(value.get('scheduled_slot')),
+                'Stato': value.get('status', ''),
+                'Timestamp Cboe (originale)': value.get('cboe_timestamp', ''),
+                'SPX': value.get('spot_spx', ''),
+                'Contratti': value.get('contracts', ''),
+                'File originale': value.get('file', ''),
+            })
         except Exception:
             rows.append({'status': 'Impossibile leggere un registro'})
+    st.caption('Gli orari di download sono convertiti in Europe/Rome. Il timestamp Cboe rimane come nella fonte, senza attribuirgli un fuso non dichiarato. I vecchi registri etichettati “automatico” non identificano necessariamente lo slot.')
     st.dataframe(rows, use_container_width=True, hide_index=True)
 else:
     st.info('Non sono presenti registri per questa settimana.')
