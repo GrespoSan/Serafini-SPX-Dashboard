@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 from datetime import datetime
 import streamlit as st
 from net_gamma import friday_of, profile, profile_csv, read_snapshot
+from pine_export import make_pine
 
 
 def render(store, week, snaps, logs):
@@ -45,8 +46,12 @@ def render(store, week, snaps, logs):
     if day.weekday() >= 5:
         st.error('Snapshot in giorno non operativo: scegliere manualmente una giornata valida.'); return
     st.caption(f'0DTE: {day.isoformat()} · Weekly (venerdì della settimana): {weekly_exp.isoformat()}. Selezione settimanale da verificare in caso di festività.')
+    computed_profiles = {}
+    if weekly_exp == day:
+        st.info('Oggi è venerdì: 0DTE e Weekly scadono entrambe oggi. I due profili possono coincidere: la separazione grafica non crea due scadenze diverse.')
     for title, expiry in [('0DTE', day), ('Weekly', weekly_exp)]:
         result = profile(snap, expiry, ref)
+        computed_profiles[title] = result
         st.subheader(f'{title} · scadenza {expiry.isoformat()}')
         if not result['rows']:
             st.warning('Nessun contratto trovato per questa scadenza nello snapshot: nessun risultato inventato.')
@@ -91,4 +96,16 @@ def render(store, week, snaps, logs):
         st.dataframe(frame, use_container_width=True, hide_index=True)
         st.download_button(f'Scarica calcolo CSV {title}', profile_csv(result, offset),
                            file_name=f'NET_GAMMA_{title}_{day.isoformat()}_{choice}.csv', mime='text/csv', key=f'csv_{title}_{choice}')
+    st.subheader('Esporta i due profili su TradingView')
+    st.caption('Il Pine Script disegna 0DTE vicino alle candele e Weekly più a destra, come nella slide 139. I prezzi ES sono SPX + differenziale inserito qui; il NET GAMMA rimane invariato.')
+    if offset is None:
+        st.warning('Per esportare sul grafico del future ES inserisci prima un differenziale ES − SPX verificato. Non assumiamo zero automaticamente.')
+    elif not (computed_profiles.get('0DTE', {}).get('rows') and computed_profiles.get('Weekly', {}).get('rows')):
+        st.warning('Esportazione non disponibile: almeno uno dei due profili non ha dati.')
+    else:
+        pine = make_pine(computed_profiles['0DTE'], computed_profiles['Weekly'], offset, day.isoformat(), timestamp)
+        st.download_button('Scarica Pine Script TradingView — 0DTE + Weekly', data=pine.encode('utf-8'), file_name=f'Serafini_NET_GAMMA_ES_{day.isoformat()}.pine', mime='text/plain', key=f'pine_both_{choice}')
+        with st.expander('Mostra codice Pine da copiare e incollare'):
+            st.code(pine, language='pine')
+        st.caption('TradingView → Pine Editor → Nuovo indicatore → incolla il codice → Salva → Aggiungi al grafico ES. Per vedere i due profili usa spazio libero a destra del grafico. Il codice è uno snapshot statico, non scarica opzioni in TradingView.')
     st.caption('NET GAMMA(K) = (OI Call + VOL Call) × Gamma Call − (OI Put + VOL Put) × Gamma Put. Nessun fattore monetario aggiunto.')
