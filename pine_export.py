@@ -38,7 +38,7 @@ indicator("Serafini SPX NET GAMMA | {date_text}", overlay=true, max_lines_count=
 // Data snapshot: {date_text} | 0DTE: {odte['expiry']} | Weekly: {weekly['expiry']}
 // Differenziale ES-SPX GIA' APPLICATO agli strike: {offset:.4f}
 // Formula originale: (OI_CALL+VOL_CALL)*GAMMA_CALL - (OI_PUT+VOL_PUT)*GAMMA_PUT.
-// 50 strike piu' vicini alla chiusura: criterio ancora PROVVISORIO in attesa di confronto Serafini.
+// 25 strike SOPRA e 25 SOTTO la chiusura SPX: regola confermata direttamente da Serafini.
 // Profili graficamente separati come slide 139: 0DTE vicino alle candele, Weekly piu' a destra.
 {warning}// Non calcola gamma flip e non usa dati opzioni live in TradingView.
 

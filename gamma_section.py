@@ -11,7 +11,7 @@ from pine_export import make_pine
 
 def render(store, week, snaps, logs):
     st.header('NET GAMMA · replica formula Serafini — verifica')
-    st.warning('La formula è quella della slide 132. La selezione concreta dei 50 strike è ancora da verificare nel video: il criterio dei 50 più vicini è PROVVISORIO. Non usare i livelli per operare finché non è validato.')
+    st.info('Formula NET GAMMA della slide 132. Selezione dei livelli confermata da Serafini: 25 strike sopra e 25 sotto la chiusura SPX. La classificazione C1/P1 e il Gamma Flip non sono ancora automatizzati.')
     if not snaps:
         st.info('Nessuno snapshot disponibile nella settimana selezionata.')
         return
@@ -50,7 +50,11 @@ def render(store, week, snaps, logs):
     if weekly_exp == day:
         st.info('Oggi è venerdì: 0DTE e Weekly scadono entrambe oggi. I due profili possono coincidere: la separazione grafica non crea due scadenze diverse.')
     for title, expiry in [('0DTE', day), ('Weekly', weekly_exp)]:
-        result = profile(snap, expiry, ref)
+        try:
+            result = profile(snap, expiry, ref)
+        except ValueError as exc:
+            st.error(f'Impossibile costruire il profilo {title}: {exc}')
+            continue
         computed_profiles[title] = result
         st.subheader(f'{title} · scadenza {expiry.isoformat()}')
         if not result['rows']:
