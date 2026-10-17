@@ -7,6 +7,7 @@ from datetime import datetime
 import streamlit as st
 from net_gamma import friday_of, profile, profile_csv, read_snapshot
 from pine_export import make_pine
+from operational_levels import find_candidates, proposed_levels, candidate_csv
 
 
 def render(store, week, snaps, logs):
@@ -47,6 +48,7 @@ def render(store, week, snaps, logs):
         st.error('Snapshot in giorno non operativo: scegliere manualmente una giornata valida.'); return
     st.caption(f'0DTE: {day.isoformat()} · Weekly (venerdì della settimana): {weekly_exp.isoformat()}. Selezione settimanale da verificare in caso di festività.')
     computed_profiles = {}
+    candidate_0dte = None
     if weekly_exp == day:
         st.info('Oggi è venerdì: 0DTE e Weekly scadono entrambe oggi. I due profili possono coincidere: la separazione grafica non crea due scadenze diverse.')
     for title, expiry in [('0DTE', day), ('Weekly', weekly_exp)]:
@@ -56,6 +58,8 @@ def render(store, week, snaps, logs):
             st.error(f'Impossibile costruire il profilo {title}: {exc}')
             continue
         computed_profiles[title] = result
+        if title == '0DTE' and result['rows']:
+            candidate_0dte = find_candidates(result['rows'], ref)
         st.subheader(f'{title} · scadenza {expiry.isoformat()}')
         if not result['rows']:
             st.warning('Nessun contratto trovato per questa scadenza nello snapshot: nessun risultato inventato.')
@@ -100,6 +104,63 @@ def render(store, week, snaps, logs):
         st.dataframe(frame, use_container_width=True, hide_index=True)
         st.download_button(f'Scarica calcolo CSV {title}', profile_csv(result, offset),
                            file_name=f'NET_GAMMA_{title}_{day.isoformat()}_{choice}.csv', mime='text/csv', key=f'csv_{title}_{choice}')
+    if candidate_0dte is not None:
+        with st.expander('Livelli operativi C/P — tre barre più intense (SPERIMENTALE v10)', expanded=False):
+            st.warning('Questi sono CANDIDATI basati sulle tre barre NET GAMMA più intense per lato, NON livelli C1–C3/P1–P3 confermati da Serafini. Non sono segnali automatici. Il calcolo NET GAMMA resta invariato.')
+            st.caption('Criterio fisso di prova: tra i 25 strike sopra la chiusura SPX, le tre barre NET GAMMA positive più lunghe; tra i 25 sotto, le tre barre negative con valore assoluto maggiore. Nessun confronto con le barre vicine. C1→C3 in ordine crescente di prezzo, P1→P3 in ordine decrescente.')
+            suggestions = proposed_levels(candidate_0dte)
+            chosen = {}
+            for side, prefix, direction in [('call', 'C', 'Call'), ('put', 'P', 'Put')]:
+                entries = candidate_0dte[side]
+                st.markdown(f'**{direction} — {len(entries)} barre eleggibili; prime tre proposte per intensità**')
+                if len(entries) < 3:
+                    st.info('Meno di tre barre del segno richiesto: non si inventano livelli mancanti.')
+                # Tre selettori indipendenti, con i suggerimenti come valori iniziali.
+                options = [None] + [e['strike_spx'] for e in entries]
+                option_index = {e['strike_spx']: e for e in entries}
+                cols = st.columns(3)
+                for n in (1, 2, 3):
+                    label = f'{prefix}{n}'
+                    default = suggestions.get(label, {}).get('strike_spx')
+                    idx = options.index(default) if default in options else 0
+                    with cols[n-1]:
+                        selected = st.selectbox(
+                            f'{label} (selezione manuale)', options=options, index=idx,
+                            format_func=lambda v: 'Non assegnato' if v is None else f'{v:g} SPX',
+                            key=f'v9_{choice}_{label}_{ref}',
+                        )
+                    if selected is not None:
+                        chosen[label] = option_index[selected]
+            wrong_order = any(
+                all(f'{prefix}{n}' in chosen for n in (1,2,3)) and
+                not (chosen[f'{prefix}1']['strike_spx'] < chosen[f'{prefix}2']['strike_spx'] < chosen[f'{prefix}3']['strike_spx'])
+                if prefix == 'C' else
+                all(f'{prefix}{n}' in chosen for n in (1,2,3)) and
+                not (chosen[f'{prefix}1']['strike_spx'] > chosen[f'{prefix}2']['strike_spx'] > chosen[f'{prefix}3']['strike_spx'])
+                for prefix in ('C','P')
+            )
+            if len({x['strike_spx'] for x in chosen.values()}) != len(chosen):
+                st.error('Uno stesso strike è stato selezionato più volte. Correggere prima di usare i livelli.')
+            elif wrong_order:
+                st.error('Ordine non coerente: C1 < C2 < C3 e P1 > P2 > P3. Correggi i candidati.')
+            else:
+                ordered = []
+                for label in ('C1','C2','C3','P1','P2','P3'):
+                    if label in chosen:
+                        item = chosen[label]
+                        ordered.append({'Livello candidato': label,
+                                        'Strike SPX': item['strike_spx'],
+                                        'Prezzo ES': None if offset is None else item['strike_spx'] + offset,
+                                        'NET GAMMA': round(item['net_gamma'], 4),
+                                        'Origine': 'top 3 per intensità / selezione modificabile'})
+                st.dataframe(ordered, hide_index=True, use_container_width=True)
+                if offset is None:
+                    st.caption('Inserisci un differenziale ES − SPX verificato per visualizzare anche i prezzi ES.')
+                st.caption('La numerazione è un’ipotesi sperimentale. Le soglie di breakout e il Gamma Flip NON sono calcolati qui.')
+            st.download_button('Scarica graduatoria barre NET GAMMA 0DTE (CSV)',
+                               candidate_csv(candidate_0dte, offset),
+                               file_name=f'Candidati_Top3_Gamma_{day.isoformat()}_{choice}.csv',
+                               mime='text/csv', key=f'v9_candidates_{choice}')
     st.subheader('Esporta i due profili su TradingView')
     st.caption('Il Pine Script disegna 0DTE vicino alle candele e Weekly più a destra, come nella slide 139. I prezzi ES sono SPX + differenziale inserito qui; il NET GAMMA rimane invariato.')
     if offset is None:
