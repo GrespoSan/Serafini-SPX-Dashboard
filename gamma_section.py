@@ -8,6 +8,7 @@ import streamlit as st
 from net_gamma import friday_of, profile, profile_csv, read_snapshot
 from pine_export import make_pine
 from operational_levels import find_candidates, proposed_levels, candidate_csv
+from es_spx_basis import download_and_calculate
 
 
 def render(store, week, snaps, logs):
@@ -34,11 +35,50 @@ def render(store, week, snaps, logs):
         return
     previous = snap['data'].get('prev_day_close')
     st.caption(f'Chiusura SPX precedente dichiarata nel payload Cboe: {previous} (da confrontare con chiusura cash ufficiale)')
+    @st.cache_data(ttl=3600, show_spinner=False)
+    def _auto_basis(target_day):
+        result = download_and_calculate(target_day)
+        # Non memorizziamo frame grafici nel widget di selezione.
+        result.pop('bars', None)
+        return result
+
+    st.markdown('**Differenziale ES − SPX (sessione precedente)**')
+    st.caption('Metodo Serafini: media delle distanze sulle barre a 15 minuti della sessione cash precedente. '
+               'Qui usiamo le chiusure sincronizzate, una scelta tecnica da verificare su TradingView.')
+    basis_key = f'basis_override_{day.isoformat()}'
+    if 'auto_basis_results' not in st.session_state:
+        st.session_state.auto_basis_results = {}
     col1, col2 = st.columns(2)
     with col1:
-        ref = st.number_input('Chiusura SPX precedente', min_value=0.01, value=float(previous or snap['data']['current_price']), step=0.25, format='%.4f', help='Riferimento per i 50 strike. Verificare che coincida con la chiusura cash precedente.')
+        ref = st.number_input('Chiusura SPX precedente', min_value=0.01,
+                              value=float(previous or snap['data']['current_price']),
+                              step=0.25, format='%.4f',
+                              help='Riferimento per i 50 strike. Verificare con la chiusura cash ufficiale.')
     with col2:
-        offset_txt = st.text_input('Differenziale ES − SPX (opzionale)', value='', placeholder='Es. 42.5', help='Lascia vuoto per il solo profilo SPX. Inserire un differenziale verificato del giorno precedente.')
+        if st.button('Calcola automaticamente ES − SPX', key=f'auto_basis_{day}'):
+            try:
+                with st.spinner('Acquisizione e confronto barre ES/SPX a 15 minuti...'):
+                    st.session_state.auto_basis_results[day.isoformat()] = _auto_basis(day)
+                # Una nuova richiesta propone il nuovo valore ma lascia all’utente
+                # la possibilità di modificarlo prima di usarlo.
+                result = st.session_state.auto_basis_results[day.isoformat()]
+                st.session_state[basis_key] = f"{result['basis']:.4f}"
+            except Exception as exc:
+                st.session_state.auto_basis_results[day.isoformat()] = None
+                st.warning(f'Calcolo automatico non disponibile: {str(exc)[:250]}. Inserisci il valore verificato manualmente.')
+        offset_txt = st.text_input('Differenziale ES − SPX applicato (modificabile)',
+                                   value='', key=basis_key,
+                                   placeholder='Es. 47',
+                                   help='Valore automatico proposto, sempre correggibile. Vuoto = grafico SPX.')
+    auto_result = st.session_state.auto_basis_results.get(day.isoformat())
+    if auto_result:
+        st.caption(f"Proposta automatica **{auto_result['basis']:.2f} punti** · "
+                   f"seduta {auto_result['reference_date']} · {auto_result['bar_count']} barre a 15 minuti "
+                   f"· min {auto_result['minimum']:.2f} / max {auto_result['maximum']:.2f} "
+                   f"· ultimo {auto_result['last']:.2f}. Fonte: {auto_result['source']}.")
+        st.info('Confronta la proposta con il grafico TradingView ES1! − SPX a 15 minuti. '
+                'Yahoo ES=F potrebbe differire dal contratto CME specifico o da TradingView. '
+                'Se necessario correggi il campo: prevale sempre il valore che hai verificato.')
     try:
         offset = None if not offset_txt.strip() else float(offset_txt.replace(',', '.'))
     except ValueError:
