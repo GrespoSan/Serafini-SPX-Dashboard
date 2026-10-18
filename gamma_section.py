@@ -9,6 +9,7 @@ from net_gamma import friday_of, profile, profile_csv, read_snapshot
 from pine_export import make_pine
 from operational_levels import find_candidates, proposed_levels, candidate_csv
 from es_spx_basis import download_and_calculate
+from decimal import Decimal, ROUND_HALF_UP
 
 
 def render(store, week, snaps, logs):
@@ -62,7 +63,7 @@ def render(store, week, snaps, logs):
                 # Una nuova richiesta propone il nuovo valore ma lascia all’utente
                 # la possibilità di modificarlo prima di usarlo.
                 result = st.session_state.auto_basis_results[day.isoformat()]
-                st.session_state[basis_key] = f"{result['basis']:.4f}"
+                st.session_state[basis_key] = str(int(Decimal(str(result['basis'])).quantize(Decimal("1"), rounding=ROUND_HALF_UP)))
             except Exception as exc:
                 st.session_state.auto_basis_results[day.isoformat()] = None
                 st.warning(f'Calcolo automatico non disponibile: {str(exc)[:250]}. Inserisci il valore verificato manualmente.')
@@ -72,7 +73,7 @@ def render(store, week, snaps, logs):
                                    help='Valore automatico proposto, sempre correggibile. Vuoto = grafico SPX.')
     auto_result = st.session_state.auto_basis_results.get(day.isoformat())
     if auto_result:
-        st.caption(f"Proposta automatica **{auto_result['basis']:.2f} punti** · "
+        st.caption(f"Proposta automatica **{auto_result['basis']:.2f} punti → arrotondata a {int(Decimal(str(auto_result['basis'])).quantize(Decimal('1'), rounding=ROUND_HALF_UP))} punti** · "
                    f"seduta {auto_result['reference_date']} · {auto_result['bar_count']} barre a 15 minuti "
                    f"· min {auto_result['minimum']:.2f} / max {auto_result['maximum']:.2f} "
                    f"· ultimo {auto_result['last']:.2f}. Fonte: {auto_result['source']}.")
