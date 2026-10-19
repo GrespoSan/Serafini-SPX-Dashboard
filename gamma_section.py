@@ -93,6 +93,81 @@ def render(store, week, snaps, logs):
     if day.weekday() >= 5:
         st.error('Snapshot in giorno non operativo: scegliere manualmente una giornata valida.'); return
     st.caption(f'0DTE: {day.isoformat()} · Weekly: {weekly_exp.isoformat()} (lun–gio venerdì corrente; venerdì successivo). In caso di festività controllare la scadenza effettiva.')
+    # Sintesi breve: due fotografie, stessi strike SPX, una sola visualizzazione.
+    with st.expander('Confronto NET GAMMA · Mattina / Pomeriggio (v19)', expanded=True):
+        same_day = sorted(n for n in names if n.startswith(f'SPX_CBOE_{day:%Y%m%d}_'))
+        if len(same_day) < 2:
+            st.info('Servono due snapshot diversi della stessa giornata.')
+        else:
+            col_a, col_b = st.columns(2)
+            with col_a:
+                first_name = st.selectbox('Mattina', same_day[:-1], index=0, key=f'v19_first_{day}')
+            later = [n for n in same_day if n > first_name]
+            if not later:
+                st.info('Non ci sono snapshot successivi per il confronto.')
+                st.stop()
+            with col_b:
+                second_name = st.selectbox('Pomeriggio', later, index=len(later)-1,
+                                           key=f'v19_second_{day}_{first_name}')
+            selected_profile = st.radio('Profilo', ['0DTE', 'Weekly'], horizontal=True,
+                                        key=f'v19_profile_{day}', label_visibility='collapsed')
+            try:
+                older = read_snapshot(store.download(f'{week}/snapshots/{first_name}'))
+                newer = read_snapshot(store.download(f'{week}/snapshots/{second_name}'))
+                old_ref = older['data'].get('prev_day_close')
+                new_ref = newer['data'].get('prev_day_close')
+                if old_ref is not None and new_ref is not None and abs(float(old_ref) - float(new_ref)) > 0.001:
+                    st.warning('Chiusure SPX precedenti diverse nei due file; il confronto applica a entrambi il riferimento scelto sopra.')
+                expiry = day if selected_profile == '0DTE' else weekly_exp
+                old_prof = profile(older, expiry, ref)
+                new_prof = profile(newer, expiry, ref)
+                if not old_prof['rows'] or not new_prof['rows']:
+                    st.info(f'Profilo {selected_profile} non disponibile in uno dei due snapshot.')
+                else:
+                    comparisons, stats = compare_profiles(old_prof, new_prof, offset)
+                    main_levels = select_key_levels(comparisons, count=5, minimum_separation=10.0)
+                    if not main_levels:
+                        st.info('Nessuno strike in comune tra i due snapshot.')
+                    else:
+                        import plotly.graph_objects as go
+                        labels = [f"{r['Prezzo ES']:,.0f}".replace(',', '.') if r['Prezzo ES'] is not None
+                                  else f"{r['Strike SPX']:g} SPX" for r in main_levels]
+                        fig = go.Figure()
+                        fig.add_bar(name='Mattina', y=labels,
+                                    x=[r['NET mattina'] for r in main_levels], orientation='h')
+                        fig.add_bar(name='Pomeriggio', y=labels,
+                                    x=[r['NET pomeriggio'] for r in main_levels], orientation='h')
+                        fig.update_layout(title=f'NET GAMMA {selected_profile} — {day:%d/%m/%Y}',
+                                          barmode='group', template='plotly_dark', height=330,
+                                          margin=dict(l=10, r=10, t=42, b=15),
+                                          legend=dict(orientation='h', y=1.10, x=0),
+                                          xaxis_title='NET GAMMA', yaxis_title=None)
+                        fig.add_vline(x=0, line_color='#999', line_width=1)
+                        st.plotly_chart(fig, use_container_width=True,
+                                        key=f'v19_chart_{selected_profile}_{first_name}_{second_name}')
+                        st.markdown('**' + summary(main_levels) + '**')
+                        # Cambio di segno reale sullo stesso strike: importante per il caso 7724/7729/7734.
+                        sign_changes = [r for r in comparisons if r['Evento'] == 'Cambio segno']
+                        if sign_changes:
+                            def _price(r):
+                                return (f"{r['Prezzo ES']:,.0f}".replace(',', '.') if r['Prezzo ES'] is not None
+                                        else f"SPX {r['Strike SPX']:g}")
+                            brief = ', '.join(f"{_price(r)} ({'+' if r['NET mattina'] > 0 else '−'} → "
+                                              f"{'+' if r['NET pomeriggio'] > 0 else '−'})"
+                                              for r in sign_changes[:6])
+                            st.info(f'Cambi di segno fra i due snapshot: {brief}')
+                        # Sotto i livelli che hanno cambiato segno può trovarsi una sequenza negativa:
+                        # osservazione descrittiva, non breakout generato automaticamente.
+
+                        st.caption('Cinque concentrazioni più intense osservate nei due snapshot, con distanza minima '
+                                   'di 10 punti SPX per leggibilità. Non sono automaticamente C1/C2/C3 o P1/P2/P3. '
+                                   'Il confronto riguarda lo stesso strike, non segnali di acquisto o vendita.')
+                        if stats['solo_mattina'] or stats['solo_pomeriggio']:
+                            st.caption(f"Strike confrontati: {stats['comuni']} · non comuni: "
+                                       f"{stats['solo_mattina'] + stats['solo_pomeriggio']}.")
+            except Exception as exc:
+                st.error(f'Confronto non disponibile: {type(exc).__name__}: {str(exc)[:220]}')
+
     computed_profiles = {}
     candidate_0dte = None
     if day.weekday() == 4:
@@ -147,67 +222,10 @@ def render(store, week, snaps, logs):
         fig.add_vline(x=0, line_width=1, line_color='#b7bec8')
         st.plotly_chart(fig, use_container_width=True, key=f'gamma_net_{title}_{choice}')
         st.caption('Gamma positivo (verde) e negativo (rosso) sono il segno del NET GAMMA per strike. Il Gamma Flip non viene calcolato né disegnato in questa versione: la sua definizione operativa resta da validare sul materiale Serafini.')
-        st.dataframe(frame, use_container_width=True, hide_index=True)
+        with st.expander(f'Dettaglio numerico {title} (50 strike)', expanded=False):
+            st.dataframe(frame, use_container_width=True, hide_index=True)
         st.download_button(f'Scarica calcolo CSV {title}', profile_csv(result, offset),
                            file_name=f'NET_GAMMA_{title}_{day.isoformat()}_{choice}.csv', mime='text/csv', key=f'csv_{title}_{choice}')
-    # Sintesi breve: due fotografie, stessi strike SPX, una sola visualizzazione.
-    with st.expander('NET GAMMA — mattina vs pomeriggio', expanded=False):
-        same_day = sorted(n for n in names if n.startswith(f'SPX_CBOE_{day:%Y%m%d}_'))
-        if len(same_day) < 2:
-            st.info('Servono due snapshot diversi della stessa giornata.')
-        else:
-            col_a, col_b = st.columns(2)
-            with col_a:
-                first_name = st.selectbox('Mattina', same_day[:-1], index=0, key=f'v18_first_{day}')
-            later = [n for n in same_day if n > first_name]
-            with col_b:
-                second_name = st.selectbox('Pomeriggio', later, index=len(later)-1,
-                                           key=f'v18_second_{day}_{first_name}')
-            selected_profile = st.radio('Profilo', ['0DTE', 'Weekly'], horizontal=True,
-                                        key=f'v18_profile_{day}', label_visibility='collapsed')
-            try:
-                older = read_snapshot(store.download(f'{week}/snapshots/{first_name}'))
-                newer = read_snapshot(store.download(f'{week}/snapshots/{second_name}'))
-                old_ref = older['data'].get('prev_day_close')
-                new_ref = newer['data'].get('prev_day_close')
-                if old_ref is not None and new_ref is not None and abs(float(old_ref) - float(new_ref)) > 0.001:
-                    st.warning('Chiusure SPX precedenti diverse nei due file; il confronto applica a entrambi il riferimento scelto sopra.')
-                expiry = day if selected_profile == '0DTE' else weekly_exp
-                old_prof = profile(older, expiry, ref)
-                new_prof = profile(newer, expiry, ref)
-                if not old_prof['rows'] or not new_prof['rows']:
-                    st.info(f'Profilo {selected_profile} non disponibile in uno dei due snapshot.')
-                else:
-                    comparisons, stats = compare_profiles(old_prof, new_prof, offset)
-                    main_levels = select_key_levels(comparisons, count=5, minimum_separation=10.0)
-                    if not main_levels:
-                        st.info('Nessuno strike in comune tra i due snapshot.')
-                    else:
-                        import plotly.graph_objects as go
-                        labels = [f"{r['Prezzo ES']:,.0f}".replace(',', '.') if r['Prezzo ES'] is not None
-                                  else f"{r['Strike SPX']:g} SPX" for r in main_levels]
-                        fig = go.Figure()
-                        fig.add_bar(name='Mattina', y=labels,
-                                    x=[r['NET mattina'] for r in main_levels], orientation='h')
-                        fig.add_bar(name='Pomeriggio', y=labels,
-                                    x=[r['NET pomeriggio'] for r in main_levels], orientation='h')
-                        fig.update_layout(title=f'NET GAMMA {selected_profile} — {day:%d/%m/%Y}',
-                                          barmode='group', template='plotly_dark', height=330,
-                                          margin=dict(l=10, r=10, t=42, b=15),
-                                          legend=dict(orientation='h', y=1.10, x=0),
-                                          xaxis_title='NET GAMMA', yaxis_title=None)
-                        fig.add_vline(x=0, line_color='#999', line_width=1)
-                        st.plotly_chart(fig, use_container_width=True,
-                                        key=f'v18_chart_{selected_profile}_{first_name}_{second_name}')
-                        st.markdown('**' + summary(main_levels) + '**')
-                        st.caption('Cinque concentrazioni più intense osservate nei due snapshot, con distanza minima '
-                                   'di 10 punti SPX per leggibilità. Non sono automaticamente C1/C2/C3 o P1/P2/P3. '
-                                   'Il confronto riguarda lo stesso strike, non segnali di acquisto o vendita.')
-                        if stats['solo_mattina'] or stats['solo_pomeriggio']:
-                            st.caption(f"Strike confrontati: {stats['comuni']} · non comuni: "
-                                       f"{stats['solo_mattina'] + stats['solo_pomeriggio']}.")
-            except Exception as exc:
-                st.error(f'Confronto non disponibile: {type(exc).__name__}: {str(exc)[:220]}')
     if candidate_0dte is not None:
         with st.expander('Livelli operativi C/P — tre barre più intense (SPERIMENTALE v10)', expanded=False):
             st.warning('Questi sono CANDIDATI basati sulle tre barre NET GAMMA più intense per lato, NON livelli C1–C3/P1–P3 confermati da Serafini. Non sono segnali automatici. Il calcolo NET GAMMA resta invariato.')
