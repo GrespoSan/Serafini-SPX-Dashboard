@@ -33,6 +33,7 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
     warning = ('// NOTA: 0DTE e Weekly hanno LA STESSA SCADENZA in questa data: i due profili sono identici per definizione.\n' if same_exp else '')
     return f'''//@version=6
 indicator("Serafini SPX NET GAMMA | {date_text}", overlay=true, max_lines_count=250, max_labels_count=20)
+// EXPORT REVISION: V16-PINE-FIX-20261019 (width=5; Weekly=100, min=55; label=50)
 // Esportazione STATICA da uno snapshot Cboe; aggiornare ricopiando il Pine generato dalla dashboard.
 // Fonte: {origin}
 // Data snapshot: {date_text} | 0DTE: {odte['expiry']} | Weekly: {weekly['expiry']}
