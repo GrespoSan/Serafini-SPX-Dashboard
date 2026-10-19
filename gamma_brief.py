@@ -1,19 +1,28 @@
 """Sintesi visuale dei due snapshot: nessun nuovo calcolo NET GAMMA."""
 
 
-def select_key_levels(rows, count=5, minimum_separation=10.0):
-    """Sceglie le maggiori intensità osservate nei due snapshot.
+def select_key_levels(rows, count_per_sign=4, minimum_separation=5.0):
+    """Fino a quattro strike positivi e quattro negativi, secondo il NET mattutino.
 
-    Evita di riempire il grafico con strike immediatamente vicini; è una
-    regola di impaginazione, NON una selezione C1/C2/C3 o supporti.
+    Il segno mattutino decide il gruppo per evitare che uno strike che cambia
+    segno sia classificato retroattivamente usando i dati pomeridiani.
+    I cambi di segno vengono segnalati separatamente su TUTTI gli strike.
+    Nessuna attribuzione automatica di Call/Put o supporti/resistenze.
     """
-    ranked = sorted(rows, key=lambda r: (-max(abs(r['NET mattina']), abs(r['NET pomeriggio'])), r['Strike SPX']))
     chosen = []
-    for row in ranked:
-        if all(abs(row['Strike SPX'] - old['Strike SPX']) >= minimum_separation for old in chosen):
-            chosen.append(row)
-        if len(chosen) == count:
-            break
+    for side in (1, -1):
+        eligible = [r for r in rows if (r['NET mattina'] > 0 if side == 1 else r['NET mattina'] < 0)]
+        ranked = sorted(
+            eligible,
+            key=lambda r: (-max(abs(r['NET mattina']), abs(r['NET pomeriggio'])), r['Strike SPX']),
+        )
+        selected = []
+        for r in ranked:
+            if all(abs(r['Strike SPX'] - old['Strike SPX']) >= minimum_separation for old in selected):
+                selected.append(r)
+            if len(selected) >= count_per_sign:
+                break
+        chosen.extend(selected)
     return sorted(chosen, key=lambda r: r['Strike SPX'])
 
 
@@ -36,7 +45,7 @@ def summary(rows):
 
 
 def operational_summary(rows):
-    """Descrizione verificabile dei 5 livelli, senza dedurre supporti o segnali dal segno Gamma."""
+    """Descrizione verificabile degli 8 livelli, senza dedurre supporti o segnali dal segno Gamma."""
     def fmt(r):
         v = r['Prezzo ES']
         return f"{v:,.0f}".replace(',', '.') if v is not None else f"SPX {r['Strike SPX']:g}"
@@ -60,5 +69,5 @@ def operational_summary(rows):
     if negative:
         lines.append('**Gamma negativo:** ' + summarize_group(negative) + '.')
     if mixed:
-        lines.append('**Segno cambiato (fra i 5):** ' + ', '.join(fmt(r) for r in mixed) + '.')
+        lines.append('**Segno cambiato (fra gli 8):** ' + ', '.join(fmt(r) for r in mixed) + '.')
     return lines if lines else ['Nessuna variazione rilevante sui livelli selezionati.']

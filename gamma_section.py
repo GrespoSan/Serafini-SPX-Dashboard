@@ -94,7 +94,7 @@ def render(store, week, snaps, logs):
         st.error('Snapshot in giorno non operativo: scegliere manualmente una giornata valida.'); return
     st.caption(f'0DTE: {day.isoformat()} · Weekly: {weekly_exp.isoformat()} (lun–gio venerdì corrente; venerdì successivo). In caso di festività controllare la scadenza effettiva.')
     # Sintesi breve: due fotografie, stessi strike SPX, una sola visualizzazione.
-    with st.expander('Confronto NET GAMMA · Mattina / Pomeriggio (v20)', expanded=True):
+    with st.expander('Confronto NET GAMMA · Mattina / Pomeriggio (v21)', expanded=True):
         same_day = sorted(n for n in names if n.startswith(f'SPX_CBOE_{day:%Y%m%d}_'))
         if len(same_day) < 2:
             st.info('Servono due snapshot diversi della stessa giornata.')
@@ -125,7 +125,7 @@ def render(store, week, snaps, logs):
                     st.info(f'Profilo {selected_profile} non disponibile in uno dei due snapshot.')
                 else:
                     comparisons, stats = compare_profiles(old_prof, new_prof, offset)
-                    main_levels = select_key_levels(comparisons, count=5, minimum_separation=10.0)
+                    main_levels = select_key_levels(comparisons, count_per_sign=4, minimum_separation=5.0)
                     if not main_levels:
                         st.info('Nessuno strike in comune tra i due snapshot.')
                     else:
@@ -138,7 +138,7 @@ def render(store, week, snaps, logs):
                         fig.add_bar(name='Pomeriggio', y=labels,
                                     x=[r['NET pomeriggio'] for r in main_levels], orientation='h', marker_color='#F2A93B')
                         fig.update_layout(title=f'NET GAMMA {selected_profile} — {day:%d/%m/%Y}',
-                                          barmode='group', template='plotly_dark', height=330,
+                                          barmode='group', template='plotly_dark', height=410,
                                           margin=dict(l=10, r=10, t=42, b=15),
                                           legend=dict(orientation='h', y=1.10, x=0),
                                           xaxis_title='NET GAMMA', yaxis_title=None)
@@ -161,9 +161,7 @@ def render(store, week, snaps, logs):
                         # Sotto i livelli che hanno cambiato segno può trovarsi una sequenza negativa:
                         # osservazione descrittiva, non breakout generato automaticamente.
 
-                        st.caption('Cinque concentrazioni più intense osservate nei due snapshot, con distanza minima '
-                                   'di 10 punti SPX per leggibilità. Non sono automaticamente C1/C2/C3 o P1/P2/P3. '
-                                   'Il confronto riguarda lo stesso strike, non segnali di acquisto o vendita.')
+                        st.caption('Fino a 4 livelli NET positivi e 4 negativi, classificati secondo il segno MATTUTINO e ordinati per intensità massima nei due snapshot. Distanza minima di 5 punti SPX. Se mancano livelli di un segno, non si inventano sostituti. Cambi di segno evidenziati su tutti gli strike, anche fuori dagli 8. Non sono Call/Put né segnali operativi.')
                         if stats['solo_mattina'] or stats['solo_pomeriggio']:
                             st.caption(f"Strike confrontati: {stats['comuni']} · non comuni: "
                                        f"{stats['solo_mattina'] + stats['solo_pomeriggio']}.")
