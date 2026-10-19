@@ -8,7 +8,8 @@ import streamlit as st
 from net_gamma import profile, profile_csv, read_snapshot
 from volatility_levels import weekly_expiry, gamma_comparison, breakout_reference
 from context_levels import suggest_buffer
-from gamma_compare import compare_profiles, as_csv
+from gamma_compare import compare_profiles
+from gamma_brief import select_key_levels, summary
 from pine_export import make_pine
 from operational_levels import find_candidates, proposed_levels, candidate_csv
 from option_structure import build_structure
@@ -149,82 +150,64 @@ def render(store, week, snaps, logs):
         st.dataframe(frame, use_container_width=True, hide_index=True)
         st.download_button(f'Scarica calcolo CSV {title}', profile_csv(result, offset),
                            file_name=f'NET_GAMMA_{title}_{day.isoformat()}_{choice}.csv', mime='text/csv', key=f'csv_{title}_{choice}')
-    # Confronto delle due fotografie nello stesso giorno: per strike SPX,
-    # mai per indice di riga o per rango della barra.
-    with st.expander('Confronto NET GAMMA — mattina vs pomeriggio', expanded=False):
-        st.caption('Seleziona due snapshot Cboe della stessa giornata, acquisiti in ordine temporale. '
-                   'La variazione per strike non e un segnale di trading: gamma e volumi possono '
-                   'cambiare anche per effetti di mercato e passaggio del tempo.')
-        same_day = sorted([n for n in names if n.startswith(f'SPX_CBOE_{day:%Y%m%d}_')])
+    # Sintesi breve: due fotografie, stessi strike SPX, una sola visualizzazione.
+    with st.expander('NET GAMMA — mattina vs pomeriggio', expanded=False):
+        same_day = sorted(n for n in names if n.startswith(f'SPX_CBOE_{day:%Y%m%d}_'))
         if len(same_day) < 2:
-            st.info('Per questa giornata e disponibile meno di due snapshot distinti. '
-                    'Occorrono una fotografia mattutina e una pomeridiana.')
+            st.info('Servono due snapshot diversi della stessa giornata.')
         else:
-            first_col, second_col = st.columns(2)
-            with first_col:
-                first_name = st.selectbox('Snapshot precedente (mattina)', same_day[:-1], index=0,
-                                          key=f'v17_compare_first_{day}')
-            later_options = [n for n in same_day if n > first_name]
-            with second_col:
-                second_name = st.selectbox('Snapshot successivo (pomeriggio)', later_options,
-                                           index=len(later_options)-1,
-                                           key=f'v17_compare_second_{day}_{first_name}')
-            if st.checkbox('Mostra confronto dei due snapshot', key=f'v17_compare_run_{day}'):
-                try:
-                    older = read_snapshot(store.download(f'{week}/snapshots/{first_name}'))
-                    newer = read_snapshot(store.download(f'{week}/snapshots/{second_name}'))
-                    # I 25+25 sono selezionati utilizzando un unico close SPX precedente.
-                    # Se Cboe segnala riferimenti differenti, non scegliere tacitamente.
-                    old_ref = older['data'].get('prev_day_close')
-                    new_ref = newer['data'].get('prev_day_close')
-                    if old_ref is not None and new_ref is not None and abs(float(old_ref)-float(new_ref)) > 0.001:
-                        st.warning('I due snapshot dichiarano chiusure SPX precedenti differenti; '
-                                   'il confronto usa il riferimento SPX attualmente impostato, '
-                                   'uguale per entrambi.')
-                    if str(older.get('timestamp', '')) >= str(newer.get('timestamp', '')):
-                        st.warning('I timestamp Cboe non sono in ordine crescente. Controlla la selezione.')
-                    for title, expiry in [('0DTE', day), ('Weekly', weekly_exp)]:
-                        old_prof = profile(older, expiry, ref)
-                        new_prof = profile(newer, expiry, ref)
-                        st.markdown(f'**{title} — scadenza {expiry.isoformat()}**')
-                        if not old_prof['rows'] or not new_prof['rows']:
-                            st.warning(f'Scadenza {title} assente in uno dei due snapshot.')
-                            continue
-                        comparisons, stats = compare_profiles(old_prof, new_prof, offset)
-                        if not comparisons:
-                            st.warning('Nessuno strike in comune fra i due profili.')
-                            continue
-                        st.caption(f"Strike comuni: {stats['comuni']} · solo primo: {stats['solo_mattina']} "
-                                   f"· solo secondo: {stats['solo_pomeriggio']} "
-                                   f"· cambi di segno: {stats['cambi_segno']}. "
-                                   'Percentuali calcolate sul valore assoluto del NET iniziale; '
-                                   'non disponibili se il NET iniziale e zero.')
-                        import pandas as pd
-                        df_comparison = pd.DataFrame(comparisons)
-                        df_display = df_comparison.copy()
-                        for col in ['NET mattina', 'NET pomeriggio', 'Delta NET', 'Delta intensità', 'Delta intensità %']:
-                            df_display[col] = df_display[col].round(2)
-                        st.dataframe(df_display, use_container_width=True, hide_index=True)
-                        strongest = [r for r in comparisons if r['Delta intensità'] > 0]
-                        weakest = [r for r in comparisons if r['Delta intensità'] < 0]
-                        l, r = st.columns(2)
-                        with l:
-                            st.markdown('**5 maggiori rafforzamenti in intensità**')
-                            st.dataframe(pd.DataFrame(sorted(strongest, key=lambda x: -x['Delta intensità'])[:5]),
-                                         hide_index=True, use_container_width=True)
-                        with r:
-                            st.markdown('**5 maggiori indebolimenti in intensità**')
-                            st.dataframe(pd.DataFrame(sorted(weakest, key=lambda x: x['Delta intensità'])[:5]),
-                                         hide_index=True, use_container_width=True)
-                        changes = [r for r in comparisons if r['Evento'] == 'Cambio segno']
-                        if changes:
-                            st.markdown('**Strike con cambio di segno**')
-                            st.dataframe(pd.DataFrame(changes), hide_index=True, use_container_width=True)
-                        st.download_button(f'Scarica CSV confronto {title}', as_csv(comparisons),
-                                           file_name=f'Confronto_Gamma_{title}_{day.isoformat()}.csv',
-                                           mime='text/csv', key=f'v17_csv_{title}_{first_name}_{second_name}')
-                except Exception as exc:
-                    st.error(f'Confronto non disponibile: {type(exc).__name__}: {str(exc)[:220]}')
+            col_a, col_b = st.columns(2)
+            with col_a:
+                first_name = st.selectbox('Mattina', same_day[:-1], index=0, key=f'v18_first_{day}')
+            later = [n for n in same_day if n > first_name]
+            with col_b:
+                second_name = st.selectbox('Pomeriggio', later, index=len(later)-1,
+                                           key=f'v18_second_{day}_{first_name}')
+            selected_profile = st.radio('Profilo', ['0DTE', 'Weekly'], horizontal=True,
+                                        key=f'v18_profile_{day}', label_visibility='collapsed')
+            try:
+                older = read_snapshot(store.download(f'{week}/snapshots/{first_name}'))
+                newer = read_snapshot(store.download(f'{week}/snapshots/{second_name}'))
+                old_ref = older['data'].get('prev_day_close')
+                new_ref = newer['data'].get('prev_day_close')
+                if old_ref is not None and new_ref is not None and abs(float(old_ref) - float(new_ref)) > 0.001:
+                    st.warning('Chiusure SPX precedenti diverse nei due file; il confronto applica a entrambi il riferimento scelto sopra.')
+                expiry = day if selected_profile == '0DTE' else weekly_exp
+                old_prof = profile(older, expiry, ref)
+                new_prof = profile(newer, expiry, ref)
+                if not old_prof['rows'] or not new_prof['rows']:
+                    st.info(f'Profilo {selected_profile} non disponibile in uno dei due snapshot.')
+                else:
+                    comparisons, stats = compare_profiles(old_prof, new_prof, offset)
+                    main_levels = select_key_levels(comparisons, count=5, minimum_separation=10.0)
+                    if not main_levels:
+                        st.info('Nessuno strike in comune tra i due snapshot.')
+                    else:
+                        import plotly.graph_objects as go
+                        labels = [f"{r['Prezzo ES']:,.0f}".replace(',', '.') if r['Prezzo ES'] is not None
+                                  else f"{r['Strike SPX']:g} SPX" for r in main_levels]
+                        fig = go.Figure()
+                        fig.add_bar(name='Mattina', y=labels,
+                                    x=[r['NET mattina'] for r in main_levels], orientation='h')
+                        fig.add_bar(name='Pomeriggio', y=labels,
+                                    x=[r['NET pomeriggio'] for r in main_levels], orientation='h')
+                        fig.update_layout(title=f'NET GAMMA {selected_profile} — {day:%d/%m/%Y}',
+                                          barmode='group', template='plotly_dark', height=330,
+                                          margin=dict(l=10, r=10, t=42, b=15),
+                                          legend=dict(orientation='h', y=1.10, x=0),
+                                          xaxis_title='NET GAMMA', yaxis_title=None)
+                        fig.add_vline(x=0, line_color='#999', line_width=1)
+                        st.plotly_chart(fig, use_container_width=True,
+                                        key=f'v18_chart_{selected_profile}_{first_name}_{second_name}')
+                        st.markdown('**' + summary(main_levels) + '**')
+                        st.caption('Cinque concentrazioni più intense osservate nei due snapshot, con distanza minima '
+                                   'di 10 punti SPX per leggibilità. Non sono automaticamente C1/C2/C3 o P1/P2/P3. '
+                                   'Il confronto riguarda lo stesso strike, non segnali di acquisto o vendita.')
+                        if stats['solo_mattina'] or stats['solo_pomeriggio']:
+                            st.caption(f"Strike confrontati: {stats['comuni']} · non comuni: "
+                                       f"{stats['solo_mattina'] + stats['solo_pomeriggio']}.")
+            except Exception as exc:
+                st.error(f'Confronto non disponibile: {type(exc).__name__}: {str(exc)[:220]}')
     if candidate_0dte is not None:
         with st.expander('Livelli operativi C/P — tre barre più intense (SPERIMENTALE v10)', expanded=False):
             st.warning('Questi sono CANDIDATI basati sulle tre barre NET GAMMA più intense per lato, NON livelli C1–C3/P1–P3 confermati da Serafini. Non sono segnali automatici. Il calcolo NET GAMMA resta invariato.')
