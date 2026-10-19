@@ -13,6 +13,7 @@ from gamma_brief import select_key_levels, operational_summary, transition_zones
 from pine_export import make_pine
 from operational_levels import find_candidates, proposed_levels, candidate_csv
 from option_structure import build_structure
+from payoff_charts import render_payoff_charts
 from es_spx_basis import download_and_calculate
 from decimal import Decimal, ROUND_HALF_UP
 from html import escape
@@ -463,6 +464,7 @@ def render(store, week, snaps, logs):
                     else:
                         role_rows, measures = structure
                         st.dataframe(role_rows, use_container_width=True, hide_index=True)
+                        render_payoff_charts(chosen, offset)
                         left, right = st.columns(2)
                         with left:
                             st.markdown('**Scenario rialzista — Vertical Call**')
