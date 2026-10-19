@@ -108,6 +108,30 @@ def _acquisition_label(store, week, logs, file_name):
     return min(matching, key=lambda r: r[0])[1]
 
 
+
+def _snapshot_download_clock(store, week, logs, file_name):
+    """Ora effettiva di download a Roma dai log; NON dal timestamp Cboe.
+
+    Restituisce None se il file non ha registri attendibili.
+    """
+    expected_path = f'{week}/snapshots/{file_name}'
+    clock_times = []
+    for entry in logs:
+        try:
+            item = json.loads(store.download(f"{week}/logs/{entry['name']}"))
+            if item.get('file') != expected_path or item.get('status') not in ('NUOVO', 'INVARIATO'):
+                continue
+            raw = item.get('download_rome') or item.get('download_utc')
+            if not raw:
+                continue
+            stamp = datetime.fromisoformat(str(raw).replace('Z', '+00:00'))
+            if stamp.tzinfo is None:
+                continue
+            clock_times.append(stamp.astimezone(ZoneInfo('Europe/Rome')))
+        except (ValueError, TypeError, KeyError, OverflowError, OSError, RuntimeError):
+            continue
+    return min(clock_times).strftime('%H:%M') if clock_times else None
+
 def render(store, week, snaps, logs):
     st.header('NET GAMMA · replica formula Serafini — verifica')
     st.info('NET GAMMA invariato (25+25 strike). 0DTE prioritario; Weekly del venerdì = venerdì successivo. C1–C3/P1–P3: proposte modificabili. Volume Profile annuale e deviazione standard si visualizzano su TradingView; qui si possono confrontare i soli valori UP/DOWN già verificati. Esclusi CFD, stocastico e probabilità macro.')
@@ -211,7 +235,7 @@ def render(store, week, snaps, logs):
         st.error('Snapshot in giorno non operativo: scegliere manualmente una giornata valida.'); return
     st.caption(f'0DTE: {day.isoformat()} · Weekly: {weekly_exp.isoformat()} (lun–gio venerdì corrente; venerdì successivo). In caso di festività controllare la scadenza effettiva.')
     # Sintesi breve: due fotografie, stessi strike SPX, una sola visualizzazione.
-    with st.expander('Confronto NET GAMMA · Mattina / Pomeriggio (v25)', expanded=True):
+    with st.expander('Confronto NET GAMMA · rilevamenti selezionati (v35)', expanded=True):
         same_day = sorted(n for n in names if n.startswith(f'SPX_CBOE_{day:%Y%m%d}_'))
         if len(same_day) < 2:
             st.info('Servono due snapshot diversi della stessa giornata.')
@@ -226,6 +250,13 @@ def render(store, week, snaps, logs):
             with col_b:
                 second_name = st.selectbox('Snapshot finale (anche manuale)', later, index=len(later)-1,
                                            key=f'v19_second_{day}_{first_name}')
+            first_clock = _snapshot_download_clock(store, week, logs, first_name)
+            second_clock = _snapshot_download_clock(store, week, logs, second_name)
+            first_label = first_clock or 'Iniziale (ora n.d.)'
+            second_label = second_clock or 'Finale (ora n.d.)'
+            interval_label = f'{first_label} : {second_label}'
+            if first_clock is None or second_clock is None:
+                st.caption('Orario di download non presente nei registri per almeno uno snapshot: non viene ricavato dal timestamp Cboe.')
             selected_profile = st.radio('Profilo', ['0DTE', 'Weekly'], horizontal=True,
                                         key=f'v19_profile_{day}', label_visibility='collapsed')
             try:
@@ -250,9 +281,9 @@ def render(store, week, snaps, logs):
                         labels = [f"{r['Prezzo ES']:,.0f}".replace(',', '.') if r['Prezzo ES'] is not None
                                   else f"{r['Strike SPX']:g} SPX" for r in main_levels]
                         fig = go.Figure()
-                        fig.add_bar(name='Mattina', y=labels,
+                        fig.add_bar(name=first_label, y=labels,
                                     x=[r['NET mattina'] for r in main_levels], orientation='h', marker_color='#596EFF')
-                        fig.add_bar(name='Pomeriggio', y=labels,
+                        fig.add_bar(name=second_label, y=labels,
                                     x=[r['NET pomeriggio'] for r in main_levels], orientation='h', marker_color='#F2A93B')
                         fig.update_layout(title=f'NET GAMMA {selected_profile} — {day:%d/%m/%Y}',
                                           barmode='group', template='plotly_dark', height=410,
@@ -311,7 +342,7 @@ def render(store, week, snaps, logs):
                                 st.markdown(
                                     '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;text-align:left;font-size:0.95rem">'
                                     '<thead><tr style="background:rgba(125,125,125,0.13)"><th style="padding:10px 12px">Livello ES</th>'
-                                    '<th style="padding:10px 12px">Mattina : Pomeriggio</th>'
+                                    f'<th style="padding:10px 12px">{escape(interval_label)}</th>'
                                     '<th style="padding:10px 12px">Variazione</th></tr></thead><tbody>'
                                     + ''.join(tr) + '</tbody></table></div>',
                                     unsafe_allow_html=True,
@@ -322,7 +353,7 @@ def render(store, week, snaps, logs):
                             zones = transition_zones(comparisons)
                             if zones:
                                 st.markdown('#### Evoluzione NET GAMMA — zone di transizione')
-                                st.caption('I valori indicano due rilevazioni distinte: Mattina : Pomeriggio. Non si sommano.')
+                                st.caption(f'I valori indicano due rilevazioni distinte ({interval_label}), non si sommano.')
                                 def _price(r):
                                     return (f"{r['Prezzo ES']:,.0f}".replace(',', '.') if r['Prezzo ES'] is not None
                                             else f"SPX {r['Strike SPX']:g}")
@@ -359,14 +390,14 @@ def render(store, week, snaps, logs):
                                             '</tr>'
                                         )
                                     table_html = ('<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;text-align:left;font-size:0.95rem">'
-                                                  '<thead><tr style="background:rgba(125,125,125,0.13)"><th style="padding:10px 12px">Livello ES</th><th style="padding:10px 12px">Mattina : Pomeriggio</th><th style="padding:10px 12px">Variazione</th></tr></thead>'
+                                                  f'<thead><tr style="background:rgba(125,125,125,0.13)"><th style="padding:10px 12px">Livello ES</th><th style="padding:10px 12px">{escape(interval_label)}</th><th style="padding:10px 12px">Variazione</th></tr></thead>'
                                                   '<tbody>' + ''.join(body) + '</tbody></table></div>')
                                     st.markdown(table_html, unsafe_allow_html=True)
                                     st.markdown(f'**Sintesi operativa:** {_transition_summary(rows, zone["direction"])}')
                             else:
                                 st.caption('Nessun cambiamento di segno netto nei livelli comuni ai due snapshot.')
 
-                        st.caption('Grafico: fino a 4 Gamma positivi e 4 negativi secondo il segno mattutino; gli strike sono confrontati allo stesso prezzo SPX. I livelli non sono automaticamente Call/Put né segnali operativi.')
+                        st.caption('Grafico: fino a 4 Gamma positivi e 4 negativi secondo il segno del primo rilevamento; gli strike sono confrontati allo stesso prezzo SPX. I livelli non sono automaticamente Call/Put né segnali operativi.')
                         if stats['solo_mattina'] or stats['solo_pomeriggio']:
                             st.caption(f"Strike confrontati: {stats['comuni']} · non comuni: "
                                        f"{stats['solo_mattina'] + stats['solo_pomeriggio']}.")
