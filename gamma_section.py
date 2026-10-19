@@ -65,6 +65,49 @@ def _transition_summary(rows, direction):
     return 'Nessun cambio di segno nella zona.'
 
 
+def _acquisition_label(store, week, logs, file_name):
+    """L'etichetta usa esclusivamente il registro del download, NON il timestamp Cboe.
+
+    Nessun orario viene inferito dal timestamp sorgente, che non dichiara il fuso.
+    """
+    path = f'{week}/snapshots/{file_name}'
+    matching = []
+    for entry in logs:
+        try:
+            item = json.loads(store.download(f"{week}/logs/{entry['name']}"))
+            if item.get('file') != path or item.get('status') not in ('NUOVO', 'INVARIATO'):
+                continue
+            downloaded = item.get('download_rome') or item.get('download_utc')
+            if not downloaded:
+                continue
+            dt = datetime.fromisoformat(str(downloaded).replace('Z', '+00:00'))
+            if dt.tzinfo is None:
+                continue
+            dt = dt.astimezone(ZoneInfo('Europe/Rome'))
+            slot = str(item.get('scheduled_slot', '')).strip()
+            if slot == '30 7 * * 1-5':
+                label = 'Mattina 07:30'
+            elif slot == '46 15 * * 1-5':
+                label = 'Pomeriggio 15:46'
+            elif slot == '30 15 * * 1-5':
+                label = 'Pomeriggio 15:30 (storico)'
+            elif slot == '45 7 * * 1-5':
+                label = 'Recupero mattina 07:45'
+            elif slot == '45 15 * * 1-5':
+                label = 'Recupero pomeriggio 15:45'
+            elif slot.lower() in ('', 'manuale', 'manual', 'test', 'workflow_dispatch'):
+                label = f'Manuale {dt:%H:%M}'
+            else:
+                label = f'Download {dt:%H:%M}'
+            matching.append((dt, label))
+        except (KeyError, TypeError, ValueError, OverflowError, OSError, RuntimeError):
+            continue
+    if not matching:
+        return 'Rilevamento non identificato'
+    # Quando lo stesso file appare in più log, preferire il primo download effettivo.
+    return min(matching, key=lambda r: r[0])[1]
+
+
 def render(store, week, snaps, logs):
     st.header('NET GAMMA · replica formula Serafini — verifica')
     st.info('NET GAMMA invariato (25+25 strike). 0DTE prioritario; Weekly del venerdì = venerdì successivo. C1–C3/P1–P3: proposte modificabili. Volume Profile annuale e deviazione standard si visualizzano su TradingView; qui si possono confrontare i soli valori UP/DOWN già verificati. Esclusi CFD, stocastico e probabilità macro.')
@@ -80,7 +123,8 @@ def render(store, week, snaps, logs):
         st.error(f'Impossibile leggere lo snapshot: {type(exc).__name__}')
         return
     timestamp = str(snap.get('timestamp', ''))
-    st.caption(f'Snapshot Cboe: {timestamp} · file {choice} · nessuna modifica al file originale')
+    acquisition_label = _acquisition_label(store, week, logs, choice)
+    st.caption(f'Rilevamento selezionato: {acquisition_label} · Timestamp Cboe: {timestamp} · file {choice}')
     # Si usa la data dello snapshot per gli esempi e per impedire look-ahead.
     try:
         day = date.fromisoformat(choice.split('SPX_CBOE_')[1][:8][:4] + '-' + choice.split('SPX_CBOE_')[1][4:6] + '-' + choice.split('SPX_CBOE_')[1][6:8])
@@ -174,13 +218,13 @@ def render(store, week, snaps, logs):
         else:
             col_a, col_b = st.columns(2)
             with col_a:
-                first_name = st.selectbox('Mattina', same_day[:-1], index=0, key=f'v19_first_{day}')
+                first_name = st.selectbox('Snapshot iniziale (es. 15:46)', same_day[:-1], index=0, key=f'v19_first_{day}')
             later = [n for n in same_day if n > first_name]
             if not later:
                 st.info('Non ci sono snapshot successivi per il confronto.')
                 st.stop()
             with col_b:
-                second_name = st.selectbox('Pomeriggio', later, index=len(later)-1,
+                second_name = st.selectbox('Snapshot finale (anche manuale)', later, index=len(later)-1,
                                            key=f'v19_second_{day}_{first_name}')
             selected_profile = st.radio('Profilo', ['0DTE', 'Weekly'], horizontal=True,
                                         key=f'v19_profile_{day}', label_visibility='collapsed')
@@ -530,7 +574,7 @@ def render(store, week, snaps, logs):
     elif not (computed_profiles.get('0DTE', {}).get('rows') and computed_profiles.get('Weekly', {}).get('rows')):
         st.warning('Esportazione non disponibile: almeno uno dei due profili non ha dati.')
     else:
-        pine = make_pine(computed_profiles['0DTE'], computed_profiles['Weekly'], offset, day.isoformat(), timestamp)
+        pine = make_pine(computed_profiles['0DTE'], computed_profiles['Weekly'], offset, day.isoformat(), timestamp, acquisition_label)
         st.download_button('Scarica Pine Script TradingView — 0DTE + Weekly', data=pine.encode('utf-8'), file_name=f'Serafini_NET_GAMMA_ES_{day.isoformat()}.pine', mime='text/plain', key=f'pine_both_{choice}')
         with st.expander('Mostra codice Pine da copiare e incollare'):
             st.code(pine, language='pine')

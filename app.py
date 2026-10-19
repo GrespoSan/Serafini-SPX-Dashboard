@@ -157,6 +157,10 @@ c1, c2 = st.columns(2)
 c1.metric('Snapshot distinti', len(snaps))
 c2.metric('Registri', len(logs))
 
+# Acquisizione manuale per tutti gli utenti autenticati: non cambia gli orari ufficiali.
+from manual_acquisition import render as render_manual_acquisition
+render_manual_acquisition(role, week)
+
 if logs:
     rows = []
     for obj in logs:

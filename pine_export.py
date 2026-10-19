@@ -20,7 +20,7 @@ def _pine_array(rows, field: str, offset: float = 0.0):
     return 'array.from(\n        ' + ',\n        '.join(', '.join(vals[i:i + 8]) for i in range(0, len(vals), 8)) + '\n    )'
 
 
-def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stamp: str) -> str:
+def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stamp: str, acquisition_label: str = '') -> str:
     if not isfinite(offset):
         raise ValueError('Il differenziale non è finito')
     if not odte.get('rows') or not weekly.get('rows'):
@@ -30,10 +30,14 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
             raise ValueError('Al massimo 50 livelli per profilo')
     same_exp = odte['expiry'] == weekly['expiry']
     origin = re.sub(r'[^0-9T: .-]', '', cboe_stamp)[:72]
+    # Usa solo etichette del registro di acquisizione, non presume il fuso del timestamp Cboe.
+    clean_label = re.sub(r'[^a-zA-Z0-9À-ÿ :()._-]', '', acquisition_label or '')[:50]
+    tag = f' | {clean_label}' if clean_label else ''
     warning = ('// NOTA: 0DTE e Weekly hanno LA STESSA SCADENZA in questa data: i due profili sono identici per definizione.\n' if same_exp else '')
     return f'''//@version=6
 indicator("Serafini SPX NET GAMMA | {date_text}", overlay=true, max_lines_count=250, max_labels_count=20)
-// EXPORT REVISION: V16-PINE-FIX-20261019 (width=5; Weekly=100, min=55; label=50)
+// EXPORT REVISION: V33-ACQUISITION-LABELS (width=5; Weekly=100, min=55; label=50)
+// Rilevamento selezionato: {clean_label or "Non identificato"}
 // Esportazione STATICA da uno snapshot Cboe; aggiornare ricopiando il Pine generato dalla dashboard.
 // Fonte: {origin}
 // Data snapshot: {date_text} | 0DTE: {odte['expiry']} | Weekly: {weekly['expiry']}
@@ -90,6 +94,6 @@ if barstate.islast
     for t in drawnLabels
         label.delete(t)
     array.clear(drawnLabels)
-    renderProfile(odteLevels, odteValues, bar_index + offsetOdte, "0DTE {odte['expiry']}")
-    renderProfile(weeklyLevels, weeklyValues, bar_index + offsetWeekly, "WEEKLY {weekly['expiry']}")
+    renderProfile(odteLevels, odteValues, bar_index + offsetOdte, "0DTE {odte['expiry']}{tag}")
+    renderProfile(weeklyLevels, weeklyValues, bar_index + offsetWeekly, "WEEKLY {weekly['expiry']}{tag}")
 '''
