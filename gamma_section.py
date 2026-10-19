@@ -283,15 +283,15 @@ def render(store, week, snaps, logs):
 
                                 def _weekly_change(a, b):
                                     if a > 0 > b:
-                                        return 'Da positivo a negativo'
+                                        return 'Passaggio da CALL a PUT'
                                     if a < 0 < b:
-                                        return 'Da negativo a positivo'
+                                        return 'Passaggio da PUT a CALL'
                                     if a == 0 or b == 0:
                                         return 'Passaggio per zero' if a != b else 'Invariato'
                                     if abs(b) > abs(a) + 1e-8:
-                                        return ('Positivo' if b > 0 else 'Negativo') + ' aumentato'
+                                        return 'Aumento di CALL' if b > 0 else 'Aumento di PUT'
                                     if abs(b) < abs(a) - 1e-8:
-                                        return ('Positivo' if b > 0 else 'Negativo') + ' diminuito'
+                                        return 'Riduzione di CALL' if b > 0 else 'Riduzione di PUT'
                                     return 'Invariato'
 
                                 tr = []
@@ -332,15 +332,15 @@ def render(store, week, snaps, logs):
                                     return f'<span style="color:{color};font-weight:650;font-variant-numeric:tabular-nums">{value}</span>'
                                 def _description(old, new):
                                     if old > 0 > new:
-                                        return 'Da positivo a negativo'
+                                        return 'Passaggio da CALL a PUT'
                                     if old < 0 < new:
-                                        return 'Da negativo a positivo'
+                                        return 'Passaggio da PUT a CALL'
                                     if old == 0 or new == 0:
                                         return 'Valore zero / cambio di segno' if old != new else 'Invariato'
                                     if abs(new) > abs(old) + 1e-8:
-                                        return ('Positivo' if new > 0 else 'Negativo') + ' aumentato'
+                                        return 'Aumento di CALL' if new > 0 else 'Aumento di PUT'
                                     if abs(new) < abs(old) - 1e-8:
-                                        return ('Positivo' if new > 0 else 'Negativo') + ' diminuito'
+                                        return 'Riduzione di CALL' if new > 0 else 'Riduzione di PUT'
                                     return 'Invariato'
                                 for num, zone in enumerate(zones, start=1):
                                     rows = sorted(zone['rows'], key=lambda r: r['Strike SPX'], reverse=True)
