@@ -71,3 +71,44 @@ def operational_summary(rows):
     if mixed:
         lines.append('**Segno cambiato (fra gli 8):** ' + ', '.join(fmt(r) for r in mixed) + '.')
     return lines if lines else ['Nessuna variazione rilevante sui livelli selezionati.']
+
+
+def transition_zones(rows, max_zones=3):
+    """Rileva gruppi CONTIGUI di strike che cambiano segno fra due snapshot.
+
+    Espande ogni gruppo di un solo strike su ogni lato per fornire contesto.
+    I livelli esterni non sono automaticamente supporti, breakout o gamma flip.
+    """
+    ordered = sorted(rows, key=lambda r: float(r['Strike SPX']))
+    if not ordered:
+        return []
+    gaps = [float(b['Strike SPX']) - float(a['Strike SPX']) for a, b in zip(ordered, ordered[1:])]
+    positive_gaps = sorted(g for g in gaps if g > 0)
+    step = positive_gaps[len(positive_gaps)//2] if positive_gaps else 5.0
+    changed = [i for i, r in enumerate(ordered) if (r['NET mattina'] > 0 > r['NET pomeriggio']
+                                                      or r['NET mattina'] < 0 < r['NET pomeriggio'])]
+    if not changed:
+        return []
+    groups = []
+    for idx in changed:
+        if groups and idx == groups[-1][-1] + 1 and gaps[idx - 1] <= step * 1.01:
+            groups[-1].append(idx)
+        else:
+            groups.append([idx])
+    result = []
+    for indices in groups:
+        left, right = indices[0], indices[-1]
+        start = left - 1 if left > 0 and gaps[left-1] <= step*1.01 else left
+        end = right
+        for _ in range(2):
+            if end + 1 < len(ordered) and gaps[end] <= step * 1.01:
+                end += 1
+        context = ordered[start:end+1]
+        direction = ('verso NET negativo' if all(ordered[i]['NET mattina'] > 0 > ordered[i]['NET pomeriggio'] for i in indices)
+                     else 'verso NET positivo' if all(ordered[i]['NET mattina'] < 0 < ordered[i]['NET pomeriggio'] for i in indices)
+                     else 'mista')
+        result.append({'rows': context, 'changed_count': len(indices),
+                       'direction': direction, 'indices': indices,
+                       'score': sum(abs(ordered[i]['NET pomeriggio'] - ordered[i]['NET mattina']) for i in indices)})
+    result.sort(key=lambda z: (-z['changed_count'], -z['score']))
+    return result[:max_zones]

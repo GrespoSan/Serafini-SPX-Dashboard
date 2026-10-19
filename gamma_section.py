@@ -9,7 +9,7 @@ from net_gamma import profile, profile_csv, read_snapshot
 from volatility_levels import weekly_expiry, gamma_comparison, breakout_reference
 from context_levels import suggest_buffer
 from gamma_compare import compare_profiles
-from gamma_brief import select_key_levels, operational_summary
+from gamma_brief import select_key_levels, operational_summary, transition_zones
 from pine_export import make_pine
 from operational_levels import find_candidates, proposed_levels, candidate_csv
 from option_structure import build_structure
@@ -94,7 +94,7 @@ def render(store, week, snaps, logs):
         st.error('Snapshot in giorno non operativo: scegliere manualmente una giornata valida.'); return
     st.caption(f'0DTE: {day.isoformat()} · Weekly: {weekly_exp.isoformat()} (lun–gio venerdì corrente; venerdì successivo). In caso di festività controllare la scadenza effettiva.')
     # Sintesi breve: due fotografie, stessi strike SPX, una sola visualizzazione.
-    with st.expander('Confronto NET GAMMA · Mattina / Pomeriggio (v21)', expanded=True):
+    with st.expander('Confronto NET GAMMA · Mattina / Pomeriggio (v22)', expanded=True):
         same_day = sorted(n for n in names if n.startswith(f'SPX_CBOE_{day:%Y%m%d}_'))
         if len(same_day) < 2:
             st.info('Servono due snapshot diversi della stessa giornata.')
@@ -148,18 +148,43 @@ def render(store, week, snaps, logs):
                         
                         for _line in operational_summary(main_levels):
                             st.markdown(_line)
-                        # Cambio di segno reale sullo stesso strike: importante per il caso 7724/7729/7734.
-                        sign_changes = [r for r in comparisons if r['Evento'] == 'Cambio segno']
-                        if sign_changes:
+                        # Transizioni CONTIGUE osservate nei due snapshot, non segnali di ingresso.
+                        zones = transition_zones(comparisons)
+                        if zones:
+                            st.markdown('#### Zona di transizione Gamma — livelli da monitorare')
+                            st.caption('Lo strike viene confrontato fra mattina e pomeriggio. Il livello vicino è mostrato solo come contesto; nessun breakout è assegnato automaticamente.')
                             def _price(r):
                                 return (f"{r['Prezzo ES']:,.0f}".replace(',', '.') if r['Prezzo ES'] is not None
                                         else f"SPX {r['Strike SPX']:g}")
-                            brief = ', '.join(f"{_price(r)} ({'+' if r['NET mattina'] > 0 else '−'} → "
-                                              f"{'+' if r['NET pomeriggio'] > 0 else '−'})"
-                                              for r in sign_changes[:6])
-                            st.warning(f'**Cambi di segno fra i due snapshot:** {brief}')
-                        # Sotto i livelli che hanno cambiato segno può trovarsi una sequenza negativa:
-                        # osservazione descrittiva, non breakout generato automaticamente.
+                            for num, zone in enumerate(zones, start=1):
+                                if len(zones) > 1:
+                                    st.markdown(f"**Zona {num} — {zone['direction']}**")
+                                else:
+                                    st.markdown(f"**Transizione {zone['direction']}**")
+                                view = []
+                                for item in sorted(zone['rows'], key=lambda r: r['Strike SPX'], reverse=True):
+                                    old, new = item['NET mattina'], item['NET pomeriggio']
+                                    flip = old * new < 0
+                                    if flip:
+                                        condition = '🟡 Cambio di segno'
+                                    elif old < 0 and new < 0 and abs(new) > abs(old):
+                                        condition = '🔴 Negativo rafforzato'
+                                    elif old > 0 and new > 0 and abs(new) < abs(old):
+                                        condition = 'Positivo indebolito'
+                                    else:
+                                        condition = 'Contesto'
+                                    view.append({'Livello ES / SPX': _price(item),
+                                                 'Mattina': f"{old:+.2f}", 'Pomeriggio': f"{new:+.2f}",
+                                                 'Evoluzione': condition})
+                                st.dataframe(view, use_container_width=True, hide_index=True)
+                                if zone['direction'] == 'verso NET negativo':
+                                    st.markdown('**Lettura:** la zona negativa si è estesa verso prezzi più alti nei livelli che hanno cambiato segno. Da confrontare con la conferma del prezzo; non è un segnale short.')
+                                elif zone['direction'] == 'verso NET positivo':
+                                    st.markdown('**Lettura:** la zona positiva si è estesa verso prezzi più bassi nei livelli che hanno cambiato segno. Non è un segnale long.')
+                                else:
+                                    st.markdown('**Lettura:** cambi di segno discordanti; nessuna direzione deducibile.')
+                        else:
+                            st.caption('Nessun cambiamento di segno netto nei livelli comuni ai due snapshot.')
 
                         st.caption('Fino a 4 livelli NET positivi e 4 negativi, classificati secondo il segno MATTUTINO e ordinati per intensità massima nei due snapshot. Distanza minima di 5 punti SPX. Se mancano livelli di un segno, non si inventano sostituti. Cambi di segno evidenziati su tutti gli strike, anche fuori dagli 8. Non sono Call/Put né segnali operativi.')
                         if stats['solo_mattina'] or stats['solo_pomeriggio']:
