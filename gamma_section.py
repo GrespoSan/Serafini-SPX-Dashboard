@@ -5,16 +5,18 @@ from datetime import date, timedelta
 from zoneinfo import ZoneInfo
 from datetime import datetime
 import streamlit as st
-from net_gamma import friday_of, profile, profile_csv, read_snapshot
+from net_gamma import profile, profile_csv, read_snapshot
+from volatility_levels import weekly_expiry, gamma_comparison, breakout_reference
 from pine_export import make_pine
 from operational_levels import find_candidates, proposed_levels, candidate_csv
+from option_structure import build_structure
 from es_spx_basis import download_and_calculate
 from decimal import Decimal, ROUND_HALF_UP
 
 
 def render(store, week, snaps, logs):
     st.header('NET GAMMA · replica formula Serafini — verifica')
-    st.info('Formula NET GAMMA della slide 132. Selezione dei livelli confermata da Serafini: 25 strike sopra e 25 sotto la chiusura SPX. La classificazione C1/P1 e il Gamma Flip non sono ancora automatizzati.')
+    st.info('NET GAMMA invariato: formula slide 132, 25 strike sopra + 25 sotto la chiusura SPX. Weekly del venerdì = venerdì successivo (risposta Serafini 18/10). I ruoli C1–C3/P1–P3 sono proposte correggibili, non riconoscimenti certi.')
     if not snaps:
         st.info('Nessuno snapshot disponibile nella settimana selezionata.')
         return
@@ -84,14 +86,14 @@ def render(store, week, snaps, logs):
         offset = None if not offset_txt.strip() else float(offset_txt.replace(',', '.'))
     except ValueError:
         st.error('Differenziale non numerico'); return
-    weekly_exp = friday_of(day)
+    weekly_exp = weekly_expiry(day)
     if day.weekday() >= 5:
         st.error('Snapshot in giorno non operativo: scegliere manualmente una giornata valida.'); return
-    st.caption(f'0DTE: {day.isoformat()} · Weekly (venerdì della settimana): {weekly_exp.isoformat()}. Selezione settimanale da verificare in caso di festività.')
+    st.caption(f'0DTE: {day.isoformat()} · Weekly: {weekly_exp.isoformat()} (lun–gio venerdì corrente; venerdì successivo). In caso di festività controllare la scadenza effettiva.')
     computed_profiles = {}
     candidate_0dte = None
-    if weekly_exp == day:
-        st.info('Oggi è venerdì: 0DTE e Weekly scadono entrambe oggi. I due profili possono coincidere: la separazione grafica non crea due scadenze diverse.')
+    if day.weekday() == 4:
+        st.info('Venerdì: il profilo 0DTE è quello di oggi, mentre il Weekly usa il venerdì SUCCESSIVO (conferma diretta di Serafini).')
     for title, expiry in [('0DTE', day), ('Weekly', weekly_exp)]:
         try:
             result = profile(snap, expiry, ref)
@@ -197,7 +199,74 @@ def render(store, week, snaps, logs):
                 st.dataframe(ordered, hide_index=True, use_container_width=True)
                 if offset is None:
                     st.caption('Inserisci un differenziale ES − SPX verificato per visualizzare anche i prezzi ES.')
-                st.caption('La numerazione è un’ipotesi sperimentale. Le soglie di breakout e il Gamma Flip NON sono calcolati qui.')
+                st.caption('La numerazione resta SPERIMENTALE. Da Serafini: C1 vicino al Gamma Flip, C2 gamma particolarmente pronunciato, C3 livello esterno vicino a 1 deviazione standard; per Put logica analoga da verificare. Qui il Gamma Flip NON è calcolato; i tre top-per-intensità sono solo una proposta modificabile.')
+                with st.expander('Livelli di volatilità e copertura Gamma — confronto assistito v14', expanded=False):
+                    st.info('Serafini affianca i livelli di Gamma esterni alle soglie di volatilità. La sua spiegazione cita 350 barre RTH a 15 minuti ma NON specifica qui in modo univoco la serie statistica e le impostazioni della deviazione standard: non la inventiamo. Inserisci i valori ottenuti dal tuo indicatore per confrontarli.')
+                    if offset is None:
+                        st.warning('Inserisci prima il differenziale ES−SPX per confrontare valori tutti sul future ES.')
+                    else:
+                        left_v, right_v = st.columns(2)
+                        with left_v:
+                            vol_hi = st.number_input('Soglia superiore (+1σ) ES, se disponibile', min_value=0.0, value=0.0, step=0.25, key=f'v14_volhi_{choice}')
+                        with right_v:
+                            vol_lo = st.number_input('Soglia inferiore (−1σ) ES, se disponibile', min_value=0.0, value=0.0, step=0.25, key=f'v14_vollo_{choice}')
+                        if vol_hi > vol_lo > 0:
+                            st.dataframe(gamma_comparison(chosen, offset, vol_hi, vol_lo), hide_index=True, use_container_width=True)
+                            st.caption('Differenze mostrate senza spostare automaticamente C3/P3: i livelli esterni devono restare legati alla struttura opzionale.')
+                        elif vol_hi or vol_lo:
+                            st.warning('Per il confronto inserisci entrambe le soglie, con superiore maggiore dell’inferiore.')
+                        st.markdown('**Coperture indicative sul Gamma (regola illustrata con 10 punti)**')
+                        st.dataframe(breakout_reference(chosen, offset, 10), hide_index=True, use_container_width=True)
+                        st.caption('Serafini richiede accettazione tramite CHIUSURA di una candela ES a 5 minuti oltre la copertura. Le 10 unità sono esemplificative: criterio oggettivo per preferire 10 o 15 in alta volatilità non ancora chiarito. Nessun ordine automatico.')
+                # Sezione separata: interpretazione della struttura, mai inferenza
+                # automatica sul verso delle singole transazioni.
+                with st.expander('Struttura opzionale — 2 Vertical + Strangle (SPERIMENTALE v13)', expanded=True):
+                    st.warning('Schema di lettura dalle slide: NON è una prova di opzioni comprate o vendute. '
+                               'Il NET GAMMA aggregato non identifica il lato effettivo delle operazioni.')
+                    st.caption('Prima seleziona/correggi C1–C3 e P1–P3 sopra. '
+                               'I ruoli qui sotto rappresentano la struttura didattica descritta da Serafini, '
+                               'non un riconoscimento certo del vertical principale.')
+                    structure = build_structure(chosen, offset)
+                    if structure is None:
+                        st.info('Per visualizzare la struttura completa, assegna sei livelli distinti e ordinati.')
+                    else:
+                        role_rows, measures = structure
+                        st.dataframe(role_rows, use_container_width=True, hide_index=True)
+                        left, right = st.columns(2)
+                        with left:
+                            st.markdown('**Scenario rialzista — Vertical Call**')
+                            st.write('Call acquistata: C1 · Call venduta che finanzia: C2')
+                            st.write('Target principale ipotizzato: **C2** · target esteso: **C3**')
+                        with right:
+                            st.markdown('**Scenario ribassista — Vertical Put**')
+                            st.write('Put acquistata: P1 · Put venduta che finanzia: P2')
+                            st.write('Target principale ipotizzato: **P2** · target esteso: **P3**')
+                        st.caption('Ampiezze strike SPX (uguali in punti ES con differenziale costante): '
+                                   + ' · '.join(f'{k}: {v:g}' for k,v in measures.items()))
+                        with st.expander('Range asiatico — confronto manuale facoltativo'):
+                            st.caption('Inserisci i massimi/minimi osservati sul future ES. '
+                                       'Nessun dato asiatico è recuperato automaticamente e non vengono generati segnali.')
+                            asiatic = st.checkbox('Ho i livelli del range asiatico', key=f'v13_asia_on_{choice}')
+                            if asiatic:
+                                ah, al = st.columns(2)
+                                with ah:
+                                    hi = st.number_input('Massimo asiatico ES', value=0.0, step=0.25,
+                                                         key=f'v13_asia_hi_{choice}')
+                                with al:
+                                    lo = st.number_input('Minimo asiatico ES', value=0.0, step=0.25,
+                                                         key=f'v13_asia_lo_{choice}')
+                                if offset is None:
+                                    st.info('Per confrontare il range ES con gli strike inserisci prima il differenziale ES–SPX.')
+                                elif hi <= lo or lo <= 0:
+                                    st.warning('Inserisci un massimo maggiore del minimo e valori positivi.')
+                                else:
+                                    st.write(f'Range asiatico ES: **{lo:g}–{hi:g}** ({hi-lo:g} punti)')
+                                    for r in role_rows:
+                                        es = r['Prezzo ES']
+                                        where = ('sotto' if es < lo else 'sopra' if es > hi else 'dentro')
+                                        st.caption(f"{r['Livello']} ({es:g}) è {where} il range asiatico")
+                        st.caption('Il superamento dei livelli esterni richiede lettura del contesto e conferme; '
+                                   'qui non si calcolano segnali, volatilità attesa o probabilità.')
             st.download_button('Scarica graduatoria barre NET GAMMA 0DTE (CSV)',
                                candidate_csv(candidate_0dte, offset),
                                file_name=f'Candidati_Top3_Gamma_{day.isoformat()}_{choice}.csv',
