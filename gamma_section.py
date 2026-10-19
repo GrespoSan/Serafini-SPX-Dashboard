@@ -100,8 +100,29 @@ def render(store, week, snaps, logs):
     st.caption('Metodo Serafini: media delle distanze sulle barre a 15 minuti della sessione cash precedente. '
                'Qui usiamo le chiusure sincronizzate, una scelta tecnica da verificare su TradingView.')
     basis_key = f'basis_override_{day.isoformat()}'
+    attempt_key = f'basis_auto_attempted_{day.isoformat()}'
     if 'auto_basis_results' not in st.session_state:
         st.session_state.auto_basis_results = {}
+
+    def _apply_auto_basis():
+        result = _auto_basis(day)
+        st.session_state.auto_basis_results[day.isoformat()] = result
+        st.session_state[basis_key] = str(int(Decimal(str(result['basis'])).quantize(
+            Decimal('1'), rounding=ROUND_HALF_UP)))
+        return result
+
+    # Una sola acquisizione automatica per giorno e sessione Streamlit.
+    # Non sovrascrivere un valore gia' modificato manualmente.
+    if attempt_key not in st.session_state:
+        st.session_state[attempt_key] = True
+        if not str(st.session_state.get(basis_key, '')).strip():
+            try:
+                with st.spinner('Calcolo automatico differenziale ES − SPX...'):
+                    _apply_auto_basis()
+            except Exception as exc:
+                st.session_state.auto_basis_results[day.isoformat()] = None
+                st.session_state[f'basis_auto_error_{day.isoformat()}'] = str(exc)[:250]
+
     col1, col2 = st.columns(2)
     with col1:
         ref = st.number_input('Chiusura SPX precedente', min_value=0.01,
@@ -109,21 +130,22 @@ def render(store, week, snaps, logs):
                               step=0.25, format='%.4f',
                               help='Riferimento per i 50 strike. Verificare con la chiusura cash ufficiale.')
     with col2:
-        if st.button('Calcola automaticamente ES − SPX', key=f'auto_basis_{day}'):
+        # Ricalcolo disponibile su richiesta, ma il valore e' gia' proposto automaticamente.
+        if st.button('Ricalcola ES − SPX', key=f'auto_basis_{day}'):
             try:
                 with st.spinner('Acquisizione e confronto barre ES/SPX a 15 minuti...'):
-                    st.session_state.auto_basis_results[day.isoformat()] = _auto_basis(day)
-                # Una nuova richiesta propone il nuovo valore ma lascia all’utente
-                # la possibilità di modificarlo prima di usarlo.
-                result = st.session_state.auto_basis_results[day.isoformat()]
-                st.session_state[basis_key] = str(int(Decimal(str(result['basis'])).quantize(Decimal("1"), rounding=ROUND_HALF_UP)))
+                    _apply_auto_basis()
+                st.session_state.pop(f'basis_auto_error_{day.isoformat()}', None)
             except Exception as exc:
-                st.session_state.auto_basis_results[day.isoformat()] = None
-                st.warning(f'Calcolo automatico non disponibile: {str(exc)[:250]}. Inserisci il valore verificato manualmente.')
+                st.warning(f'Ricalcolo non disponibile: {str(exc)[:250]}. Mantengo il valore inserito.')
         offset_txt = st.text_input('Differenziale ES − SPX applicato (modificabile)',
-                                   value='', key=basis_key,
+                                   key=basis_key,
                                    placeholder='Es. 47',
-                                   help='Valore automatico proposto, sempre correggibile. Vuoto = grafico SPX.')
+                                   help='Calcolato automaticamente alla prima apertura; puoi correggerlo. Vuoto = grafico SPX.')
+    if st.session_state.get(f'basis_auto_error_{day.isoformat()}'):
+        st.caption('Calcolo automatico non disponibile: ' +
+                   st.session_state[f'basis_auto_error_{day.isoformat()}'] +
+                   '. Puoi inserire manualmente il differenziale.')
     auto_result = st.session_state.auto_basis_results.get(day.isoformat())
     if auto_result:
         st.caption(f"Proposta automatica **{auto_result['basis']:.2f} punti → arrotondata a {int(Decimal(str(auto_result['basis'])).quantize(Decimal('1'), rounding=ROUND_HALF_UP))} punti** · "
