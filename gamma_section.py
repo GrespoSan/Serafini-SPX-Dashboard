@@ -130,7 +130,7 @@ def render(store, week, snaps, logs):
                               step=0.25, format='%.4f',
                               help='Riferimento per i 50 strike. Verificare con la chiusura cash ufficiale.')
     with col2:
-        offset_txt = st.text_input('Differenziale ES − SPX applicato (modificabile)',
+        offset_txt = st.text_input('Differenziale ES − SPX applicato in automatico e modificabile',
                                    key=basis_key,
                                    placeholder='Es. 47',
                                    help='Calcolato automaticamente alla prima apertura; puoi correggerlo. Vuoto = grafico SPX.')
