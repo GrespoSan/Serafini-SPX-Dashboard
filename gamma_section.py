@@ -14,6 +14,7 @@ from pine_export import make_pine
 from operational_levels import find_candidates, proposed_levels, candidate_csv
 from option_structure import build_structure
 from payoff_charts import render_payoff_charts
+from asia_range import download_asia_range
 from es_spx_basis import download_and_calculate
 from decimal import Decimal, ROUND_HALF_UP
 from html import escape
@@ -476,28 +477,57 @@ def render(store, week, snaps, logs):
                             st.write('Target principale ipotizzato: **P2** · target esteso: **P3**')
                         st.caption('Ampiezze strike SPX (uguali in punti ES con differenziale costante): '
                                    + ' · '.join(f'{k}: {v:g}' for k,v in measures.items()))
-                        with st.expander('Range asiatico — confronto manuale facoltativo'):
-                            st.caption('Inserisci i massimi/minimi osservati sul future ES. '
-                                       'Nessun dato asiatico è recuperato automaticamente e non vengono generati segnali.')
-                            asiatic = st.checkbox('Ho i livelli del range asiatico', key=f'v13_asia_on_{choice}')
-                            if asiatic:
+                        with st.expander('Range asiatico ES — 00:00–09:00 Roma (automatico)', expanded=False):
+                            st.caption('Box del giorno dello snapshot, ore italiane; 36 barre a 15 minuti. '
+                                       'Fonte Yahoo ES=F, da confrontare con il future CQG/TradingView. '
+                                       'Per gli snapshot mattutini il range completo è disponibile solo dopo le 09:00.')
+                            @st.cache_data(ttl=900, show_spinner=False)
+                            def _load_asia(target_day):
+                                return download_asia_range(target_day)
+                            auto_asia = None
+                            if st.button('Calcola massimo/minimo ES automaticamente', key=f'asia_fetch_v27_{choice}'):
+                                try:
+                                    auto_asia = _load_asia(day)
+                                    st.session_state[f'asia_result_v27_{day}'] = auto_asia
+                                    st.session_state.pop(f'asia_error_v27_{day}', None)
+                                except Exception as exc:
+                                    st.session_state.pop(f'asia_result_v27_{day}', None)
+                                    st.session_state[f'asia_error_v27_{day}'] = str(exc)
+                            auto_asia = st.session_state.get(f'asia_result_v27_{day}')
+                            if auto_asia:
+                                hi, lo = auto_asia['high'], auto_asia['low']
+                                st.success(f"Range asiatico ES {day:%d/%m/%Y}: **{lo:,.2f} – {hi:,.2f}** "
+                                           f"(ampiezza {hi-lo:,.2f} punti, {auto_asia['bars']}/36 barre)")
+                                st.caption(auto_asia['source'])
+                            else:
+                                msg = st.session_state.get(f'asia_error_v27_{day}')
+                                if msg:
+                                    st.warning(msg)
+                                st.caption('Se non sono disponibili tutte le barre, nessun range automatico viene utilizzato.')
+                            if st.checkbox('Usa valori ES manuali (verifica CQG / TradingView)',
+                                           key=f'asia_manual_v27_{choice}'):
                                 ah, al = st.columns(2)
                                 with ah:
-                                    hi = st.number_input('Massimo asiatico ES', value=0.0, step=0.25,
-                                                         key=f'v13_asia_hi_{choice}')
+                                    hi = st.number_input('Massimo ES 00:00–09:00', min_value=0.0,
+                                                         value=float(auto_asia['high']) if auto_asia else 0.0,
+                                                         step=0.25, key=f'asia_hi_v27_{choice}')
                                 with al:
-                                    lo = st.number_input('Minimo asiatico ES', value=0.0, step=0.25,
-                                                         key=f'v13_asia_lo_{choice}')
+                                    lo = st.number_input('Minimo ES 00:00–09:00', min_value=0.0,
+                                                         value=float(auto_asia['low']) if auto_asia else 0.0,
+                                                         step=0.25, key=f'asia_lo_v27_{choice}')
+                                if hi <= lo or lo <= 0:
+                                    st.warning('Inserisci un massimo maggiore del minimo e valori ES positivi.')
+                                    hi = lo = None
+                            elif auto_asia is None:
+                                hi = lo = None
+                            if hi is not None and lo is not None:
                                 if offset is None:
-                                    st.info('Per confrontare il range ES con gli strike inserisci prima il differenziale ES–SPX.')
-                                elif hi <= lo or lo <= 0:
-                                    st.warning('Inserisci un massimo maggiore del minimo e valori positivi.')
+                                    st.info('Per confrontare i livelli Gamma con il range ES inserisci il differenziale ES−SPX.')
                                 else:
-                                    st.write(f'Range asiatico ES: **{lo:g}–{hi:g}** ({hi-lo:g} punti)')
                                     for r in role_rows:
                                         es = r['Prezzo ES']
                                         where = ('sotto' if es < lo else 'sopra' if es > hi else 'dentro')
-                                        st.caption(f"{r['Livello']} ({es:g}) è {where} il range asiatico")
+                                        st.caption(f"{r['Livello']} ({es:,.2f} ES): {where} il range")
                         st.caption('Il superamento dei livelli esterni richiede lettura del contesto e conferme; '
                                    'qui non si calcolano segnali, volatilità attesa o probabilità.')
             st.download_button('Scarica graduatoria barre NET GAMMA 0DTE (CSV)',
