@@ -7,6 +7,7 @@ from datetime import datetime
 import streamlit as st
 from net_gamma import profile, profile_csv, read_snapshot
 from volatility_levels import weekly_expiry, gamma_comparison, breakout_reference
+from context_levels import suggest_buffer
 from pine_export import make_pine
 from operational_levels import find_candidates, proposed_levels, candidate_csv
 from option_structure import build_structure
@@ -16,7 +17,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 def render(store, week, snaps, logs):
     st.header('NET GAMMA · replica formula Serafini — verifica')
-    st.info('NET GAMMA invariato: formula slide 132, 25 strike sopra + 25 sotto la chiusura SPX. Weekly del venerdì = venerdì successivo (risposta Serafini 18/10). I ruoli C1–C3/P1–P3 sono proposte correggibili, non riconoscimenti certi.')
+    st.info('NET GAMMA invariato (25+25 strike). 0DTE prioritario; Weekly del venerdì = venerdì successivo. C1–C3/P1–P3: proposte modificabili. Volume Profile annuale e deviazione standard si visualizzano su TradingView; qui si possono confrontare i soli valori UP/DOWN già verificati. Esclusi CFD, stocastico e probabilità macro.')
     if not snaps:
         st.info('Nessuno snapshot disponibile nella settimana selezionata.')
         return
@@ -200,8 +201,8 @@ def render(store, week, snaps, logs):
                 if offset is None:
                     st.caption('Inserisci un differenziale ES − SPX verificato per visualizzare anche i prezzi ES.')
                 st.caption('La numerazione resta SPERIMENTALE. Da Serafini: C1 vicino al Gamma Flip, C2 gamma particolarmente pronunciato, C3 livello esterno vicino a 1 deviazione standard; per Put logica analoga da verificare. Qui il Gamma Flip NON è calcolato; i tre top-per-intensità sono solo una proposta modificabile.')
-                with st.expander('Livelli di volatilità e copertura Gamma — confronto assistito v14', expanded=False):
-                    st.info('Serafini affianca i livelli di Gamma esterni alle soglie di volatilità. La sua spiegazione cita 350 barre RTH a 15 minuti ma NON specifica qui in modo univoco la serie statistica e le impostazioni della deviazione standard: non la inventiamo. Inserisci i valori ottenuti dal tuo indicatore per confrontarli.')
+                with st.expander('Livelli di volatilità e copertura Gamma — confronto assistito v16', expanded=False):
+                    st.info('Metodo Cash 350 verificato separatamente in TradingView: deviazione standard delle 350 chiusure M15 RTH, fissata sulla sessione precedente. Inserisci qui i valori ES UP/DOWN dell’indicatore già validato; non li ricalcoliamo né li stimiamo.')
                     if offset is None:
                         st.warning('Inserisci prima il differenziale ES−SPX per confrontare valori tutti sul future ES.')
                     else:
@@ -215,9 +216,26 @@ def render(store, week, snaps, logs):
                             st.caption('Differenze mostrate senza spostare automaticamente C3/P3: i livelli esterni devono restare legati alla struttura opzionale.')
                         elif vol_hi or vol_lo:
                             st.warning('Per il confronto inserisci entrambe le soglie, con superiore maggiore dell’inferiore.')
-                        st.markdown('**Coperture indicative sul Gamma (regola illustrata con 10 punti)**')
-                        st.dataframe(breakout_reference(chosen, offset, 10), hide_index=True, use_container_width=True)
-                        st.caption('Serafini richiede accettazione tramite CHIUSURA di una candela ES a 5 minuti oltre la copertura. Le 10 unità sono esemplificative: criterio oggettivo per preferire 10 o 15 in alta volatilità non ancora chiarito. Nessun ordine automatico.')
+                        st.markdown('**Buffer di copertura 10/15 — contesto della seduta PRECEDENTE**')
+                        st.caption('Risposta Serafini 19/10: 15 se VIX in backwardation; 15 dopo forte ribasso (>1%) o seduta negativa con range >1%; altrimenti 10 nei casi ordinari entro ±1%. Non è una previsione automatica del VIX.')
+                        choice_buffer = st.radio('Criterio buffer', ['Manuale 10', 'Manuale 15', 'Assistito (contesto inserito)'], horizontal=True, key=f'v15_buffer_choice_{choice}')
+                        use_buffer = 10 if choice_buffer == 'Manuale 10' else 15 if choice_buffer == 'Manuale 15' else None
+                        if choice_buffer == 'Assistito (contesto inserito)':
+                            b1, b2, b3 = st.columns(3)
+                            with b1:
+                                prior_change = st.number_input('Variazione close/close precedente (%)', value=0.0, step=0.1, format='%.2f', key=f'v15_change_{choice}', help='Inserire la variazione percentuale della seduta PRECEDENTE, non quella odierna.')
+                            with b2:
+                                prior_range = st.number_input('Range massimo−minimo precedente (%)', min_value=0.0, value=0.0, step=0.1, format='%.2f', key=f'v15_range_{choice}', help='(Massimo−minimo)/prezzo di riferimento ×100. Indicare 0 se non disponibile; il risultato non è una verifica del VIX.')
+                            with b3:
+                                vix_status = st.selectbox('VIX term structure', ['Non verificata', 'Backwardation', 'Non backwardation'], key=f'v15_vix_{choice}')
+                            use_buffer, reason = suggest_buffer(prior_change, prior_range if prior_range > 0 else None,
+                                True if vix_status == 'Backwardation' else False if vix_status == 'Non backwardation' else None)
+                            st.caption(reason)
+                        if use_buffer is None:
+                            st.warning('Buffer non determinato con affidabilità: usa la selezione manuale dopo aver verificato il contesto.')
+                        else:
+                            st.dataframe(breakout_reference(chosen, offset, use_buffer), hide_index=True, use_container_width=True)
+                            st.caption(f'Buffer selezionato: **{use_buffer} punti**. Accettazione solo con CHIUSURA ES 5m oltre la soglia. Livelli indicativi, non ordini; non spiegano automaticamente 7.724 del 19/10.')
                 # Sezione separata: interpretazione della struttura, mai inferenza
                 # automatica sul verso delle singole transazioni.
                 with st.expander('Struttura opzionale — 2 Vertical + Strangle (SPERIMENTALE v13)', expanded=True):
