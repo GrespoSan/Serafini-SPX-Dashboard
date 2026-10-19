@@ -44,7 +44,7 @@ indicator("Serafini SPX NET GAMMA | {date_text}", overlay=true, max_lines_count=
 
 barsWidth = input.int(22, "Larghezza massima barre (in candele)", minval=2, maxval=45)
 offsetOdte = input.int(48, "Distanza 0DTE da ultima candela", minval=45, maxval=170)
-offsetWeekly = input.int(155, "Distanza Weekly da ultima candela", minval=135, maxval=300)
+offsetWeekly = input.int(100, "Distanza Weekly da ultima candela", minval=55, maxval=300)
 positiveColor = input.color(color.lime, "NET GAMMA positivo")
 negativeColor = input.color(color.red, "NET GAMMA negativo")
 showTitles = input.bool(true, "Mostra intestazioni")
@@ -75,11 +75,11 @@ renderProfile(array<float> levels, array<float> gamma, int center, string headin
             int length = largest > 0 and g != 0 ? math.max(1, int(math.round(math.abs(g) / largest * barsWidth))) : 0
             if length > 0
                 int farX = center + (g > 0 ? length : -length)
-                line segment = line.new(center, level, farX, level, xloc=xloc.bar_index, extend=extend.none, color=g >= 0 ? positiveColor : negativeColor, width=3)
+                line segment = line.new(center, level, farX, level, xloc=xloc.bar_index, extend=extend.none, color=g >= 0 ? positiveColor : negativeColor, width=5)
                 array.push(drawnLines, segment)
         if showTitles
             float spacing = count > 1 ? math.max(5.0, (top - bottom) / 20.0) : 10.0
-            label t = label.new(center, top + spacing, heading, xloc=xloc.bar_index, yloc=yloc.price, color=color.new(color.black, 90), textcolor=color.white, style=label.style_label_down, size=size.small)
+            label t = label.new(center, top + spacing, heading, xloc=xloc.bar_index, yloc=yloc.price, color=color.new(color.black, 50), textcolor=color.white, style=label.style_label_down, size=size.small)
             array.push(drawnLabels, t)
 
 if barstate.islast
