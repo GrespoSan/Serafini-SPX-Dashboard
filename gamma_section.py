@@ -6,8 +6,7 @@ from zoneinfo import ZoneInfo
 from datetime import datetime
 import streamlit as st
 from net_gamma import profile, profile_csv, read_snapshot
-from volatility_levels import weekly_expiry, gamma_comparison, breakout_reference
-from context_levels import suggest_buffer
+from volatility_levels import weekly_expiry
 from gamma_compare import compare_profiles
 from gamma_brief import select_key_levels, operational_summary, transition_zones
 from pine_export import make_pine
@@ -416,41 +415,6 @@ def render(store, week, snaps, logs):
                 if offset is None:
                     st.caption('Inserisci un differenziale ES − SPX verificato per visualizzare anche i prezzi ES.')
                 st.caption('La numerazione resta SPERIMENTALE. Da Serafini: C1 vicino al Gamma Flip, C2 gamma particolarmente pronunciato, C3 livello esterno vicino a 1 deviazione standard; per Put logica analoga da verificare. Qui il Gamma Flip NON è calcolato; i tre top-per-intensità sono solo una proposta modificabile.')
-                with st.expander('Livelli di volatilità e copertura Gamma — confronto assistito v16', expanded=False):
-                    st.info('Metodo Cash 350 verificato separatamente in TradingView: deviazione standard delle 350 chiusure M15 RTH, fissata sulla sessione precedente. Inserisci qui i valori ES UP/DOWN dell’indicatore già validato; non li ricalcoliamo né li stimiamo.')
-                    if offset is None:
-                        st.warning('Inserisci prima il differenziale ES−SPX per confrontare valori tutti sul future ES.')
-                    else:
-                        left_v, right_v = st.columns(2)
-                        with left_v:
-                            vol_hi = st.number_input('Soglia superiore (+1σ) ES, se disponibile', min_value=0.0, value=0.0, step=0.25, key=f'v14_volhi_{choice}')
-                        with right_v:
-                            vol_lo = st.number_input('Soglia inferiore (−1σ) ES, se disponibile', min_value=0.0, value=0.0, step=0.25, key=f'v14_vollo_{choice}')
-                        if vol_hi > vol_lo > 0:
-                            st.dataframe(gamma_comparison(chosen, offset, vol_hi, vol_lo), hide_index=True, use_container_width=True)
-                            st.caption('Differenze mostrate senza spostare automaticamente C3/P3: i livelli esterni devono restare legati alla struttura opzionale.')
-                        elif vol_hi or vol_lo:
-                            st.warning('Per il confronto inserisci entrambe le soglie, con superiore maggiore dell’inferiore.')
-                        st.markdown('**Buffer di copertura 10/15 — contesto della seduta PRECEDENTE**')
-                        st.caption('Risposta Serafini 19/10: 15 se VIX in backwardation; 15 dopo forte ribasso (>1%) o seduta negativa con range >1%; altrimenti 10 nei casi ordinari entro ±1%. Non è una previsione automatica del VIX.')
-                        choice_buffer = st.radio('Criterio buffer', ['Manuale 10', 'Manuale 15', 'Assistito (contesto inserito)'], horizontal=True, key=f'v15_buffer_choice_{choice}')
-                        use_buffer = 10 if choice_buffer == 'Manuale 10' else 15 if choice_buffer == 'Manuale 15' else None
-                        if choice_buffer == 'Assistito (contesto inserito)':
-                            b1, b2, b3 = st.columns(3)
-                            with b1:
-                                prior_change = st.number_input('Variazione close/close precedente (%)', value=0.0, step=0.1, format='%.2f', key=f'v15_change_{choice}', help='Inserire la variazione percentuale della seduta PRECEDENTE, non quella odierna.')
-                            with b2:
-                                prior_range = st.number_input('Range massimo−minimo precedente (%)', min_value=0.0, value=0.0, step=0.1, format='%.2f', key=f'v15_range_{choice}', help='(Massimo−minimo)/prezzo di riferimento ×100. Indicare 0 se non disponibile; il risultato non è una verifica del VIX.')
-                            with b3:
-                                vix_status = st.selectbox('VIX term structure', ['Non verificata', 'Backwardation', 'Non backwardation'], key=f'v15_vix_{choice}')
-                            use_buffer, reason = suggest_buffer(prior_change, prior_range if prior_range > 0 else None,
-                                True if vix_status == 'Backwardation' else False if vix_status == 'Non backwardation' else None)
-                            st.caption(reason)
-                        if use_buffer is None:
-                            st.warning('Buffer non determinato con affidabilità: usa la selezione manuale dopo aver verificato il contesto.')
-                        else:
-                            st.dataframe(breakout_reference(chosen, offset, use_buffer), hide_index=True, use_container_width=True)
-                            st.caption(f'Buffer selezionato: **{use_buffer} punti**. Accettazione solo con CHIUSURA ES 5m oltre la soglia. Livelli indicativi, non ordini; non spiegano automaticamente 7.724 del 19/10.')
                 # Sezione separata: interpretazione della struttura, mai inferenza
                 # automatica sul verso delle singole transazioni.
                 with st.expander('Struttura opzionale — 2 Vertical + Strangle (SPERIMENTALE v13)', expanded=True):
@@ -479,7 +443,7 @@ def render(store, week, snaps, logs):
                                    + ' · '.join(f'{k}: {v:g}' for k,v in measures.items()))
                         with st.expander('Range asiatico ES — 00:00–09:00 Roma (automatico)', expanded=False):
                             st.caption('Box del giorno dello snapshot, ore italiane; 36 barre a 15 minuti. '
-                                       'Fonte Yahoo ES=F, da confrontare con il future CQG/TradingView. '
+                                       'Fonte Yahoo ES=F, da confrontare con il future TradingView. '
                                        'Per gli snapshot mattutini il range completo è disponibile solo dopo le 09:00.')
                             @st.cache_data(ttl=900, show_spinner=False)
                             def _load_asia(target_day):
@@ -504,7 +468,7 @@ def render(store, week, snaps, logs):
                                 if msg:
                                     st.warning(msg)
                                 st.caption('Se non sono disponibili tutte le barre, nessun range automatico viene utilizzato.')
-                            if st.checkbox('Usa valori ES manuali (verifica CQG / TradingView)',
+                            if st.checkbox('Usa valori ES manuali (verifica TradingView)',
                                            key=f'asia_manual_v27_{choice}'):
                                 ah, al = st.columns(2)
                                 with ah:
