@@ -15,6 +15,7 @@ from operational_levels import find_candidates, proposed_levels, candidate_csv
 from option_structure import build_structure
 from es_spx_basis import download_and_calculate
 from decimal import Decimal, ROUND_HALF_UP
+from html import escape
 
 
 def render(store, week, snaps, logs):
@@ -94,7 +95,7 @@ def render(store, week, snaps, logs):
         st.error('Snapshot in giorno non operativo: scegliere manualmente una giornata valida.'); return
     st.caption(f'0DTE: {day.isoformat()} · Weekly: {weekly_exp.isoformat()} (lun–gio venerdì corrente; venerdì successivo). In caso di festività controllare la scadenza effettiva.')
     # Sintesi breve: due fotografie, stessi strike SPX, una sola visualizzazione.
-    with st.expander('Confronto NET GAMMA · Mattina / Pomeriggio (v22)', expanded=True):
+    with st.expander('Confronto NET GAMMA · Mattina / Pomeriggio (v23)', expanded=True):
         same_day = sorted(n for n in names if n.startswith(f'SPX_CBOE_{day:%Y%m%d}_'))
         if len(same_day) < 2:
             st.info('Servono due snapshot diversi della stessa giornata.')
@@ -151,38 +152,56 @@ def render(store, week, snaps, logs):
                         # Transizioni CONTIGUE osservate nei due snapshot, non segnali di ingresso.
                         zones = transition_zones(comparisons)
                         if zones:
-                            st.markdown('#### Zona di transizione Gamma — livelli da monitorare')
-                            st.caption('Lo strike viene confrontato fra mattina e pomeriggio. Il livello vicino è mostrato solo come contesto; nessun breakout è assegnato automaticamente.')
+                            st.markdown('#### Evoluzione NET GAMMA — zone di transizione')
+                            st.caption('I valori indicano due rilevazioni distinte: Mattina : Pomeriggio. Non si sommano.')
                             def _price(r):
                                 return (f"{r['Prezzo ES']:,.0f}".replace(',', '.') if r['Prezzo ES'] is not None
                                         else f"SPX {r['Strike SPX']:g}")
+                            def _colored(v):
+                                color = '#22c55e' if v > 0 else '#ef4444' if v < 0 else '#d1d5db'
+                                value = f"{v:+.2f}".replace('.', ',').replace('-', '−')
+                                return f'<span style="color:{color};font-weight:650;font-variant-numeric:tabular-nums">{value}</span>'
+                            def _description(old, new):
+                                if old > 0 > new:
+                                    return 'Da positivo a negativo'
+                                if old < 0 < new:
+                                    return 'Da negativo a positivo'
+                                if old == 0 or new == 0:
+                                    return 'Valore zero / cambio di segno' if old != new else 'Invariato'
+                                if abs(new) > abs(old) + 1e-8:
+                                    return ('Positivo' if new > 0 else 'Negativo') + ' aumentato'
+                                if abs(new) < abs(old) - 1e-8:
+                                    return ('Positivo' if new > 0 else 'Negativo') + ' diminuito'
+                                return 'Invariato'
                             for num, zone in enumerate(zones, start=1):
+                                rows = sorted(zone['rows'], key=lambda r: r['Strike SPX'], reverse=True)
                                 if len(zones) > 1:
-                                    st.markdown(f"**Zona {num} — {zone['direction']}**")
-                                else:
-                                    st.markdown(f"**Transizione {zone['direction']}**")
-                                view = []
-                                for item in sorted(zone['rows'], key=lambda r: r['Strike SPX'], reverse=True):
-                                    old, new = item['NET mattina'], item['NET pomeriggio']
-                                    flip = old * new < 0
-                                    if flip:
-                                        condition = '🟡 Cambio di segno'
-                                    elif old < 0 and new < 0 and abs(new) > abs(old):
-                                        condition = '🔴 Negativo rafforzato'
-                                    elif old > 0 and new > 0 and abs(new) < abs(old):
-                                        condition = 'Positivo indebolito'
-                                    else:
-                                        condition = 'Contesto'
-                                    view.append({'Livello ES / SPX': _price(item),
-                                                 'Mattina': f"{old:+.2f}", 'Pomeriggio': f"{new:+.2f}",
-                                                 'Evoluzione': condition})
-                                st.dataframe(view, use_container_width=True, hide_index=True)
-                                if zone['direction'] == 'verso NET negativo':
-                                    st.markdown('**Lettura:** la zona negativa si è estesa verso prezzi più alti nei livelli che hanno cambiato segno. Da confrontare con la conferma del prezzo; non è un segnale short.')
-                                elif zone['direction'] == 'verso NET positivo':
-                                    st.markdown('**Lettura:** la zona positiva si è estesa verso prezzi più bassi nei livelli che hanno cambiato segno. Non è un segnale long.')
-                                else:
-                                    st.markdown('**Lettura:** cambi di segno discordanti; nessuna direzione deducibile.')
+                                    st.markdown(f"**Zona {num} — {escape(zone['direction'])}**")
+                                body = []
+                                for item in rows:
+                                    old, new = float(item['NET mattina']), float(item['NET pomeriggio'])
+                                    desc = _description(old, new)
+                                    emphasis = 'font-weight:650;' if old * new < 0 else ''
+                                    body.append(
+                                        '<tr>'
+                                        f'<td style="padding:9px 12px;border-bottom:1px solid #40454b;font-weight:600;white-space:nowrap">{escape(_price(item))}</td>'
+                                        f'<td style="padding:9px 12px;border-bottom:1px solid #40454b;white-space:nowrap">{_colored(old)} <span style="color:#a1a1aa;padding:0 9px">:</span> {_colored(new)}</td>'
+                                        f'<td style="padding:9px 12px;border-bottom:1px solid #40454b;{emphasis}">{escape(desc)}</td>'
+                                        '</tr>'
+                                    )
+                                table_html = ('<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;text-align:left;font-size:0.95rem">'
+                                              '<thead><tr style="background:rgba(125,125,125,0.13)"><th style="padding:10px 12px">Livello ES</th><th style="padding:10px 12px">Mattina : Pomeriggio</th><th style="padding:10px 12px">Variazione</th></tr></thead>'
+                                              '<tbody>' + ''.join(body) + '</tbody></table></div>')
+                                st.markdown(table_html, unsafe_allow_html=True)
+                                flipped = [r for r in rows if r['NET mattina'] * r['NET pomeriggio'] < 0]
+                                if flipped:
+                                    direction = ('Il Gamma negativo si è esteso verso prezzi più alti.'
+                                                 if zone['direction'] == 'verso NET negativo' else
+                                                 'Il Gamma positivo si è esteso verso prezzi più bassi.'
+                                                 if zone['direction'] == 'verso NET positivo' else
+                                                 'Sono presenti cambi di segno in entrambe le direzioni.')
+                                    levels = ', '.join(_price(r) for r in flipped)
+                                    st.markdown(f'**Sintesi:** {direction} Cambi di segno a {levels}.')
                         else:
                             st.caption('Nessun cambiamento di segno netto nei livelli comuni ai due snapshot.')
 
