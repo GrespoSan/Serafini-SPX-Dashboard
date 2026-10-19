@@ -123,25 +123,28 @@ def render(store, week, snaps, logs):
                 st.session_state.auto_basis_results[day.isoformat()] = None
                 st.session_state[f'basis_auto_error_{day.isoformat()}'] = str(exc)[:250]
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns([1.15, 1.45, 0.65], gap='small')
     with col1:
         ref = st.number_input('Chiusura SPX precedente', min_value=0.01,
                               value=float(previous or snap['data']['current_price']),
                               step=0.25, format='%.4f',
                               help='Riferimento per i 50 strike. Verificare con la chiusura cash ufficiale.')
     with col2:
-        # Ricalcolo disponibile su richiesta, ma il valore e' gia' proposto automaticamente.
-        if st.button('Ricalcola ES − SPX', key=f'auto_basis_{day}'):
-            try:
-                with st.spinner('Acquisizione e confronto barre ES/SPX a 15 minuti...'):
-                    _apply_auto_basis()
-                st.session_state.pop(f'basis_auto_error_{day.isoformat()}', None)
-            except Exception as exc:
-                st.warning(f'Ricalcolo non disponibile: {str(exc)[:250]}. Mantengo il valore inserito.')
         offset_txt = st.text_input('Differenziale ES − SPX applicato (modificabile)',
                                    key=basis_key,
                                    placeholder='Es. 47',
                                    help='Calcolato automaticamente alla prima apertura; puoi correggerlo. Vuoto = grafico SPX.')
+    with col3:
+        # Allinea il pulsante all'altezza dei campi, anziché alle intestazioni.
+        st.markdown('<div style="height: 29px"></div>', unsafe_allow_html=True)
+        if st.button('Ricalcola ES − SPX', key=f'auto_basis_{day}', use_container_width=True):
+            try:
+                with st.spinner('Acquisizione e confronto barre ES/SPX a 15 minuti...'):
+                    _apply_auto_basis()
+                st.session_state.pop(f'basis_auto_error_{day.isoformat()}', None)
+                st.rerun()
+            except Exception as exc:
+                st.warning(f'Ricalcolo non disponibile: {str(exc)[:250]}. Mantengo il valore inserito.')
     if st.session_state.get(f'basis_auto_error_{day.isoformat()}'):
         st.caption('Calcolo automatico non disponibile: ' +
                    st.session_state[f'basis_auto_error_{day.isoformat()}'] +
