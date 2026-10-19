@@ -18,6 +18,52 @@ from decimal import Decimal, ROUND_HALF_UP
 from html import escape
 
 
+def _transition_summary(rows, direction):
+    """Sintesi basata solo sui segni e sulle intensita' osservate negli snapshot."""
+    flips_neg = sorted((r for r in rows if r['NET mattina'] > 0 > r['NET pomeriggio']),
+                       key=lambda r: r['Strike SPX'], reverse=True)
+    flips_pos = sorted((r for r in rows if r['NET mattina'] < 0 < r['NET pomeriggio']),
+                       key=lambda r: r['Strike SPX'], reverse=True)
+
+    def level(r):
+        price = r.get('Prezzo ES')
+        return f"{price:,.0f}".replace(',', '.') if price is not None else f"SPX {r['Strike SPX']:g}"
+
+    if flips_neg and not flips_pos:
+        summary = 'Il Gamma negativo si è esteso verso l\'alto. '
+        summary += 'I livelli ' + ' e '.join(level(r) for r in flips_neg) + ' sono passati da positivo a negativo'
+        lo = min(r['Strike SPX'] for r in flips_neg)
+        hi = max(r['Strike SPX'] for r in flips_neg)
+        below = sorted((r for r in rows if r['Strike SPX'] < lo and r['NET mattina'] < 0 and
+                        r['NET pomeriggio'] < r['NET mattina']), key=lambda r: lo - r['Strike SPX'])
+        above = sorted((r for r in rows if r['Strike SPX'] > hi and r['NET mattina'] > 0 and
+                        0 < r['NET pomeriggio'] < r['NET mattina']), key=lambda r: r['Strike SPX'] - hi)
+        if below:
+            summary += '; a ' + level(below[0]) + ' il Gamma negativo è aumentato'
+        if above:
+            summary += (', mentre ' if below else '; ') + 'il Gamma positivo a ' + level(above[0]) + ' si è indebolito'
+        return summary + '.'
+    if flips_pos and not flips_neg:
+        summary = 'Il Gamma positivo si è esteso verso il basso. '
+        summary += 'I livelli ' + ' e '.join(level(r) for r in flips_pos) + ' sono passati da negativo a positivo'
+        lo = min(r['Strike SPX'] for r in flips_pos)
+        hi = max(r['Strike SPX'] for r in flips_pos)
+        above = sorted((r for r in rows if r['Strike SPX'] > hi and r['NET mattina'] > 0 and
+                        r['NET pomeriggio'] > r['NET mattina']), key=lambda r: r['Strike SPX'] - hi)
+        below = sorted((r for r in rows if r['Strike SPX'] < lo and r['NET mattina'] < 0 and
+                        r['NET mattina'] < r['NET pomeriggio'] < 0), key=lambda r: lo - r['Strike SPX'])
+        if above:
+            summary += '; a ' + level(above[0]) + ' il Gamma positivo è aumentato'
+        if below:
+            summary += (', mentre ' if above else '; ') + 'il Gamma negativo a ' + level(below[0]) + ' si è indebolito'
+        return summary + '.'
+    if flips_pos or flips_neg:
+        return ('Cambi di segno in entrambe le direzioni: ' +
+                ', '.join(level(r) for r in sorted(flips_neg + flips_pos,
+                                                  key=lambda r: r['Strike SPX'], reverse=True)) + '.')
+    return 'Nessun cambio di segno nella zona.'
+
+
 def render(store, week, snaps, logs):
     st.header('NET GAMMA · replica formula Serafini — verifica')
     st.info('NET GAMMA invariato (25+25 strike). 0DTE prioritario; Weekly del venerdì = venerdì successivo. C1–C3/P1–P3: proposte modificabili. Volume Profile annuale e deviazione standard si visualizzano su TradingView; qui si possono confrontare i soli valori UP/DOWN già verificati. Esclusi CFD, stocastico e probabilità macro.')
@@ -95,7 +141,7 @@ def render(store, week, snaps, logs):
         st.error('Snapshot in giorno non operativo: scegliere manualmente una giornata valida.'); return
     st.caption(f'0DTE: {day.isoformat()} · Weekly: {weekly_exp.isoformat()} (lun–gio venerdì corrente; venerdì successivo). In caso di festività controllare la scadenza effettiva.')
     # Sintesi breve: due fotografie, stessi strike SPX, una sola visualizzazione.
-    with st.expander('Confronto NET GAMMA · Mattina / Pomeriggio (v23)', expanded=True):
+    with st.expander('Confronto NET GAMMA · Mattina / Pomeriggio (v24)', expanded=True):
         same_day = sorted(n for n in names if n.startswith(f'SPX_CBOE_{day:%Y%m%d}_'))
         if len(same_day) < 2:
             st.info('Servono due snapshot diversi della stessa giornata.')
@@ -193,15 +239,7 @@ def render(store, week, snaps, logs):
                                               '<thead><tr style="background:rgba(125,125,125,0.13)"><th style="padding:10px 12px">Livello ES</th><th style="padding:10px 12px">Mattina : Pomeriggio</th><th style="padding:10px 12px">Variazione</th></tr></thead>'
                                               '<tbody>' + ''.join(body) + '</tbody></table></div>')
                                 st.markdown(table_html, unsafe_allow_html=True)
-                                flipped = [r for r in rows if r['NET mattina'] * r['NET pomeriggio'] < 0]
-                                if flipped:
-                                    direction = ('Il Gamma negativo si è esteso verso prezzi più alti.'
-                                                 if zone['direction'] == 'verso NET negativo' else
-                                                 'Il Gamma positivo si è esteso verso prezzi più bassi.'
-                                                 if zone['direction'] == 'verso NET positivo' else
-                                                 'Sono presenti cambi di segno in entrambe le direzioni.')
-                                    levels = ', '.join(_price(r) for r in flipped)
-                                    st.markdown(f'**Sintesi:** {direction} Cambi di segno a {levels}.')
+                                st.markdown(f'**Sintesi operativa:** {_transition_summary(rows, zone["direction"])}')
                         else:
                             st.caption('Nessun cambiamento di segno netto nei livelli comuni ai due snapshot.')
 
