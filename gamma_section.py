@@ -141,7 +141,7 @@ def render(store, week, snaps, logs):
         st.error('Snapshot in giorno non operativo: scegliere manualmente una giornata valida.'); return
     st.caption(f'0DTE: {day.isoformat()} · Weekly: {weekly_exp.isoformat()} (lun–gio venerdì corrente; venerdì successivo). In caso di festività controllare la scadenza effettiva.')
     # Sintesi breve: due fotografie, stessi strike SPX, una sola visualizzazione.
-    with st.expander('Confronto NET GAMMA · Mattina / Pomeriggio (v24)', expanded=True):
+    with st.expander('Confronto NET GAMMA · Mattina / Pomeriggio (v25)', expanded=True):
         same_day = sorted(n for n in names if n.startswith(f'SPX_CBOE_{day:%Y%m%d}_'))
         if len(same_day) < 2:
             st.info('Servono due snapshot diversi della stessa giornata.')
@@ -195,55 +195,108 @@ def render(store, week, snaps, logs):
                         
                         for _line in operational_summary(main_levels):
                             st.markdown(_line)
-                        # Transizioni CONTIGUE osservate nei due snapshot, non segnali di ingresso.
-                        zones = transition_zones(comparisons)
-                        if zones:
-                            st.markdown('#### Evoluzione NET GAMMA — zone di transizione')
-                            st.caption('I valori indicano due rilevazioni distinte: Mattina : Pomeriggio. Non si sommano.')
-                            def _price(r):
-                                return (f"{r['Prezzo ES']:,.0f}".replace(',', '.') if r['Prezzo ES'] is not None
-                                        else f"SPX {r['Strike SPX']:g}")
-                            def _colored(v):
-                                color = '#22c55e' if v > 0 else '#ef4444' if v < 0 else '#d1d5db'
-                                value = f"{v:+.2f}".replace('.', ',').replace('-', '−')
-                                return f'<span style="color:{color};font-weight:650;font-variant-numeric:tabular-nums">{value}</span>'
-                            def _description(old, new):
-                                if old > 0 > new:
-                                    return 'Da positivo a negativo'
-                                if old < 0 < new:
-                                    return 'Da negativo a positivo'
-                                if old == 0 or new == 0:
-                                    return 'Valore zero / cambio di segno' if old != new else 'Invariato'
-                                if abs(new) > abs(old) + 1e-8:
-                                    return ('Positivo' if new > 0 else 'Negativo') + ' aumentato'
-                                if abs(new) < abs(old) - 1e-8:
-                                    return ('Positivo' if new > 0 else 'Negativo') + ' diminuito'
-                                return 'Invariato'
-                            for num, zone in enumerate(zones, start=1):
-                                rows = sorted(zone['rows'], key=lambda r: r['Strike SPX'], reverse=True)
-                                if len(zones) > 1:
-                                    st.markdown(f"**Zona {num} — {escape(zone['direction'])}**")
-                                body = []
-                                for item in rows:
-                                    old, new = float(item['NET mattina']), float(item['NET pomeriggio'])
-                                    desc = _description(old, new)
-                                    emphasis = 'font-weight:650;' if old * new < 0 else ''
-                                    body.append(
+                        if selected_profile == 'Weekly':
+                            # Weekly: enfasi sulle concentrazioni di maggiore intensita',
+                            # non sulle transizioni di segno di ampiezza minima.
+                            st.markdown('#### Concentrazioni Weekly principali')
+                            ranked_weekly = sorted(
+                                comparisons,
+                                key=lambda r: max(abs(float(r['NET mattina'])),
+                                                  abs(float(r['NET pomeriggio']))),
+                                reverse=True,
+                            )[:4]
+                            if ranked_weekly:
+                                def _weekly_value(v):
+                                    color = '#22c55e' if v > 0 else '#ef4444' if v < 0 else '#d1d5db'
+                                    label = f"{v:+.2f}".replace('.', ',').replace('-', '−')
+                                    return f'<span style="color:{color};font-weight:650">{label}</span>'
+
+                                def _weekly_change(a, b):
+                                    if a > 0 > b:
+                                        return 'Da positivo a negativo'
+                                    if a < 0 < b:
+                                        return 'Da negativo a positivo'
+                                    if a == 0 or b == 0:
+                                        return 'Passaggio per zero' if a != b else 'Invariato'
+                                    if abs(b) > abs(a) + 1e-8:
+                                        return ('Positivo' if b > 0 else 'Negativo') + ' aumentato'
+                                    if abs(b) < abs(a) - 1e-8:
+                                        return ('Positivo' if b > 0 else 'Negativo') + ' diminuito'
+                                    return 'Invariato'
+
+                                tr = []
+                                for r in ranked_weekly:
+                                    morning = float(r['NET mattina'])
+                                    afternoon = float(r['NET pomeriggio'])
+                                    price = r.get('Prezzo ES')
+                                    label = (f"{price:,.0f}".replace(',', '.') if price is not None
+                                             else f"SPX {r['Strike SPX']:g}")
+                                    tr.append(
                                         '<tr>'
-                                        f'<td style="padding:9px 12px;border-bottom:1px solid #40454b;font-weight:600;white-space:nowrap">{escape(_price(item))}</td>'
-                                        f'<td style="padding:9px 12px;border-bottom:1px solid #40454b;white-space:nowrap">{_colored(old)} <span style="color:#a1a1aa;padding:0 9px">:</span> {_colored(new)}</td>'
-                                        f'<td style="padding:9px 12px;border-bottom:1px solid #40454b;{emphasis}">{escape(desc)}</td>'
+                                        f'<td style="padding:9px 12px;border-bottom:1px solid #40454b;font-weight:600">{escape(label)}</td>'
+                                        f'<td style="padding:9px 12px;border-bottom:1px solid #40454b;white-space:nowrap">{_weekly_value(morning)} <span style="color:#a1a1aa;padding:0 9px">:</span> {_weekly_value(afternoon)}</td>'
+                                        f'<td style="padding:9px 12px;border-bottom:1px solid #40454b">{escape(_weekly_change(morning, afternoon))}</td>'
                                         '</tr>'
                                     )
-                                table_html = ('<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;text-align:left;font-size:0.95rem">'
-                                              '<thead><tr style="background:rgba(125,125,125,0.13)"><th style="padding:10px 12px">Livello ES</th><th style="padding:10px 12px">Mattina : Pomeriggio</th><th style="padding:10px 12px">Variazione</th></tr></thead>'
-                                              '<tbody>' + ''.join(body) + '</tbody></table></div>')
-                                st.markdown(table_html, unsafe_allow_html=True)
-                                st.markdown(f'**Sintesi operativa:** {_transition_summary(rows, zone["direction"])}')
+                                st.markdown(
+                                    '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;text-align:left;font-size:0.95rem">'
+                                    '<thead><tr style="background:rgba(125,125,125,0.13)"><th style="padding:10px 12px">Livello ES</th>'
+                                    '<th style="padding:10px 12px">Mattina : Pomeriggio</th>'
+                                    '<th style="padding:10px 12px">Variazione</th></tr></thead><tbody>'
+                                    + ''.join(tr) + '</tbody></table></div>',
+                                    unsafe_allow_html=True,
+                                )
+                                st.caption('Quattro concentrazioni principali per intensità NET GAMMA, non quattro livelli operativi. I piccoli cambi di segno Weekly non generano zone automatiche.')
                         else:
-                            st.caption('Nessun cambiamento di segno netto nei livelli comuni ai due snapshot.')
+                            # Transizioni CONTIGUE osservate nei due snapshot, non segnali di ingresso.
+                            zones = transition_zones(comparisons)
+                            if zones:
+                                st.markdown('#### Evoluzione NET GAMMA — zone di transizione')
+                                st.caption('I valori indicano due rilevazioni distinte: Mattina : Pomeriggio. Non si sommano.')
+                                def _price(r):
+                                    return (f"{r['Prezzo ES']:,.0f}".replace(',', '.') if r['Prezzo ES'] is not None
+                                            else f"SPX {r['Strike SPX']:g}")
+                                def _colored(v):
+                                    color = '#22c55e' if v > 0 else '#ef4444' if v < 0 else '#d1d5db'
+                                    value = f"{v:+.2f}".replace('.', ',').replace('-', '−')
+                                    return f'<span style="color:{color};font-weight:650;font-variant-numeric:tabular-nums">{value}</span>'
+                                def _description(old, new):
+                                    if old > 0 > new:
+                                        return 'Da positivo a negativo'
+                                    if old < 0 < new:
+                                        return 'Da negativo a positivo'
+                                    if old == 0 or new == 0:
+                                        return 'Valore zero / cambio di segno' if old != new else 'Invariato'
+                                    if abs(new) > abs(old) + 1e-8:
+                                        return ('Positivo' if new > 0 else 'Negativo') + ' aumentato'
+                                    if abs(new) < abs(old) - 1e-8:
+                                        return ('Positivo' if new > 0 else 'Negativo') + ' diminuito'
+                                    return 'Invariato'
+                                for num, zone in enumerate(zones, start=1):
+                                    rows = sorted(zone['rows'], key=lambda r: r['Strike SPX'], reverse=True)
+                                    if len(zones) > 1:
+                                        st.markdown(f"**Zona {num} — {escape(zone['direction'])}**")
+                                    body = []
+                                    for item in rows:
+                                        old, new = float(item['NET mattina']), float(item['NET pomeriggio'])
+                                        desc = _description(old, new)
+                                        emphasis = 'font-weight:650;' if old * new < 0 else ''
+                                        body.append(
+                                            '<tr>'
+                                            f'<td style="padding:9px 12px;border-bottom:1px solid #40454b;font-weight:600;white-space:nowrap">{escape(_price(item))}</td>'
+                                            f'<td style="padding:9px 12px;border-bottom:1px solid #40454b;white-space:nowrap">{_colored(old)} <span style="color:#a1a1aa;padding:0 9px">:</span> {_colored(new)}</td>'
+                                            f'<td style="padding:9px 12px;border-bottom:1px solid #40454b;{emphasis}">{escape(desc)}</td>'
+                                            '</tr>'
+                                        )
+                                    table_html = ('<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;text-align:left;font-size:0.95rem">'
+                                                  '<thead><tr style="background:rgba(125,125,125,0.13)"><th style="padding:10px 12px">Livello ES</th><th style="padding:10px 12px">Mattina : Pomeriggio</th><th style="padding:10px 12px">Variazione</th></tr></thead>'
+                                                  '<tbody>' + ''.join(body) + '</tbody></table></div>')
+                                    st.markdown(table_html, unsafe_allow_html=True)
+                                    st.markdown(f'**Sintesi operativa:** {_transition_summary(rows, zone["direction"])}')
+                            else:
+                                st.caption('Nessun cambiamento di segno netto nei livelli comuni ai due snapshot.')
 
-                        st.caption('Fino a 4 livelli NET positivi e 4 negativi, classificati secondo il segno MATTUTINO e ordinati per intensità massima nei due snapshot. Distanza minima di 5 punti SPX. Se mancano livelli di un segno, non si inventano sostituti. Cambi di segno evidenziati su tutti gli strike, anche fuori dagli 8. Non sono Call/Put né segnali operativi.')
+                        st.caption('Grafico: fino a 4 Gamma positivi e 4 negativi secondo il segno mattutino; gli strike sono confrontati allo stesso prezzo SPX. I livelli non sono automaticamente Call/Put né segnali operativi.')
                         if stats['solo_mattina'] or stats['solo_pomeriggio']:
                             st.caption(f"Strike confrontati: {stats['comuni']} · non comuni: "
                                        f"{stats['solo_mattina'] + stats['solo_pomeriggio']}.")
