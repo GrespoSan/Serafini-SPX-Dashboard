@@ -19,6 +19,22 @@ from decimal import Decimal, ROUND_HALF_UP
 from html import escape
 
 
+def _has_usable_gamma(snapshot):
+    """Qualita' minima: almeno un contratto con gamma finito non nullo.
+
+    Controllo sul file originale, indipendente dalla formula NET GAMMA.
+    """
+    import math
+    for option in snapshot.get('data', {}).get('options', []):
+        try:
+            gamma = float(option.get('gamma') or 0)
+            if math.isfinite(gamma) and gamma != 0:
+                return True
+        except (ValueError, TypeError, OverflowError):
+            pass
+    return False
+
+
 def _transition_summary(rows, direction):
     """Sintesi basata solo sui segni e sulle intensita' osservate negli snapshot."""
     flips_neg = sorted((r for r in rows if r['NET mattina'] > 0 > r['NET pomeriggio']),
@@ -237,8 +253,25 @@ def render(store, week, snaps, logs):
     # Sintesi breve: due fotografie, stessi strike SPX, una sola visualizzazione.
     with st.expander('Confronto NET GAMMA · rilevamenti selezionati (v37)', expanded=True):
         same_day = sorted(n for n in names if n.startswith(f'SPX_CBOE_{day:%Y%m%d}_'))
+        # Escludere dal confronto gli snapshot senza Gamma, compresi gli storici
+        # precedenti all'introduzione del controllo qualita' nel downloader.
+        valid_names = []
+        rejected = []
+        for candidate in same_day:
+            try:
+                candidate_data = read_snapshot(store.download(f'{week}/snapshots/{candidate}'))
+                if _has_usable_gamma(candidate_data):
+                    valid_names.append(candidate)
+                else:
+                    rejected.append(candidate)
+            except Exception:
+                rejected.append(candidate)
+        if rejected:
+            st.warning(f'{len(rejected)} snapshot esclusi dal confronto: Gamma assenti o file non leggibili. '
+                       'Restano conservati nell’archivio, con la segnalazione nella colonna Qualità dati.')
+        same_day = valid_names
         if len(same_day) < 2:
-            st.info('Servono due snapshot diversi della stessa giornata.')
+            st.info('Servono due snapshot validi della stessa giornata per il confronto NET GAMMA.')
         else:
             col_a, col_b = st.columns(2)
             with col_a:
@@ -275,7 +308,7 @@ def render(store, week, snaps, logs):
                     comparisons, stats = compare_profiles(old_prof, new_prof, offset)
                     main_levels = select_key_levels(comparisons, count_per_sign=4, minimum_separation=5.0)
                     if not main_levels:
-                        st.info('Nessuno strike in comune tra i due snapshot.')
+                        st.info('Non ci sono strike confrontabili per la scadenza selezionata. Verificare scadenza e riferimento SPX.')
                     else:
                         import plotly.graph_objects as go
                         # Grafico principale: solo otto concentrazioni, colori per ORARIO.

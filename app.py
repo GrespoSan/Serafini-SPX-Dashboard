@@ -211,7 +211,17 @@ if logs:
         except Exception:
             rows.append({'Stato': 'Impossibile leggere un registro', 'Qualità dati': 'DA VERIFICARE'})
     st.caption('Gli orari di download sono convertiti in Europe/Rome. Il timestamp Cboe rimane come nella fonte, senza attribuirgli un fuso non dichiarato. I vecchi registri etichettati “automatico” non identificano necessariamente lo slot.')
-    st.dataframe(rows, use_container_width=True, hide_index=True)
+    # La colorazione riguarda solo la qualita', non la colonna Stato (NUOVO/INVARIATO).
+    import pandas as pd
+    frame = pd.DataFrame(rows)
+    def quality_color(series):
+        return [
+            'color: #FF4B4B; font-weight: 700' if str(value).startswith('NON VALIDO')
+            else 'color: #28C76F; font-weight: 600' if str(value) == 'VALIDO'
+            else 'color: #EAB308' for value in series
+        ]
+    st.dataframe(frame.style.apply(quality_color, subset=['Qualità dati']),
+                 use_container_width=True, hide_index=True)
 else:
     st.info('Non sono presenti registri per questa settimana.')
 
