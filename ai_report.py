@@ -175,6 +175,28 @@ def build_report(store, week, day, reference, offset=None):
     return report
 
 
+def _acquisition_label(rec):
+    """Etichetta leggibile per PDF; conserva il cron originale nel JSON.
+
+    Gli orari dell'archivio sono quelli effettivi di download (Europe/Rome).
+    """
+    raw = str(rec.get('acquisition_slot') or '').strip()
+    fixed = {
+        '30 7 * * 1-5': 'Mattina 07:30',
+        '46 15 * * 1-5': 'Pomeriggio 15:46',
+        '07:30': 'Mattina 07:30',
+        '15:46': 'Pomeriggio 15:46',
+    }
+    if raw in fixed:
+        return fixed[raw]
+    if raw.lower() in ('', 'manuale', 'test manuale', 'manual'):
+        stamp = str(rec.get('download_rome') or '')
+        if len(stamp) >= 16:
+            return 'Manuale ' + stamp[11:16]
+        return 'Manuale'
+    return raw  # Non inventare la classificazione di eventuali slot futuri.
+
+
 def pdf_summary(report):
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_LEFT
@@ -207,14 +229,14 @@ def pdf_summary(report):
     entries=[]
     for rec in report['snapshots']:
         entries.append([rec.get('download_rome') or 'n.d.', rec.get('status',''),
-                        (rec.get('acquisition_slot') or 'n.d.')[:22],
+                        _acquisition_label(rec)[:22],
                         rec['file'].split('/')[-1].replace('SPX_CBOE_','')[:24]])
     story.append(table(['Download Roma','Qualita','Slot','File Cboe'],entries,[39*mm,36*mm,38*mm,61*mm]))
     story.append(Paragraph('Concentrazioni principali per snapshot (magnitudine NET)', styles['SPXHeading']))
     for rec in report['snapshots']:
         if rec['status'] != 'VALIDO':
             continue
-        header = f"{rec.get('download_rome') or rec['file'].split('/')[-1]} | {rec.get('acquisition_slot') or 'manuale'}"
+        header = f"{rec.get('download_rome') or rec['file'].split('/')[-1]} | {_acquisition_label(rec)}"
         sub=[Paragraph(header,styles['SPXSmall'])]
         for label in ('0DTE','Weekly'):
             p=rec['profiles'].get(label, {})
