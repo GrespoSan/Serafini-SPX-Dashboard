@@ -225,78 +225,81 @@ if logs:
 else:
     st.info('Non sono presenti registri per questa settimana.')
 
-# Il file ZIP non contiene trasformazioni sui dati originali.
-if st.button('Prepara ZIP della settimana', disabled=not (snaps or logs)):
-    try:
-        with st.spinner('Lettura dei file e creazione ZIP...'):
-            out = io.BytesIO()
-            manifest = []
-            with zipfile.ZipFile(out, 'w', compression=zipfile.ZIP_STORED) as archive:
-                for folder, objects in [('snapshots', snaps), ('logs', logs)]:
-                    for obj in objects:
-                        name = obj['name']
-                        path = f'{week}/{folder}/{name}'
-                        content = store.download(path)
-                        if folder == 'snapshots':
-                            raw = gzip.decompress(content)
-                            payload = json.loads(raw)
-                            if not isinstance(payload.get('data', {}).get('options'), list):
-                                raise ValueError('Formato catena Cboe inatteso')
-                        else:
-                            json.loads(content)
-                        archive.writestr(path, content)
-                        manifest.append({'path': path, 'sha256': hashlib.sha256(content).hexdigest(),
-                                         'bytes': len(content)})
-                archive.writestr('manifest.json', json.dumps({'week': week, 'files': manifest}, indent=2))
-            data = out.getvalue()
-            st.session_state.archive = data
-            st.session_state.archive_week = week
-            st.session_state.manifest = manifest
-            st.session_state.archive_sha = hashlib.sha256(data).hexdigest()
-    except Exception:
-        st.error('ZIP non generato: un file è illeggibile o la connessione non è riuscita.')
+# Archivio settimanale e amministrazione sulla stessa riga.
+col_zip, col_admin = st.columns([1, 1], gap='medium')
+with col_zip:
+    # Il file ZIP non contiene trasformazioni sui dati originali.
+    if st.button('Prepara ZIP della settimana', disabled=not (snaps or logs)):
+        try:
+            with st.spinner('Lettura dei file e creazione ZIP...'):
+                out = io.BytesIO()
+                manifest = []
+                with zipfile.ZipFile(out, 'w', compression=zipfile.ZIP_STORED) as archive:
+                    for folder, objects in [('snapshots', snaps), ('logs', logs)]:
+                        for obj in objects:
+                            name = obj['name']
+                            path = f'{week}/{folder}/{name}'
+                            content = store.download(path)
+                            if folder == 'snapshots':
+                                raw = gzip.decompress(content)
+                                payload = json.loads(raw)
+                                if not isinstance(payload.get('data', {}).get('options'), list):
+                                    raise ValueError('Formato catena Cboe inatteso')
+                            else:
+                                json.loads(content)
+                            archive.writestr(path, content)
+                            manifest.append({'path': path, 'sha256': hashlib.sha256(content).hexdigest(),
+                                             'bytes': len(content)})
+                    archive.writestr('manifest.json', json.dumps({'week': week, 'files': manifest}, indent=2))
+                data = out.getvalue()
+                st.session_state.archive = data
+                st.session_state.archive_week = week
+                st.session_state.manifest = manifest
+                st.session_state.archive_sha = hashlib.sha256(data).hexdigest()
+        except Exception:
+            st.error('ZIP non generato: un file è illeggibile o la connessione non è riuscita.')
 
-if st.session_state.get('archive_week') == week and st.session_state.get('archive'):
-    sha = st.session_state.archive_sha
-    st.success(f"ZIP pronto · {len(st.session_state.archive):,} byte · SHA256: {sha}")
-    st.download_button('Scarica ZIP', data=st.session_state.archive,
-                       file_name=f'Serafini_SPX_{week}.zip', mime='application/zip')
-    st.caption('Verifica sul tuo PC di poter aprire lo ZIP. Scaricare non elimina i file dal cloud.')
-
-if role == 'admin':
-    with st.expander('Amministrazione — cancellazione dei file cloud', expanded=False):
-        st.warning('Operazione irreversibile. Prima salva e verifica lo ZIP sul tuo PC.')
-        if st.session_state.get('archive_week') != week or not st.session_state.get('archive'):
-            st.info('Prepara lo ZIP prima di cancellare la settimana.')
-        else:
-            sha = st.session_state.archive_sha
-            typed = st.text_input('Inserisci SHA256 dello ZIP che hai verificato', key=f'sha_{week}')
-            confirmed = st.checkbox('Ho scaricato e verificato lo ZIP sul mio PC', key=f'confirmed_{week}')
-            ready = confirmed and hmac.compare_digest(typed.strip().lower(), sha)
-            if st.button('Elimina settimana da Supabase', disabled=not ready, type='secondary'):
-                exported = {entry['path']: entry['sha256'] for entry in st.session_state.manifest}
-                try:
-                    current = [f'{week}/{folder}/{o["name"]}'
-                               for folder in ('snapshots', 'logs') for o in store.list(f'{week}/{folder}/')]
-                    if set(current) != set(exported):
-                        st.error('Sono arrivati nuovi file dopo lo ZIP: rigenera l’archivio.')
-                    elif any(hashlib.sha256(store.download(path)).hexdigest() != exported[path]
-                             for path in current):
-                        st.error('Un file cloud è cambiato: rigenera l’archivio.')
-                    else:
-                        for i in range(0, len(current), 100):
-                            store.delete(current[i:i + 100])
-                        remaining = [f'{week}/{folder}/{o["name"]}'
-                                     for folder in ('snapshots', 'logs') for o in store.list(f'{week}/{folder}/')]
-                        if remaining:
-                            st.error('Cancellazione parziale: controlla il contenuto del bucket.')
+    if st.session_state.get('archive_week') == week and st.session_state.get('archive'):
+        sha = st.session_state.archive_sha
+        st.success(f"ZIP pronto · {len(st.session_state.archive):,} byte · SHA256: {sha}")
+        st.download_button('Scarica ZIP', data=st.session_state.archive,
+                           file_name=f'Serafini_SPX_{week}.zip', mime='application/zip')
+        st.caption('Verifica sul tuo PC di poter aprire lo ZIP. Scaricare non elimina i file dal cloud.')
+with col_admin:
+    if role == 'admin':
+        with st.expander('Amministrazione — cancellazione dei file cloud', expanded=False):
+            st.warning('Operazione irreversibile. Prima salva e verifica lo ZIP sul tuo PC.')
+            if st.session_state.get('archive_week') != week or not st.session_state.get('archive'):
+                st.info('Prepara lo ZIP prima di cancellare la settimana.')
+            else:
+                sha = st.session_state.archive_sha
+                typed = st.text_input('Inserisci SHA256 dello ZIP che hai verificato', key=f'sha_{week}')
+                confirmed = st.checkbox('Ho scaricato e verificato lo ZIP sul mio PC', key=f'confirmed_{week}')
+                ready = confirmed and hmac.compare_digest(typed.strip().lower(), sha)
+                if st.button('Elimina settimana da Supabase', disabled=not ready, type='secondary'):
+                    exported = {entry['path']: entry['sha256'] for entry in st.session_state.manifest}
+                    try:
+                        current = [f'{week}/{folder}/{o["name"]}'
+                                   for folder in ('snapshots', 'logs') for o in store.list(f'{week}/{folder}/')]
+                        if set(current) != set(exported):
+                            st.error('Sono arrivati nuovi file dopo lo ZIP: rigenera l’archivio.')
+                        elif any(hashlib.sha256(store.download(path)).hexdigest() != exported[path]
+                                 for path in current):
+                            st.error('Un file cloud è cambiato: rigenera l’archivio.')
                         else:
-                            st.session_state.pop('archive', None)
-                            st.success('Settimana eliminata dal cloud. Conserva lo ZIP locale.')
-                except Exception:
-                    st.error('Impossibile completare la cancellazione. Controlla il bucket.')
-else:
-    st.caption('Accesso lettore: download consentito, cancellazione non disponibile.')
+                            for i in range(0, len(current), 100):
+                                store.delete(current[i:i + 100])
+                            remaining = [f'{week}/{folder}/{o["name"]}'
+                                         for folder in ('snapshots', 'logs') for o in store.list(f'{week}/{folder}/')]
+                            if remaining:
+                                st.error('Cancellazione parziale: controlla il contenuto del bucket.')
+                            else:
+                                st.session_state.pop('archive', None)
+                                st.success('Settimana eliminata dal cloud. Conserva lo ZIP locale.')
+                    except Exception:
+                        st.error('Impossibile completare la cancellazione. Controlla il bucket.')
+    else:
+        st.caption('Accesso lettore: download consentito, cancellazione non disponibile.')
 
 # Calcolo di sola lettura, anche per il ruolo amici. Nessuna cancellazione qui.
 with st.expander('NET GAMMA 0DTE / Weekly — modulo in verifica', expanded=False):
