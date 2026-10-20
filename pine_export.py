@@ -35,7 +35,7 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
     tag = f' | {clean_label}' if clean_label else ''
     warning = ('// NOTA: 0DTE e Weekly hanno LA STESSA SCADENZA in questa data: i due profili sono identici per definizione.\n' if same_exp else '')
     return f'''//@version=6
-indicator("Serafini SPX NET GAMMA | {date_text}", overlay=true, max_lines_count=250, max_labels_count=20)
+indicator("Serafini SPX NET GAMMA | {date_text}{tag}", overlay=true, max_lines_count=250, max_labels_count=20)
 // EXPORT REVISION: V33-ACQUISITION-LABELS (width=5; Weekly=100, min=55; label=50)
 // Rilevamento selezionato: {clean_label or "Non identificato"}
 // Esportazione STATICA da uno snapshot Cboe; aggiornare ricopiando il Pine generato dalla dashboard.
