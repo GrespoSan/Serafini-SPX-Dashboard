@@ -278,11 +278,40 @@ def render(store, week, snaps, logs):
                         st.info('Nessuno strike in comune tra i due snapshot.')
                     else:
                         import plotly.graph_objects as go
-                        # Oltre agli otto livelli di intensita', includere nel grafico
-                        # le transizioni reali di segno. Si limita a cinque per evitare
-                        # grafici illeggibili nelle giornate molto movimentate.
-                        # Il Weekly conserva la selezione originaria a otto livelli.
-                        transitions = []
+                        # Grafico principale: solo otto concentrazioni, colori per ORARIO.
+                        # Grafico di transizione separato: colori per SEGNO NET (rosso/verde).
+                        def _price_label(r):
+                            return (f"{r['Prezzo ES']:,.0f}".replace(',', '.')
+                                    if r['Prezzo ES'] is not None else f"{r['Strike SPX']:g} SPX")
+
+                        fig = go.Figure()
+                        main_ordered = sorted(main_levels, key=lambda r: float(r['Strike SPX']))
+                        for name, field, color in (
+                            (first_label, 'NET mattina', '#596EFF'),
+                            (second_label, 'NET pomeriggio', '#F2A93B'),
+                        ):
+                            fig.add_bar(
+                                name=name,
+                                y=[_price_label(r) for r in main_ordered],
+                                x=[float(r[field]) for r in main_ordered],
+                                orientation='h',
+                                marker_color=color,
+                                hovertemplate='%{y}<br>NET GAMMA: %{x:.2f}<extra>' + name + '</extra>',
+                            )
+                        fig.update_layout(
+                            title=f'NET GAMMA {selected_profile} — {day:%d/%m/%Y}',
+                            barmode='group', template='plotly_dark', height=440,
+                            margin=dict(l=10, r=10, t=42, b=15),
+                            legend=dict(orientation='h', y=1.10, x=0),
+                            xaxis_title='NET GAMMA', yaxis_title=None,
+                        )
+                        fig.add_vline(x=0, line_color='#999', line_width=1)
+                        st.plotly_chart(fig, use_container_width=True,
+                                        key=f'v38_main_{selected_profile}_{first_name}_{second_name}')
+
+                        # Un secondo grafico dedicato rende evidente il PASSAGGIO di segno.
+                        # La selezione di cinque e' soltanto per leggibilita': la tabella
+                        # delle transizioni continua a mostrare tutti i livelli rilevati.
                         if selected_profile == '0DTE':
                             transitions = sorted(
                                 (r for r in comparisons
@@ -290,53 +319,37 @@ def render(store, week, snaps, logs):
                                 key=lambda r: abs(float(r['NET pomeriggio']) - float(r['NET mattina'])),
                                 reverse=True,
                             )[:5]
-                        displayed = {float(r['Strike SPX']): r for r in main_levels}
-                        for r in transitions:
-                            displayed[float(r['Strike SPX'])] = r
-                        chart_rows = sorted(displayed.values(), key=lambda r: float(r['Strike SPX']))
-                        def _price_label(r):
-                            return (f"{r['Prezzo ES']:,.0f}".replace(',', '.')
-                                    if r['Prezzo ES'] is not None else f"{r['Strike SPX']:g} SPX")
-                        def _change_label(r):
-                            old, new = float(r['NET mattina']), float(r['NET pomeriggio'])
-                            if old < 0 < new:
-                                return 'PUT → CALL'
-                            if old > 0 > new:
-                                return 'CALL → PUT'
-                            return ''
-                        labels = [(_price_label(r) + ('  ·  ' + _change_label(r) if _change_label(r) else ''))
-                                  for r in chart_rows]
-                        highlighted = [bool(_change_label(r)) for r in chart_rows]
-                        fig = go.Figure()
-                        for name, field, color in (
-                            (first_label, 'NET mattina', '#596EFF'),
-                            (second_label, 'NET pomeriggio', '#F2A93B'),
-                        ):
-                            fig.add_bar(
-                                name=name, y=labels,
-                                x=[float(r[field]) for r in chart_rows], orientation='h',
-                                marker=dict(color=color,
-                                            line=dict(color=['#FACC15' if flag else color for flag in highlighted],
-                                                      width=[2 if flag else 0 for flag in highlighted])),
-                                customdata=[['Cambio di segno: ' + _change_label(r) if _change_label(r)
-                                             else 'Concentrazione principale'] for r in chart_rows],
-                                hovertemplate='%{y}<br>NET GAMMA: %{x:.2f}<br>%{customdata[0]}<extra>' + name + '</extra>',
-                            )
-                        fig.update_layout(title=f'NET GAMMA {selected_profile} — {day:%d/%m/%Y}',
-                                          barmode='group', template='plotly_dark',
-                                          height=max(410, 55 * len(chart_rows) + 105),
-                                          margin=dict(l=10, r=10, t=42, b=15),
-                                          legend=dict(orientation='h', y=1.10, x=0),
-                                          xaxis_title='NET GAMMA', yaxis_title=None)
-                        fig.add_vline(x=0, line_color='#999', line_width=1)
-                        st.plotly_chart(fig, use_container_width=True,
-                                        key=f'v37_chart_{selected_profile}_{first_name}_{second_name}')
-                        if transitions:
-                            st.caption('Contorno giallo = cambio di segno tra i rilevamenti. '
-                                       'PUT → CALL indica NET negativo → positivo; '
-                                       'CALL → PUT indica positivo → negativo. '
-                                       'Non prova acquisti o vendite effettivi di opzioni.')
-                        
+                            if transitions:
+                                transitions.sort(key=lambda r: float(r['Strike SPX']))
+                                def _transition_label(r):
+                                    old, new = float(r['NET mattina']), float(r['NET pomeriggio'])
+                                    return 'PUT → CALL' if old < 0 < new else 'CALL → PUT'
+                                names = [_price_label(r) + '  ·  ' + _transition_label(r) for r in transitions]
+                                fig_transition = go.Figure()
+                                for name, field in ((first_label, 'NET mattina'),
+                                                    (second_label, 'NET pomeriggio')):
+                                    vals = [float(r[field]) for r in transitions]
+                                    fig_transition.add_bar(
+                                        name=name, y=names, x=vals, orientation='h',
+                                        marker_color=['#22C55E' if v > 0 else '#EF4444' for v in vals],
+                                        text=[f'{v:+.2f}'.replace('.', ',') for v in vals],
+                                        textposition='outside', cliponaxis=False,
+                                        hovertemplate='%{y}<br>NET GAMMA: %{x:.2f}<extra>' + name + '</extra>',
+                                    )
+                                fig_transition.update_layout(
+                                    title='Cambi di segno — Gamma negativo (rosso) / positivo (verde)',
+                                    barmode='group', template='plotly_dark',
+                                    height=max(300, 52 * len(transitions) + 110),
+                                    margin=dict(l=10, r=55, t=45, b=15),
+                                    showlegend=False, xaxis_title='NET GAMMA', yaxis_title=None,
+                                )
+                                fig_transition.add_vline(x=0, line_color='#999', line_width=1)
+                                st.plotly_chart(fig_transition, use_container_width=True,
+                                    key=f'v38_transitions_{first_name}_{second_name}')
+                                st.caption(f'Primo valore: {first_label}; secondo valore: {second_label}. '
+                                           'I colori indicano il segno, non l’orario. '
+                                           'PUT/CALL sono etichette del NET GAMMA, non operazioni osservate.')
+
                         for _line in operational_summary(main_levels):
                             st.markdown(_line)
                         if selected_profile == 'Weekly':
