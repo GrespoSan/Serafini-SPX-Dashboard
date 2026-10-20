@@ -159,7 +159,7 @@ c2.metric('Registri', len(logs))
 
 # Acquisizione manuale per tutti gli utenti autenticati: non cambia gli orari ufficiali.
 from manual_acquisition import render as render_manual_acquisition
-render_manual_acquisition(role, week)
+render_manual_acquisition(role, week, store)
 
 if logs:
     rows = []
