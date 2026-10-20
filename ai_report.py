@@ -9,6 +9,7 @@ import io
 import json
 import math
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -99,11 +100,16 @@ def build_report(store, week, day, reference, offset=None):
         'expiries': {'0DTE': day.isoformat(), 'Weekly': weekly.isoformat()},
         'snapshots': [], 'pairwise_changes': [], 'warnings': [],
     }
-    for name in objects:
+    # Scarica soltanto gli snapshot del giorno selezionato; richieste di rete parallele limitate.
+    # L'elaborazione rimane nell'ordine cronologico dei file.
+    def fetch_snapshot(name):
+        return store.download(f'{week}/snapshots/{name}')
+    with ThreadPoolExecutor(max_workers=min(3, len(objects))) as pool:
+        downloads = list(pool.map(fetch_snapshot, objects))
+    for name, blob in zip(objects, downloads):
         path = f'{week}/snapshots/{name}'
         rec = {'file': path, 'status': 'DA VERIFICARE', 'profiles': {}}
         try:
-            blob = store.download(path)
             rec['sha256_original_gzip'] = hashlib.sha256(blob).hexdigest()
             snap = read_snapshot(blob)
             rec['cboe_timestamp_original'] = snap.get('timestamp')
@@ -261,11 +267,14 @@ def render(store, week, snaps, logs):
     first=next((o['name'] for o in snaps if o['name'].startswith('SPX_CBOE_'+day.strftime('%Y%m%d')+'_')),None)
     default_prev=0.0
     if first:
-        try:
-            s=read_snapshot(store.download(f'{week}/snapshots/{first}'))
-            default_prev=float(s['data'].get('prev_day_close') or 0)
-        except (ValueError,KeyError,TypeError,EOFError,OSError):
-            pass
+        preview_key = f'ai_prev_close_{week}_{first}'
+        if preview_key not in st.session_state:
+            try:
+                s = read_snapshot(store.download(f'{week}/snapshots/{first}'))
+                st.session_state[preview_key] = float(s['data'].get('prev_day_close') or 0)
+            except (ValueError, KeyError, TypeError, EOFError, OSError):
+                st.session_state[preview_key] = 0.0
+        default_prev = st.session_state[preview_key]
     col1,col2=st.columns(2)
     with col1:
         ref=st.number_input('Chiusura SPX precedente (verificare)',min_value=0.01,

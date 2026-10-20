@@ -34,6 +34,25 @@ def format_download_rome(value):
         return str(value)
 
 
+@st.cache_data(show_spinner=False, ttl=1800, max_entries=250)
+def _cached_quality_from_file(path, _store):
+    # Solo lo stato di validita': i dati grezzi NON entrano nella cache.
+    try:
+        raw = _store.download(path)
+        options = json.loads(gzip.decompress(raw))['data']['options']
+        import math
+        for option in options:
+            try:
+                gamma = float(option.get('gamma') or 0)
+                if math.isfinite(gamma) and gamma != 0:
+                    return 'VALIDO'
+            except (TypeError, ValueError, OverflowError):
+                continue
+        return 'NON VALIDO — Gamma assenti'
+    except Exception:
+        return 'DA VERIFICARE'
+
+
 def describe_quality(value, store=None):
     """Qualita' senza inferirla da NUOVO/INVARIATO.
 
@@ -50,20 +69,7 @@ def describe_quality(value, store=None):
     path = value.get('file')
     if not path or store is None:
         return 'DA VERIFICARE'
-    try:
-        raw = store.download(path)
-        options = json.loads(gzip.decompress(raw))['data']['options']
-        import math
-        for option in options:
-            try:
-                gamma = float(option.get('gamma') or 0)
-                if math.isfinite(gamma) and gamma != 0:
-                    return 'VALIDO'
-            except (TypeError, ValueError, OverflowError):
-                continue
-        return 'NON VALIDO — Gamma assenti'
-    except Exception:
-        return 'DA VERIFICARE'
+    return _cached_quality_from_file(path, store)
 
 
 def describe_slot(slot):
