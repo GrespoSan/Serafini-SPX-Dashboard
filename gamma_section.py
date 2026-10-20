@@ -235,7 +235,7 @@ def render(store, week, snaps, logs):
         st.error('Snapshot in giorno non operativo: scegliere manualmente una giornata valida.'); return
     st.caption(f'0DTE: {day.isoformat()} · Weekly: {weekly_exp.isoformat()} (lun–gio venerdì corrente; venerdì successivo). In caso di festività controllare la scadenza effettiva.')
     # Sintesi breve: due fotografie, stessi strike SPX, una sola visualizzazione.
-    with st.expander('Confronto NET GAMMA · rilevamenti selezionati (v35)', expanded=True):
+    with st.expander('Confronto NET GAMMA · rilevamenti selezionati (v37)', expanded=True):
         same_day = sorted(n for n in names if n.startswith(f'SPX_CBOE_{day:%Y%m%d}_'))
         if len(same_day) < 2:
             st.info('Servono due snapshot diversi della stessa giornata.')
@@ -278,21 +278,64 @@ def render(store, week, snaps, logs):
                         st.info('Nessuno strike in comune tra i due snapshot.')
                     else:
                         import plotly.graph_objects as go
-                        labels = [f"{r['Prezzo ES']:,.0f}".replace(',', '.') if r['Prezzo ES'] is not None
-                                  else f"{r['Strike SPX']:g} SPX" for r in main_levels]
+                        # Oltre agli otto livelli di intensita', includere nel grafico
+                        # le transizioni reali di segno. Si limita a cinque per evitare
+                        # grafici illeggibili nelle giornate molto movimentate.
+                        # Il Weekly conserva la selezione originaria a otto livelli.
+                        transitions = []
+                        if selected_profile == '0DTE':
+                            transitions = sorted(
+                                (r for r in comparisons
+                                 if float(r['NET mattina']) * float(r['NET pomeriggio']) < 0),
+                                key=lambda r: abs(float(r['NET pomeriggio']) - float(r['NET mattina'])),
+                                reverse=True,
+                            )[:5]
+                        displayed = {float(r['Strike SPX']): r for r in main_levels}
+                        for r in transitions:
+                            displayed[float(r['Strike SPX'])] = r
+                        chart_rows = sorted(displayed.values(), key=lambda r: float(r['Strike SPX']))
+                        def _price_label(r):
+                            return (f"{r['Prezzo ES']:,.0f}".replace(',', '.')
+                                    if r['Prezzo ES'] is not None else f"{r['Strike SPX']:g} SPX")
+                        def _change_label(r):
+                            old, new = float(r['NET mattina']), float(r['NET pomeriggio'])
+                            if old < 0 < new:
+                                return 'PUT → CALL'
+                            if old > 0 > new:
+                                return 'CALL → PUT'
+                            return ''
+                        labels = [(_price_label(r) + ('  ·  ' + _change_label(r) if _change_label(r) else ''))
+                                  for r in chart_rows]
+                        highlighted = [bool(_change_label(r)) for r in chart_rows]
                         fig = go.Figure()
-                        fig.add_bar(name=first_label, y=labels,
-                                    x=[r['NET mattina'] for r in main_levels], orientation='h', marker_color='#596EFF')
-                        fig.add_bar(name=second_label, y=labels,
-                                    x=[r['NET pomeriggio'] for r in main_levels], orientation='h', marker_color='#F2A93B')
+                        for name, field, color in (
+                            (first_label, 'NET mattina', '#596EFF'),
+                            (second_label, 'NET pomeriggio', '#F2A93B'),
+                        ):
+                            fig.add_bar(
+                                name=name, y=labels,
+                                x=[float(r[field]) for r in chart_rows], orientation='h',
+                                marker=dict(color=color,
+                                            line=dict(color=['#FACC15' if flag else color for flag in highlighted],
+                                                      width=[2 if flag else 0 for flag in highlighted])),
+                                customdata=[['Cambio di segno: ' + _change_label(r) if _change_label(r)
+                                             else 'Concentrazione principale'] for r in chart_rows],
+                                hovertemplate='%{y}<br>NET GAMMA: %{x:.2f}<br>%{customdata[0]}<extra>' + name + '</extra>',
+                            )
                         fig.update_layout(title=f'NET GAMMA {selected_profile} — {day:%d/%m/%Y}',
-                                          barmode='group', template='plotly_dark', height=410,
+                                          barmode='group', template='plotly_dark',
+                                          height=max(410, 55 * len(chart_rows) + 105),
                                           margin=dict(l=10, r=10, t=42, b=15),
                                           legend=dict(orientation='h', y=1.10, x=0),
                                           xaxis_title='NET GAMMA', yaxis_title=None)
                         fig.add_vline(x=0, line_color='#999', line_width=1)
                         st.plotly_chart(fig, use_container_width=True,
-                                        key=f'v19_chart_{selected_profile}_{first_name}_{second_name}')
+                                        key=f'v37_chart_{selected_profile}_{first_name}_{second_name}')
+                        if transitions:
+                            st.caption('Contorno giallo = cambio di segno tra i rilevamenti. '
+                                       'PUT → CALL indica NET negativo → positivo; '
+                                       'CALL → PUT indica positivo → negativo. '
+                                       'Non prova acquisti o vendite effettivi di opzioni.')
                         
                         for _line in operational_summary(main_levels):
                             st.markdown(_line)
@@ -397,7 +440,7 @@ def render(store, week, snaps, logs):
                             else:
                                 st.caption('Nessun cambiamento di segno netto nei livelli comuni ai due snapshot.')
 
-                        st.caption('Grafico: fino a 4 Gamma positivi e 4 negativi secondo il segno del primo rilevamento; gli strike sono confrontati allo stesso prezzo SPX. I livelli non sono automaticamente Call/Put né segnali operativi.')
+                        st.caption('Grafico: 8 concentrazioni principali (4 positive e 4 negative iniziali), più fino a 5 cambi di segno 0DTE evidenziati. Stessi strike SPX; nessun segnale operativo automatico.')
                         if stats['solo_mattina'] or stats['solo_pomeriggio']:
                             st.caption(f"Strike confrontati: {stats['comuni']} · non comuni: "
                                        f"{stats['solo_mattina'] + stats['solo_pomeriggio']}.")
