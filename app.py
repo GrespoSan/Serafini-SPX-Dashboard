@@ -34,6 +34,38 @@ def format_download_rome(value):
         return str(value)
 
 
+def describe_quality(value, store=None):
+    """Qualita' senza inferirla da NUOVO/INVARIATO.
+
+    I log recenti contengono i conteggi gamma. Per i log storici, se e' presente
+    il file, controlliamo il JSON originale senza modificarlo.
+    """
+    quality = value.get('quality') or {}
+    count = (quality.get('nonzero') or {}).get('gamma')
+    if isinstance(count, (int, float)):
+        return 'VALIDO' if count > 0 else 'NON VALIDO — Gamma assenti'
+    status = str(value.get('status', ''))
+    if status == 'DATI_NON_VALIDI':
+        return 'NON VALIDO — Gamma assenti'
+    path = value.get('file')
+    if not path or store is None:
+        return 'DA VERIFICARE'
+    try:
+        raw = store.download(path)
+        options = json.loads(gzip.decompress(raw))['data']['options']
+        import math
+        for option in options:
+            try:
+                gamma = float(option.get('gamma') or 0)
+                if math.isfinite(gamma) and gamma != 0:
+                    return 'VALIDO'
+            except (TypeError, ValueError, OverflowError):
+                continue
+        return 'NON VALIDO — Gamma assenti'
+    except Exception:
+        return 'DA VERIFICARE'
+
+
 def describe_slot(slot):
     """Non indovinare lo slot di vecchi registri privi di identificazione."""
     name = str(slot or '').strip()
@@ -170,13 +202,14 @@ if logs:
                 'Download (ora di Roma)': format_download_rome(value.get('download_utc')),
                 'Acquisizione': describe_slot(value.get('scheduled_slot')),
                 'Stato': value.get('status', ''),
+                'Qualità dati': describe_quality(value, store),
                 'Timestamp Cboe (originale)': value.get('cboe_timestamp', ''),
                 'SPX': value.get('spot_spx', ''),
                 'Contratti': value.get('contracts', ''),
                 'File originale': value.get('file', ''),
             })
         except Exception:
-            rows.append({'status': 'Impossibile leggere un registro'})
+            rows.append({'Stato': 'Impossibile leggere un registro', 'Qualità dati': 'DA VERIFICARE'})
     st.caption('Gli orari di download sono convertiti in Europe/Rome. Il timestamp Cboe rimane come nella fonte, senza attribuirgli un fuso non dichiarato. I vecchi registri etichettati “automatico” non identificano necessariamente lo slot.')
     st.dataframe(rows, use_container_width=True, hide_index=True)
 else:
