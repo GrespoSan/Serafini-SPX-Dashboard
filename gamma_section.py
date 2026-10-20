@@ -207,6 +207,15 @@ def render(store, week, snaps, logs):
                 st.session_state.auto_basis_results[day.isoformat()] = None
                 st.session_state[f'basis_auto_error_{day.isoformat()}'] = str(exc)[:250]
 
+    # v41: Streamlit puo' conservare il risultato automatico ma lasciare vuoto
+    # il widget dopo un cambio snapshot/rerun. Riallineiamo lo stato PRIMA
+    # dell'istanziazione del text_input, senza sovrascrivere valori non vuoti
+    # (anche se modificati manualmente dall'utente).
+    cached_basis = st.session_state.auto_basis_results.get(day.isoformat())
+    if cached_basis is not None and not str(st.session_state.get(basis_key, '')).strip():
+        st.session_state[basis_key] = str(int(Decimal(str(cached_basis['basis'])).quantize(
+            Decimal('1'), rounding=ROUND_HALF_UP)))
+
     col1, col2, col3 = st.columns([1.15, 1.45, 0.65], gap='small')
     with col1:
         ref = st.number_input('Chiusura SPX precedente', min_value=0.01,
