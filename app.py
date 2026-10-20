@@ -305,3 +305,8 @@ with col_admin:
 with st.expander('NET GAMMA 0DTE / Weekly — modulo in verifica', expanded=False):
     from gamma_section import render
     render(store, week, snaps, logs)
+
+# Report descrittivo e riproducibile per analisi AI (nessuna chiamata a servizi AI).
+with st.expander('Report giornaliero per analisi AI — JSON + PDF', expanded=False):
+    from ai_report import render as render_ai_report
+    render_ai_report(store, week, snaps, logs)
