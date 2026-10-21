@@ -20,6 +20,11 @@ def intrinsic_payoff(strikes: dict[str, float], kind: str, x: np.ndarray) -> np.
         return np.maximum(s['P1'] - x, 0) - np.maximum(s['P2'] - x, 0)
     if kind == 'strangle':
         return -np.maximum(s['P3'] - x, 0) - np.maximum(x - s['C3'], 0)
+    if kind == 'combined':
+        # Esattamente le 6 gambe dei tre grafici precedenti; nessun premio.
+        return (intrinsic_payoff(s, 'call', x)
+                + intrinsic_payoff(s, 'put', x)
+                + intrinsic_payoff(s, 'strangle', x))
     raise ValueError(f'Tipo di strategia non riconosciuto: {kind}')
 
 
@@ -61,6 +66,56 @@ def make_payoff_figure(strikes: dict[str, float], kind: str, offset: float = 0.0
     return fig
 
 
+def make_combined_payoff_figure(strikes: dict[str, float], offset: float = 0.0) -> go.Figure:
+    """Somma delle sei gambe, rappresentata sullo stesso prezzo SPX a scadenza.
+
+    I prezzi ES in ascissa sono una traslazione visiva; l'intrinseco rimane
+    quello delle opzioni SPX. Non sono inclusi premi, commissioni o moltiplicatori.
+    """
+    s = {key: float(value) for key, value in strikes.items()}
+    ordered = ['P3', 'P2', 'P1', 'C1', 'C2', 'C3']
+    values = [s[key] for key in ordered]
+    if any(right <= left for left, right in zip(values, values[1:])):
+        raise ValueError('Per il payoff combinato gli strike devono essere ordinati P3 < P2 < P1 < C1 < C2 < C3.')
+    span = values[-1] - values[0]
+    margin = max(20.0, span * 0.18)
+    points = np.linspace(values[0] - margin, values[-1] + margin, 600)
+    # Vertici agli strike esatti, per mostrare le pendenze corrette.
+    x_spx = np.sort(np.unique(np.r_[points, values]))
+    x_es = x_spx + offset
+    y = intrinsic_payoff(s, 'combined', x_spx)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=x_es, y=y, mode='lines', name='Intrinseco combinato',
+        line={'color': '#60a5fa', 'width': 3},
+        hovertemplate='ES %{x:.2f}<br>Intrinseco combinato %{y:+.2f} pt<extra></extra>',
+    ))
+    for leg in ordered:
+        level = s[leg] + offset
+        fig.add_vline(x=level, line_color='#94a3b8', line_width=1, line_dash='dash',
+                      opacity=0.55)
+        fig.add_annotation(x=level, y=1.05, yref='paper',
+                           text=f'<b>{leg}</b><br>{level:g}',
+                           showarrow=False,
+                           font={'size': 10, 'color': '#e2e8f0'},
+                           bgcolor='rgba(17,24,39,0.85)', borderpad=3)
+    fig.add_hline(y=0, line_color='#94a3b8', line_width=1, line_dash='dot')
+    max_abs = max(float(np.max(np.abs(y))), 1.0)
+    fig.update_layout(
+        template='plotly_dark', height=385,
+        margin={'l': 12, 'r': 12, 't': 63, 'b': 30},
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        showlegend=False, font={'size': 12},
+        xaxis={'title': 'Prezzo ES stimato (strike SPX + differenziale)',
+               'range': [float(x_es[0]), float(x_es[-1])],
+               'tickformat': '.0f', 'gridcolor': '#273142', 'zeroline': False},
+        yaxis={'title': 'Intrinseco combinato (punti SPX)',
+               'range': [-max_abs * 1.2, max_abs * 1.2],
+               'gridcolor': '#273142', 'zeroline': False},
+    )
+    return fig
+
+
 def render_payoff_charts(chosen: dict, offset: float | None = None) -> None:
     """Da chiamare SOLO dopo aver validato i sei livelli C1..P3."""
     names = ('C1', 'C2', 'C3', 'P1', 'P2', 'P3')
@@ -89,6 +144,17 @@ def render_payoff_charts(chosen: dict, offset: float | None = None) -> None:
             st.caption(descr)
             st.plotly_chart(make_payoff_figure(s, kind, offset), use_container_width=True,
                             key=f'payoff_{kind}_{offset:g}_{"_".join(str(s[n]) for n in names)}')
+    st.markdown('**Payoff combinato — 2 Vertical + Short Strangle (6 gambe)**')
+    st.caption('Somma del Vertical Call (C1 acquistata, C2 venduta), '
+               'Vertical Put (P1 acquistata, P2 venduta) e Short Strangle '
+               '(P3 e C3 vendute). Intrinseco teorico a scadenza, senza premi o commissioni.')
+    try:
+        combined = make_combined_payoff_figure(s, offset)
+    except ValueError as exc:
+        st.warning(f'Payoff combinato non disponibile: {exc}')
+    else:
+        st.plotly_chart(combined, use_container_width=True,
+                        key=f'payoff_combined_{offset:g}_{"_".join(str(s[n]) for n in names)}')
     st.caption('Nota: nei grafici dei vertical il valore intrinseco non può diventare negativo '
                'senza considerare il premio pagato. Nello short strangle, fra P3 e C3 '
                'l’intrinseco è zero; il credito iniziale non è noto e non viene inventato.')
