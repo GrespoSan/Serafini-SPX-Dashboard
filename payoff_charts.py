@@ -116,46 +116,116 @@ def make_combined_payoff_figure(strikes: dict[str, float], offset: float = 0.0) 
     return fig
 
 
-def render_payoff_charts(chosen: dict, offset: float | None = None) -> None:
-    """Da chiamare SOLO dopo aver validato i sei livelli C1..P3."""
+def render_payoff_charts(chosen: dict, offset: float | None = None,
+                         profile_0dte: dict | None = None) -> None:
+    """Confronto unico nella sezione Struttura opzionale.
+
+    Pannelli indipendenti ma con identica scala verticale ES:
+    a sinistra gamma 0DTE, a destra intrinseco combinato ruotato.
+    Non modifica la selezione dei livelli ne' la formula NET GAMMA.
+    """
     names = ('C1', 'C2', 'C3', 'P1', 'P2', 'P3')
     if not all(name in chosen for name in names):
-        st.info('Seleziona i sei livelli C1–C3 e P1–P3 per visualizzare i payoff.')
+        st.info('Seleziona i sei livelli C1–C3 e P1–P3 per il confronto.')
         return
     s = {name: float(chosen[name]['strike_spx']) for name in names}
     if not (s['C1'] < s['C2'] < s['C3'] and s['P1'] > s['P2'] > s['P3']):
-        st.warning('Correggi l’ordine degli strike per visualizzare i payoff.')
+        st.warning('Correggi l’ordine dei sei strike per visualizzare la struttura.')
         return
-    st.markdown('**Grafici payoff — 2 Vertical + Strangle (sperimentale)**')
     if offset is None:
-        st.info('Per mostrare i grafici con i prezzi ES inserisci prima il differenziale ES−SPX.')
+        st.info('Inserisci il differenziale ES−SPX per confrontare payoff e Gamma sulla stessa scala ES.')
         return
+    rows = (profile_0dte or {}).get('rows') or []
+    if not rows:
+        st.info('Profilo 0DTE non disponibile: il confronto non può essere costruito.')
+        return
+
     offset = float(offset)
-    st.caption('Payoff intrinseco A SCADENZA, espresso in punti SPX, senza premi né commissioni. '
-               'Non rappresenta il profitto/perdita effettivo e non dimostra chi abbia comprato o venduto le opzioni.')
-    specs = [
-        ('call', 'Vertical Call · C1–C2', f"C1 ES {s['C1']+offset:g} · C2 ES {s['C2']+offset:g}"),
-        ('put', 'Vertical Put · P1–P2', f"P1 ES {s['P1']+offset:g} · P2 ES {s['P2']+offset:g}"),
-        ('strangle', 'Short Strangle · P3/C3', f"P3 ES {s['P3']+offset:g} · C3 ES {s['C3']+offset:g}"),
-    ]
-    for col, (kind, title, descr) in zip(st.columns(3), specs):
-        with col:
-            st.markdown(f'**{title}**')
-            st.caption(descr)
-            st.plotly_chart(make_payoff_figure(s, kind, offset), use_container_width=True,
-                            key=f'payoff_{kind}_{offset:g}_{"_".join(str(s[n]) for n in names)}')
-    st.markdown('**Payoff combinato — 2 Vertical + Short Strangle (6 gambe)**')
-    st.caption('Somma del Vertical Call (C1 acquistata, C2 venduta), '
-               'Vertical Put (P1 acquistata, P2 venduta) e Short Strangle '
-               '(P3 e C3 vendute). Intrinseco teorico a scadenza, senza premi o commissioni.')
-    try:
-        combined = make_combined_payoff_figure(s, offset)
-    except ValueError as exc:
-        st.warning(f'Payoff combinato non disponibile: {exc}')
-    else:
-        st.plotly_chart(combined, use_container_width=True,
-                        key=f'payoff_combined_{offset:g}_{"_".join(str(s[n]) for n in names)}')
-    st.caption('Nota: nei grafici dei vertical il valore intrinseco non può diventare negativo '
-               'senza considerare il premio pagato. Nello short strangle, fra P3 e C3 '
-               'l’intrinseco è zero; il credito iniziale non è noto e non viene inventato.')
-    st.caption(f'Asse orizzontale in ES (differenziale {offset:+.2f}). Intrinseco calcolato sugli strike SPX; nessun premio ipotizzato.')
+    levels = {key: value + offset for key, value in s.items()}
+    gamma_prices = [float(r['strike_spx']) + offset for r in rows]
+    gamma_values = [float(r['net_gamma']) for r in rows]
+    ylow = min(gamma_prices + list(levels.values())) - 8
+    yhigh = max(gamma_prices + list(levels.values())) + 8
+    y_range = [ylow, yhigh]
+
+    # Campionare tutti i vertici: la curva ruotata mantiene la geometria
+    # esatta delle sei opzioni, senza approssimare gli strike.
+    points_spx = np.sort(np.unique(np.r_[
+        np.linspace(ylow - offset, yhigh - offset, 600),
+        list(s.values()), ylow - offset, yhigh - offset
+    ]))
+    combined = intrinsic_payoff(s, 'combined', points_spx)
+
+    fig_gamma = go.Figure()
+    fig_gamma.add_trace(go.Bar(
+        x=gamma_values, y=gamma_prices, orientation='h',
+        width=3.8, marker_color=[
+            '#22c55e' if value >= 0 else '#ef4444' for value in gamma_values
+        ],
+        customdata=[float(r['strike_spx']) for r in rows],
+        hovertemplate='ES %{y:.2f}<br>SPX %{customdata:.2f}'
+                      '<br>NET Gamma %{x:+.3f}<extra></extra>',
+        name='NET GAMMA 0DTE',
+    ))
+    fig_gamma.add_vline(x=0, line_color='#94a3b8', line_width=1)
+    fig_gamma.update_layout(
+        title='NET GAMMA 0DTE', template='plotly_dark',
+        height=670, margin=dict(l=10, r=14, t=54, b=48),
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        showlegend=False, bargap=0.1,
+        xaxis=dict(title='NET GAMMA', zeroline=True, gridcolor='#273142'),
+        yaxis=dict(title='Prezzo ES stimato', range=y_range,
+                   tickformat=',.0f', gridcolor='#273142', fixedrange=True),
+    )
+
+    fig_payoff = go.Figure()
+    fig_payoff.add_trace(go.Scatter(
+        x=combined, y=points_spx + offset,
+        mode='lines', name='Intrinseco combinato',
+        line=dict(color='#60a5fa', width=3),
+        hovertemplate='Intrinseco %{x:+.2f} punti SPX'
+                      '<br>ES %{y:.2f}<extra></extra>',
+    ))
+    fig_payoff.add_vline(x=0, line_color='#94a3b8', line_width=1,
+                         line_dash='dot')
+    for key in ('P3', 'P2', 'P1', 'C1', 'C2', 'C3'):
+        price = levels[key]
+        marker_color = '#f59e0b' if key.startswith('C') else '#a78bfa'
+        for fig in (fig_gamma, fig_payoff):
+            fig.add_hline(y=price, line_color=marker_color,
+                          line_width=1, line_dash='dash', opacity=0.65)
+        fig_payoff.add_annotation(
+            x=1.01, xref='paper', y=price, yref='y',
+            text=f'<b>{key}</b> {price:,.0f}', showarrow=False,
+            xanchor='left', font=dict(size=11, color=marker_color),
+        )
+    width = max(float(np.max(combined) - np.min(combined)), 1)
+    fig_payoff.update_layout(
+        title='Payoff combinato — 6 gambe', template='plotly_dark',
+        height=670, margin=dict(l=12, r=94, t=54, b=48),
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        showlegend=False,
+        xaxis=dict(title='Intrinseco teorico (punti SPX)',
+                   range=[min(0, float(np.min(combined))) - width * 0.1,
+                          max(0, float(np.max(combined))) + width * 0.1],
+                   gridcolor='#273142'),
+        yaxis=dict(title='Prezzo ES stimato', range=y_range,
+                   tickformat=',.0f', gridcolor='#273142', fixedrange=True),
+    )
+
+    st.markdown('**Struttura opzionale — NET GAMMA 0DTE e payoff combinato**')
+    st.caption('Stesso asse verticale ES e stessi sei livelli. '
+               'I livelli restano ipotesi modificabili; il payoff è il valore '
+               'intrinseco teorico a scadenza delle sei gambe, senza premi '
+               'né commissioni. Non rappresenta il profitto reale.')
+    left, right = st.columns(2, gap='small')
+    key_suffix = '_'.join(str(s[key]) for key in names)
+    with left:
+        st.plotly_chart(fig_gamma, use_container_width=True,
+                        key=f'structure_gamma_{offset:g}_{key_suffix}')
+    with right:
+        st.plotly_chart(fig_payoff, use_container_width=True,
+                        key=f'structure_combined_{offset:g}_{key_suffix}')
+    st.caption(f'Prezzi ES = strike SPX + differenziale {offset:+.2f}. '
+               'Le curve rappresentano solo la struttura didattica ipotizzata '
+               'da Serafini; il NET GAMMA non prova le posizioni delle opzioni.')
