@@ -4,6 +4,7 @@ Il grafico espone ORARI DI DOWNLOAD a Roma; il timestamp Cboe non viene
 interpretato come tempo UTC o come ora italiana. Nessuna scrittura in Supabase.
 """
 import json
+import math
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -80,6 +81,7 @@ def _official_frames(store, week, day, logs):
                     "slot_rome": slot, "clock": clock.strftime("%H:%M:%S"),
                     "origin": "UFFICIALE", "spot": snap["data"].get("current_price"),
                     "reference_spx": ref, "profiles": profiles,
+                    "cboe_timestamp_original": snap.get("timestamp"),
                 }
                 break
             except (KeyError, TypeError, ValueError, OSError, RuntimeError, OverflowError):
@@ -113,6 +115,7 @@ def _study_frames(store, week, day):
                 "origin": "STUDIO NON UFFICIALE",
                 "spot": item.get("spot_spx"),
                 "reference_spx": item.get("reference_spx"),
+                "cboe_timestamp_original": item.get("cboe_timestamp_original"),
                 "profiles": profiles,
             }
         except (KeyError, ValueError, TypeError, RuntimeError, OverflowError):
@@ -169,6 +172,14 @@ def render(store, week, logs):
         st.warning("Il replay mostra strike SPX; per visualizzare livelli ES "
                    "inserire il differenziale corretto.")
 
+    def numeric_spot(item):
+        """Never substitute live prices for a historical Cboe observation."""
+        try:
+            spot = float(item.get("spot"))
+            return spot if math.isfinite(spot) and spot > 0 else None
+        except (TypeError, ValueError, OverflowError):
+            return None
+
     all_rows = [r for _, f in available for r in f["profiles"][kind]["rows"]]
     strikes = sorted({float(r["strike_spx"]) for r in all_rows})
     xmin = min(float(r["net_gamma"]) for r in all_rows)
@@ -176,54 +187,102 @@ def render(store, week, logs):
     spread = max(xmax - xmin, 1.0)
     bounds = [min(0, xmin) - spread * 0.08, max(0, xmax) + spread * 0.08]
 
+    # Axes remain numeric: a price line must represent its exact value even
+    # when the price falls between two available option strikes.
+    yvalues = [strike + (offset or 0) for strike in strikes]
+    prices = [(numeric_spot(item) + (offset or 0))
+              for _, item in available if numeric_spot(item) is not None]
+    ybounds = [min(yvalues + prices) - 8, max(yvalues + prices) + 8]
+
     def frame_data(slot, item):
-        values = {float(r["strike_spx"]): float(r["net_gamma"])
-                  for r in item["profiles"][kind]["rows"]}
-        ys = [f"{strike + offset:,.0f}".replace(",", ".") if offset is not None
-              else f"{strike:g}" for strike in strikes]
-        xs = [values.get(strike, 0.0) for strike in strikes]
+        vals = {float(r["strike_spx"]): float(r["net_gamma"])
+                for r in item["profiles"][kind]["rows"]}
+        xs = [vals.get(strike, 0.0) for strike in strikes]
         colors = ["#22c55e" if v >= 0 else "#ef4444" for v in xs]
-        return go.Bar(x=xs, y=ys, orientation="h", marker_color=colors,
-                      hovertemplate="Livello %{y}<br>NET Gamma %{x:+.3f}<extra></extra>",
-                      name=f"{slot} ({item['clock']})")
+        bars = go.Bar(
+            x=xs, y=yvalues, orientation="h", width=3.6,
+            marker_color=colors,
+            hovertemplate="Livello %{y:,.2f}<br>NET Gamma %{x:+.3f}<extra></extra>",
+            name=f"NET Gamma {slot}",
+        )
+        spot = numeric_spot(item)
+        if spot is not None:
+            estimated = spot + (offset or 0)
+            price_note = (f"ES stimato {estimated:,.2f}" if offset is not None
+                          else f"SPX Cboe {spot:,.2f}")
+            marker = go.Scatter(
+                x=[bounds[0], bounds[1]], y=[estimated, estimated],
+                mode="lines", line={"color": "#fbbf24", "width": 2.5, "dash": "dash"},
+                name=price_note, showlegend=False,
+                hovertemplate=price_note + "<extra></extra>",
+            )
+        else:
+            marker = go.Scatter(
+                x=[], y=[], mode="lines", showlegend=False,
+                name="Prezzo Cboe non disponibile",
+            )
+        return [bars, marker]
+
+    def frame_title(slot, item):
+        spot = numeric_spot(item)
+        spot_text = f"SPX Cboe {spot:,.2f}" if spot is not None else "SPX non disponibile"
+        es_text = (f" | ES stimato {spot + offset:,.2f}"
+                   if spot is not None and offset is not None else "")
+        cboe_time = str(item.get("cboe_timestamp_original") or "n.d.")
+        return (f"NET GAMMA {kind} | {day:%d/%m/%Y} | "
+                f"Slot {slot}, download {item['clock']} Roma"
+                f"<br><sup>{spot_text}{es_text} | Timestamp Cboe: {cboe_time} "
+                f"(fuso non dichiarato)</sup>")
 
     first_slot, first = available[0]
-    graph = go.Figure(data=[frame_data(first_slot, first)])
-    graph.frames = [go.Frame(name=slot, data=[frame_data(slot, item)],
-                             traces=[0]) for slot, item in available]
-    steps = [dict(method="animate", label=slot,
-                  args=[[slot], {"mode": "immediate",
-                                 "frame": {"duration": 0, "redraw": True},
-                                 "transition": {"duration": 0}}])
-             for slot, _ in available]
+    graph = go.Figure(data=frame_data(first_slot, first))
+    graph.frames = [
+        go.Frame(name=slot, data=frame_data(slot, item), traces=[0, 1],
+                 layout=go.Layout(title={"text": frame_title(slot, item)}))
+        for slot, item in available
+    ]
+    steps = [
+        dict(method="animate", label=slot,
+             args=[[slot], {"mode": "immediate",
+                            "frame": {"duration": 0, "redraw": True},
+                            "transition": {"duration": 0}}])
+        for slot, _ in available
+    ]
     graph.update_layout(
-        title=f"NET GAMMA {kind} | {day:%d/%m/%Y} | frame {first_slot}",
-        template="plotly_dark", height=max(650, min(1000, 18 * len(strikes) + 175)),
-        margin=dict(l=16, r=16, t=65, b=90),
-        xaxis=dict(title="NET GAMMA", range=bounds, zeroline=True),
-        yaxis=dict(title="Livello ES" if offset is not None else "Strike SPX",
-                   categoryorder="array",
-                   categoryarray=[
-                       f"{strike + offset:,.0f}".replace(",", ".") if offset is not None
-                       else f"{strike:g}" for strike in strikes]),
-        updatemenus=[dict(type="buttons", showactive=False, direction="left",
-                          x=0.01, y=-0.12,
-                          buttons=[
-                              dict(label="▶ Play", method="animate",
-                                   args=[None, {"fromcurrent": True,
-                                                "frame": {"duration": 1100, "redraw": True},
-                                                "transition": {"duration": 0}}]),
-                              dict(label="Ⅱ Pausa", method="animate",
-                                   args=[[None], {"mode": "immediate",
-                                                  "frame": {"duration": 0, "redraw": False},
-                                                  "transition": {"duration": 0}}]),
-                          ])],
-        sliders=[dict(active=0, x=0.26, y=-0.10, len=0.72,
-                      currentvalue={"prefix": "Orario: "},
-                      steps=steps)],
+        title={"text": frame_title(first_slot, first)},
+        template="plotly_dark",
+        height=max(650, min(1000, 18 * len(strikes) + 175)),
+        margin=dict(l=16, r=16, t=94, b=90),
+        xaxis=dict(title="NET GAMMA", range=bounds, zeroline=True, fixedrange=True),
+        yaxis=dict(title="Prezzo ES stimato" if offset is not None else "Strike SPX",
+                   range=ybounds, fixedrange=True, tickformat=",.0f"),
+        updatemenus=[
+            dict(type="buttons", showactive=False, direction="left",
+                 x=0.01, y=-0.12,
+                 buttons=[
+                     dict(label="▶ Play", method="animate",
+                          args=[None, {"fromcurrent": True,
+                                       "frame": {"duration": 1100, "redraw": True},
+                                       "transition": {"duration": 0}}]),
+                     dict(label="Ⅱ Pausa", method="animate",
+                          args=[[None], {"mode": "immediate",
+                                         "frame": {"duration": 0, "redraw": False},
+                                         "transition": {"duration": 0}}]),
+                 ])
+        ],
+        sliders=[
+            dict(active=0, x=0.26, y=-0.10, len=0.72,
+                 currentvalue={"prefix": "Orario: "}, steps=steps)
+        ],
     )
     st.plotly_chart(graph, use_container_width=True,
                     key=f"replay_chart_{week}_{day}_{kind}")
+    st.caption("Linea gialla tratteggiata: prezzo SPX rilevato da Cboe, "
+               "traslato sul future ES con il differenziale indicato (se presente). "
+               "Prezzo potenzialmente ritardato; ogni frame usa il proprio prezzo "
+               "storico, mai la quotazione al momento del replay. "
+               "Orario Cboe senza fuso dichiarato.")
+
     st.caption("Scala NET GAMMA fissa per tutti i frame. Barre verdi: NET positivo; "
                "rosse: NET negativo. Lo spostamento apparente puo' dipendere "
                "sia da variazioni delle posizioni sia della Gamma delle opzioni.")
@@ -235,7 +294,11 @@ def render(store, week, logs):
         lower = sorted((r for r in rows if float(r["net_gamma"]) < 0),
                        key=lambda r: float(r["net_gamma"]))[:3]
         fmt = lambda xs: ", ".join(f"{float(r['strike_spx']) + (offset or 0):.0f}" for r in xs) or "—"
+        spot = numeric_spot(item)
         table.append({"Slot Roma": slot, "Download Roma": item["clock"],
+                      "Timestamp Cboe": item.get("cboe_timestamp_original") or "—",
+                      "SPX Cboe": round(spot, 2) if spot is not None else None,
+                      "ES stimato": round(spot + offset, 2) if spot is not None and offset is not None else None,
                       "Tipo": item["origin"], "Top 3 positivo": fmt(upper),
                       "Top 3 negativo": fmt(lower)})
     st.dataframe(table, hide_index=True, use_container_width=True)
