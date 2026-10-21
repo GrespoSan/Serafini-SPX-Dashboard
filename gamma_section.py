@@ -258,25 +258,46 @@ def render_comparison(store, week, snaps, logs):
                                        for val in old_values]
 
                     fig = go.Figure()
-                    # Ordine di disegno: pieno sotto e contorno sopra, tutti con
-                    # larghezza IDENTICA. Nessun raggruppamento laterale.
+                    # Le barre Plotly trasparenti possono sovrascrivere il bordo
+                    # quando il valore successivo copre il precedente.
+                    # Asse Y numerico: disegniamo la sagoma come linee Scatter
+                    # SOPRA le barre. Questo assicura stessa altezza, stesso
+                    # centro e visibilita' completa del precedente.
+                    row_y = list(range(len(levels)))
+                    bar_height = 0.64
                     fig.add_bar(
-                        name=f'Attuale {second_label}', y=levels, x=new_values,
-                        orientation='h', width=0.62,
-                        marker=dict(color=actual_colors),
-                        customdata=old_values,
-                        hovertemplate=('%{y}<br>DOPO: %{x:+.2f}'
-                                       '<br>PRIMA: %{customdata:+.2f}<extra></extra>'),
+                        name=f'DOPO {second_label}',
+                        y=row_y, x=new_values, orientation='h',
+                        width=bar_height, marker=dict(color=actual_colors),
+                        customdata=[[levels[i], old_values[i]] for i in row_y],
+                        hovertemplate=(
+                            '%{customdata[0]}<br>DOPO: %{x:+.2f}'
+                            '<br>PRIMA: %{customdata[1]:+.2f}<extra></extra>'
+                        ),
                     )
-                    fig.add_bar(
-                        name=f'Precedente {first_label}', y=levels, x=old_values,
-                        orientation='h', width=0.62,
-                        marker=dict(color='rgba(0,0,0,0)',
-                                    line=dict(color=previous_colors, width=2.5)),
-                        customdata=new_values,
-                        hovertemplate=('%{y}<br>PRIMA: %{x:+.2f}'
-                                       '<br>DOPO: %{customdata:+.2f}<extra></extra>'),
-                    )
+                    half_height = bar_height / 2
+                    for idx, before in enumerate(old_values):
+                        top, bottom = idx + half_height, idx - half_height
+                        fig.add_trace(go.Scatter(
+                            x=[0, before, before, 0, 0],
+                            y=[bottom, bottom, top, top, bottom],
+                            mode='lines',
+                            line=dict(color=previous_colors[idx], width=3),
+                            fill='none',
+                            name=f'PRIMA {first_label}',
+                            showlegend=False,
+                            hoverinfo='skip',
+                        ))
+                    # Piccolo marcatore del valore PRIMA per il tooltip,
+                    # indipendente dall'ordine di rendering delle barre.
+                    fig.add_trace(go.Scatter(
+                        x=old_values, y=row_y, mode='markers',
+                        marker=dict(size=7, symbol='line-ns-open',
+                                    color=previous_colors, line=dict(width=2)),
+                        customdata=levels, showlegend=False,
+                        hovertemplate=('%{customdata}<br>PRIMA: %{x:+.2f}'
+                                       '<extra></extra>'),
+                    ))
                     extent = max(abs(val) for val in old_values + new_values)
                     extent = max(extent, 1.0)
                     st.markdown(f'**Confronto NET GAMMA {selected_profile} — {day:%d/%m/%Y}**')
@@ -296,12 +317,14 @@ def render_comparison(store, week, snaps, logs):
                                    range=[-1.10 * extent, 1.10 * extent],
                                    zeroline=True, zerolinecolor='#CBD5E1'),
                         yaxis=dict(title=None, automargin=True,
-                                   categoryorder='array', categoryarray=levels),
+                                   tickmode='array', tickvals=row_y,
+                                   ticktext=levels,
+                                   range=[-0.75, len(levels) - 0.25]),
                     )
                     fig.add_vline(x=0, line_color='#CBD5E1', line_width=1)
                     st.plotly_chart(
                         fig, use_container_width=True,
-                        key=f'v40_one_gamma_{selected_profile}_{first_name}_{second_name}',
+                        key=f'v41_one_gamma_{selected_profile}_{first_name}_{second_name}',
                     )
                     st.caption(
                         'Ogni riga indica lo stesso strike nei due rilevamenti. '
