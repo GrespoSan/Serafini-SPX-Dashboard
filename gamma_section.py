@@ -224,106 +224,91 @@ def render_comparison(store, week, snaps, logs):
                         return (f"{r['Prezzo ES']:,.0f}".replace(',', '.')
                                 if r['Prezzo ES'] is not None else f"{r['Strike SPX']:g} SPX")
 
-                    fig = go.Figure()
-                    main_ordered = sorted(main_levels, key=lambda r: float(r['Strike SPX']))
-                    for name, field, color in (
-                        (first_label, 'NET mattina', '#596EFF'),
-                        (second_label, 'NET pomeriggio', '#F2A93B'),
-                    ):
-                        fig.add_bar(
-                            name=name,
-                            y=[_price_label(r) for r in main_ordered],
-                            x=[float(r[field]) for r in main_ordered],
-                            orientation='h',
-                            marker_color=color,
-                            hovertemplate='%{y}<br>NET GAMMA: %{x:.2f}<extra>' + name + '</extra>',
-                        )
-                    st.markdown(f'**Confronto NET GAMMA {selected_profile} — {day:%d/%m/%Y}**')
-                    st.caption(f'Primo rilevamento: {first_label} (Roma) · '
-                               f'Secondo rilevamento: {second_label} (Roma). '
-                               'Blu = primo; arancione = secondo.')
-                    fig.update_layout(
-                        title='Concentrazioni NET GAMMA — 1° blu / 2° arancione',
-                        barmode='group', template='plotly_dark', height=440,
-                        margin=dict(l=10, r=10, t=53, b=30),
-                        showlegend=False,
-                        xaxis_title='NET GAMMA', yaxis_title=None,
-                    )
-                    fig.add_vline(x=0, line_color='#999', line_width=1)
-                    st.plotly_chart(fig, use_container_width=True,
-                                    key=f'v38_main_{selected_profile}_{first_name}_{second_name}')
+                    # Grafico UNICO: otto concentrazioni principali e, nel 0DTE,
+                    # tutti gli strike presenti nella tabella delle zone di transizione.
+                    # Il prezzo e' una categoria unica, quindi PRE e POST coincidono
+                    # esattamente per centro e altezza: niente barre disallineate.
+                    indexed = {float(r['Strike SPX']): r for r in main_levels}
+                    zones = transition_zones(comparisons) if selected_profile == '0DTE' else []
+                    for zone in zones:
+                        for rec in zone['rows']:
+                            indexed[float(rec['Strike SPX'])] = rec
+                    ordered = sorted(indexed.values(), key=lambda r: float(r['Strike SPX']))
+                    def _comparison_label(rec):
+                        a = float(rec['NET mattina'])
+                        b = float(rec['NET pomeriggio'])
+                        if a < 0 < b:
+                            description = 'PUT → CALL'
+                        elif a > 0 > b:
+                            description = 'CALL → PUT'
+                        elif abs(b) > abs(a):
+                            description = 'CALL ↑' if b > 0 else 'PUT ↑'
+                        elif abs(b) < abs(a):
+                            description = 'CALL ↓' if b > 0 else 'PUT ↓'
+                        else:
+                            description = 'invariato'
+                        return f'{_price_label(rec)}  ·  {description}'
 
-                    # Un secondo grafico dedicato rende evidente il PASSAGGIO di segno.
-                    # La selezione di cinque e' soltanto per leggibilita': la tabella
-                    # delle transizioni continua a mostrare tutti i livelli rilevati.
-                    if selected_profile == '0DTE':
-                        # Gli stessi livelli della tabella "zone di transizione".
-                        zone_rows = {}
-                        for zone in transition_zones(comparisons):
-                            for rec in zone['rows']:
-                                zone_rows[float(rec['Strike SPX'])] = rec
-                        transitions = list(zone_rows.values())
-                        if transitions:
-                            transitions.sort(key=lambda r: float(r['Strike SPX']))
-                            def _transition_label(r):
-                                old, new = float(r['NET mattina']), float(r['NET pomeriggio'])
-                                return ('PUT → CALL' if old < 0 < new else
-                                            'CALL → PUT' if old > 0 > new else
-                                            ('CALL ' if new > 0 else 'PUT ') +
-                                            ('↑' if abs(new) > abs(old) else
-                                             '↓' if abs(new) < abs(old) else '='))
-                            names = [_price_label(r) + '  ·  ' + _transition_label(r) for r in transitions]
-                            # PRECEDENTE: sola sagoma (contorno del segno iniziale).
-                            # FINALE: barra piena (segno e dimensione attuali).
-                            # Nessun arrotondamento nei calcoli.
-                            original = [float(r['NET mattina']) for r in transitions]
-                            final = [float(r['NET pomeriggio']) for r in transitions]
-                            fig_transition = go.Figure()
-                            fig_transition.add_bar(
-                                name='Primo (contorno)', y=names, x=original,
-                                orientation='h', width=0.56,
-                                marker=dict(
-                                    color='rgba(0,0,0,0)',
-                                    line=dict(
-                                        color=['#22C55E' if v > 0 else '#EF4444'
-                                               for v in original],
-                                        width=2.5,
-                                    ),
-                                ),
-                                customdata=original,
-                                hovertemplate='%{y}<br>Prima: %{customdata:+.2f}<extra></extra>',
-                            )
-                            fig_transition.add_bar(
-                                name='Secondo (pieno)', y=names, x=final,
-                                orientation='h', width=0.38,
-                                marker=dict(color=['#22C55E' if v > 0 else '#EF4444'
-                                                   for v in final]),
-                                customdata=final,
-                                hovertemplate='%{y}<br>Dopo: %{customdata:+.2f}<extra></extra>',
-                            )
-                            max_value = max(abs(v) for v in original + final)
-                            fig_transition.update_layout(
-                                title='Evoluzione zona — contorno PRIMA / pieno DOPO',
-                                barmode='overlay', template='plotly_dark',
-                                height=max(370, 70 * len(transitions) + 135),
-                                margin=dict(l=18, r=45, t=58, b=50),
-                                showlegend=False,
-                                xaxis=dict(title='NET GAMMA',
-                                           range=[-1.08 * max_value, 1.08 * max_value],
-                                           zeroline=True),
-                                yaxis=dict(title=None, automargin=True),
-                            )
-                            fig_transition.add_vline(x=0, line_color='#999', line_width=1)
-                            st.plotly_chart(fig_transition, use_container_width=True,
-                                key=f'v38_transitions_{first_name}_{second_name}')
-                            st.caption(
-                                f'Primo: {first_label} Roma = solo CONTORNO '
-                                f'(verde positivo / rosso negativo). '
-                                f'Secondo: {second_label} Roma = barra PIENA '
-                                '(verde positivo / rosso negativo). '
-                                'Dimensioni effettive leggibili passando il mouse sulle barre. '
-                                'CALL/PUT indicano soltanto il segno NET GAMMA.'
-                            )
+                    levels = [_comparison_label(rec) for rec in ordered]
+                    old_values = [float(rec['NET mattina']) for rec in ordered]
+                    new_values = [float(rec['NET pomeriggio']) for rec in ordered]
+                    actual_colors = ['#22C55E' if val >= 0 else '#EF4444'
+                                     for val in new_values]
+                    previous_colors = ['#22C55E' if val >= 0 else '#EF4444'
+                                       for val in old_values]
+
+                    fig = go.Figure()
+                    # Ordine di disegno: pieno sotto e contorno sopra, tutti con
+                    # larghezza IDENTICA. Nessun raggruppamento laterale.
+                    fig.add_bar(
+                        name=f'Attuale {second_label}', y=levels, x=new_values,
+                        orientation='h', width=0.62,
+                        marker=dict(color=actual_colors),
+                        customdata=old_values,
+                        hovertemplate=('%{y}<br>DOPO: %{x:+.2f}'
+                                       '<br>PRIMA: %{customdata:+.2f}<extra></extra>'),
+                    )
+                    fig.add_bar(
+                        name=f'Precedente {first_label}', y=levels, x=old_values,
+                        orientation='h', width=0.62,
+                        marker=dict(color='rgba(0,0,0,0)',
+                                    line=dict(color=previous_colors, width=2.5)),
+                        customdata=new_values,
+                        hovertemplate=('%{y}<br>PRIMA: %{x:+.2f}'
+                                       '<br>DOPO: %{customdata:+.2f}<extra></extra>'),
+                    )
+                    extent = max(abs(val) for val in old_values + new_values)
+                    extent = max(extent, 1.0)
+                    st.markdown(f'**Confronto NET GAMMA {selected_profile} — {day:%d/%m/%Y}**')
+                    st.caption(
+                        f'PRIMA: {first_label} Roma = contorno; '
+                        f'DOPO: {second_label} Roma = barra piena. '
+                        'Verde NET positivo, rosso NET negativo. '
+                        'I due profili usano la stessa scala e la stessa altezza per strike.'
+                    )
+                    fig.update_layout(
+                        title='Evoluzione NET GAMMA — prima (contorno) / dopo (pieno)',
+                        barmode='overlay', template='plotly_dark',
+                        height=max(510, 48 * len(ordered) + 125),
+                        margin=dict(l=18, r=55, t=57, b=55),
+                        showlegend=False,
+                        xaxis=dict(title='NET GAMMA',
+                                   range=[-1.10 * extent, 1.10 * extent],
+                                   zeroline=True, zerolinecolor='#CBD5E1'),
+                        yaxis=dict(title=None, automargin=True,
+                                   categoryorder='array', categoryarray=levels),
+                    )
+                    fig.add_vline(x=0, line_color='#CBD5E1', line_width=1)
+                    st.plotly_chart(
+                        fig, use_container_width=True,
+                        key=f'v40_one_gamma_{selected_profile}_{first_name}_{second_name}',
+                    )
+                    st.caption(
+                        'Ogni riga indica lo stesso strike nei due rilevamenti. '
+                        'Gli strike supplementari del 0DTE derivano dalle zone '
+                        'di transizione della tabella. Il segno NET GAMMA non prova '
+                        'posizioni CALL/PUT effettivamente comprate o vendute.'
+                    )
 
                     for _line in operational_summary(main_levels):
                         st.markdown(_line)
