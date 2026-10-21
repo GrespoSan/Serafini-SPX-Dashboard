@@ -154,6 +154,13 @@ def render(store, week, logs):
         st.info("Nessun frame replay disponibile per questa data. I frame futuri "
                 "non possono essere ricostruiti retroattivamente.")
         return
+    if len(available) == 1:
+        st.warning("Replay non animabile: e' disponibile soltanto il frame "
+                   f"{available[0][0]}. Play richiede almeno due acquisizioni "
+                   "distinte. Gli snapshot intermedi del 20/10 non possono "
+                   "essere ricreati retroattivamente: il replay temporaneo "
+                   "e' stato attivato successivamente.")
+
 
     offset_key = f"basis_override_{day.isoformat()}"
     proposed = str(st.session_state.get(offset_key, "")).strip()
@@ -256,8 +263,7 @@ def render(store, week, logs):
         xaxis=dict(title="NET GAMMA", range=bounds, zeroline=True, fixedrange=True),
         yaxis=dict(title="Prezzo ES stimato" if offset is not None else "Strike SPX",
                    range=ybounds, fixedrange=True, tickformat=",.0f"),
-        updatemenus=[
-            dict(type="buttons", showactive=False, direction="left",
+        updatemenus=([dict(type="buttons", showactive=False, direction="left",
                  x=0.01, y=-0.12,
                  buttons=[
                      dict(label="▶ Play", method="animate",
@@ -268,12 +274,10 @@ def render(store, week, logs):
                           args=[[None], {"mode": "immediate",
                                          "frame": {"duration": 0, "redraw": False},
                                          "transition": {"duration": 0}}]),
-                 ])
-        ],
-        sliders=[
-            dict(active=0, x=0.26, y=-0.10, len=0.72,
-                 currentvalue={"prefix": "Orario: "}, steps=steps)
-        ],
+                 ])] if len(available) > 1 else []),
+        sliders=([dict(active=0, x=0.26, y=-0.10, len=0.72,
+                 currentvalue={"prefix": "Orario: "}, steps=steps)]
+                 if len(available) > 1 else []),
     )
     st.plotly_chart(graph, use_container_width=True,
                     key=f"replay_chart_{week}_{day}_{kind}")
