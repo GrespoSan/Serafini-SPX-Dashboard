@@ -312,6 +312,11 @@ with st.expander('NET GAMMA 0DTE / Weekly — modulo in verifica', expanded=Fals
     from gamma_section import render
     render(store, week, snaps, logs)
 
+# Il confronto e' un modulo autonomo, distinto dal profilo singolo.
+with st.expander('Confronto NET GAMMA — due rilevamenti', expanded=False):
+    from gamma_section import render_comparison
+    render_comparison(store, week, snaps, logs)
+
 # Replay temporaneo: profili compatti isolati dagli snapshot ufficiali.
 with st.expander('Replay NET GAMMA intraday — 07:30 → 17:30', expanded=False):
     from gamma_replay import render as render_gamma_replay
