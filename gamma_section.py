@@ -181,15 +181,32 @@ def render_comparison(store, week, snaps, logs):
         st.info('Servono due snapshot validi della stessa giornata per il confronto NET GAMMA.')
     else:
         col_a, col_b = st.columns(2)
+        first_key = f'v19_first_{day}'
+        first_selected = st.session_state.get(first_key)
+        if first_selected not in same_day[:-1]:
+            first_selected = same_day[0]
+        first_clock_preview = _snapshot_download_clock(store, week, logs, first_selected)
+        first_caption = first_clock_preview or 'ora non disponibile'
         with col_a:
-            first_name = st.selectbox('Snapshot iniziale (es. 15:46)', same_day[:-1], index=0, key=f'v19_first_{day}')
+            first_name = st.selectbox(
+                f'Snapshot iniziale — download {first_caption} Roma',
+                same_day[:-1], index=0, key=first_key,
+            )
         later = [n for n in same_day if n > first_name]
         if not later:
             st.info('Non ci sono snapshot successivi per il confronto.')
             return
+        second_key = f'v19_second_{day}_{first_name}'
+        second_selected = st.session_state.get(second_key)
+        if second_selected not in later:
+            second_selected = later[-1]
+        second_clock_preview = _snapshot_download_clock(store, week, logs, second_selected)
+        second_caption = second_clock_preview or 'ora non disponibile'
         with col_b:
-            second_name = st.selectbox('Snapshot finale (anche manuale)', later, index=len(later)-1,
-                                       key=f'v19_second_{day}_{first_name}')
+            second_name = st.selectbox(
+                f'Snapshot finale — download {second_caption} Roma',
+                later, index=len(later)-1, key=second_key,
+            )
         first_clock = _snapshot_download_clock(store, week, logs, first_name)
         second_clock = _snapshot_download_clock(store, week, logs, second_name)
         first_label = first_clock or 'Iniziale (ora n.d.)'
