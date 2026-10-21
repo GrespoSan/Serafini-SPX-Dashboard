@@ -10,12 +10,18 @@ from zoneinfo import ZoneInfo
 import plotly.graph_objects as go
 import streamlit as st
 
-from net_gamma import profile, read_snapshot, weekly_expiry
+from net_gamma import profile, read_snapshot
 
 ROME = ZoneInfo("Europe/Rome")
 SLOTS = ("07:30", "11:00", "13:30", "15:46", "16:01", "16:16",
          "16:31", "16:46", "17:30")
 OFFICIAL = {"07:30": "30 7 * * 1-5", "15:46": "46 15 * * 1-5"}
+
+def weekly_expiry(day):
+    from datetime import timedelta
+    delta = 4 - day.weekday()
+    return day + timedelta(days=delta if delta > 0 else 7)
+
 
 
 def _download_clock(record):
