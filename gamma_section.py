@@ -627,7 +627,7 @@ def render(store, week, snaps, logs):
                     else:
                         role_rows, measures = structure
                         st.dataframe(role_rows, use_container_width=True, hide_index=True)
-                        render_payoff_charts(chosen, offset)
+                        render_payoff_charts(chosen, offset, computed_profiles.get('0DTE'))
                         left, right = st.columns(2)
                         with left:
                             st.markdown('**Scenario rialzista — Vertical Call**')
