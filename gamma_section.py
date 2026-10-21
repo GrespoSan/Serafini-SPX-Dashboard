@@ -515,7 +515,8 @@ def render(store, week, snaps, logs):
         computed_profiles[title] = result
         if title == '0DTE' and result['rows']:
             candidate_0dte = find_candidates(result['rows'], ref)
-        st.subheader(f'{title} · scadenza {expiry.isoformat()}')
+        st.subheader(f'{title} · dati Cboe del {day:%d/%m/%Y} · scadenza {expiry:%d/%m/%Y}')
+        st.caption(f'Snapshot acquisito: {acquisition_label} · Timestamp originale Cboe: {timestamp} (fuso non dichiarato)')
         if not result['rows']:
             st.warning('Nessun contratto trovato per questa scadenza nello snapshot: nessun risultato inventato.')
             continue
