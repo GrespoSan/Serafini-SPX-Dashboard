@@ -267,7 +267,7 @@ def render_comparison(store, week, snaps, logs):
                             transitions.sort(key=lambda r: float(r['Strike SPX']))
                             def _transition_label(r):
                                 old, new = float(r['NET mattina']), float(r['NET pomeriggio'])
-                                ('PUT → CALL' if old < 0 < new else
+                                return ('PUT → CALL' if old < 0 < new else
                                             'CALL → PUT' if old > 0 > new else
                                             ('CALL ' if new > 0 else 'PUT ') +
                                             ('↑' if abs(new) > abs(old) else
