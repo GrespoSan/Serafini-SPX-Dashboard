@@ -128,7 +128,7 @@ def _pending_monitor(store, week: str):
 
 
 def render(role: str, week: str, store) -> None:
-    if role not in ('admin', 'friend'):
+    if role != 'admin':
         return
     with st.expander('Acquisizione Cboe supplementare', expanded=False):
         st.caption('Nuova acquisizione manuale. I rilevamenti automatici delle 07:30 e 15:46 restano invariati.')
