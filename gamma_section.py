@@ -150,6 +150,293 @@ def _snapshot_download_clock(store, week, logs, file_name):
             continue
     return min(clock_times).strftime('%H:%M') if clock_times else None
 
+def render_comparison(store, week, snaps, logs):
+    """Confronto autonomo; usa il contesto del profilo singolo selezionato."""
+    ctx = st.session_state.get(f'gamma_compare_context_{week}')
+    if not ctx:
+        st.info('Apri prima la sezione NET GAMMA 0DTE / Weekly per selezionare lo snapshot.')
+        return
+    day, ref, offset, weekly_exp = (ctx['day'], ctx['ref'], ctx['offset'], ctx['weekly_exp'])
+    names = sorted((obj['name'] for obj in snaps), reverse=True)
+    st.subheader('Confronto NET GAMMA — rilevamenti della stessa giornata')
+    same_day = sorted(n for n in names if n.startswith(f'SPX_CBOE_{day:%Y%m%d}_'))
+    # Escludere dal confronto gli snapshot senza Gamma, compresi gli storici
+    # precedenti all'introduzione del controllo qualita' nel downloader.
+    valid_names = []
+    rejected = []
+    for candidate in same_day:
+        try:
+            candidate_data = read_snapshot(store.download(f'{week}/snapshots/{candidate}'))
+            if _has_usable_gamma(candidate_data):
+                valid_names.append(candidate)
+            else:
+                rejected.append(candidate)
+        except Exception:
+            rejected.append(candidate)
+    if rejected:
+        st.warning(f'{len(rejected)} snapshot esclusi dal confronto: Gamma assenti o file non leggibili. '
+                   'Restano conservati nell’archivio, con la segnalazione nella colonna Qualità dati.')
+    same_day = valid_names
+    if len(same_day) < 2:
+        st.info('Servono due snapshot validi della stessa giornata per il confronto NET GAMMA.')
+    else:
+        col_a, col_b = st.columns(2)
+        with col_a:
+            first_name = st.selectbox('Snapshot iniziale (es. 15:46)', same_day[:-1], index=0, key=f'v19_first_{day}')
+        later = [n for n in same_day if n > first_name]
+        if not later:
+            st.info('Non ci sono snapshot successivi per il confronto.')
+            return
+        with col_b:
+            second_name = st.selectbox('Snapshot finale (anche manuale)', later, index=len(later)-1,
+                                       key=f'v19_second_{day}_{first_name}')
+        first_clock = _snapshot_download_clock(store, week, logs, first_name)
+        second_clock = _snapshot_download_clock(store, week, logs, second_name)
+        first_label = first_clock or 'Iniziale (ora n.d.)'
+        second_label = second_clock or 'Finale (ora n.d.)'
+        interval_label = f'{first_label} : {second_label}'
+        if first_clock is None or second_clock is None:
+            st.caption('Orario di download non presente nei registri per almeno uno snapshot: non viene ricavato dal timestamp Cboe.')
+        selected_profile = st.radio('Profilo', ['0DTE', 'Weekly'], horizontal=True,
+                                    key=f'v19_profile_{day}', label_visibility='collapsed')
+        try:
+            older = read_snapshot(store.download(f'{week}/snapshots/{first_name}'))
+            newer = read_snapshot(store.download(f'{week}/snapshots/{second_name}'))
+            old_ref = older['data'].get('prev_day_close')
+            new_ref = newer['data'].get('prev_day_close')
+            if old_ref is not None and new_ref is not None and abs(float(old_ref) - float(new_ref)) > 0.001:
+                st.warning('Chiusure SPX precedenti diverse nei due file; il confronto applica a entrambi il riferimento scelto sopra.')
+            expiry = day if selected_profile == '0DTE' else weekly_exp
+            old_prof = profile(older, expiry, ref)
+            new_prof = profile(newer, expiry, ref)
+            if not old_prof['rows'] or not new_prof['rows']:
+                st.info(f'Profilo {selected_profile} non disponibile in uno dei due snapshot.')
+            else:
+                comparisons, stats = compare_profiles(old_prof, new_prof, offset)
+                main_levels = select_key_levels(comparisons, count_per_sign=4, minimum_separation=5.0)
+                if not main_levels:
+                    st.info('Non ci sono strike confrontabili per la scadenza selezionata. Verificare scadenza e riferimento SPX.')
+                else:
+                    import plotly.graph_objects as go
+                    # Grafico principale: solo otto concentrazioni, colori per ORARIO.
+                    # Grafico di transizione separato: colori per SEGNO NET (rosso/verde).
+                    def _price_label(r):
+                        return (f"{r['Prezzo ES']:,.0f}".replace(',', '.')
+                                if r['Prezzo ES'] is not None else f"{r['Strike SPX']:g} SPX")
+
+                    fig = go.Figure()
+                    main_ordered = sorted(main_levels, key=lambda r: float(r['Strike SPX']))
+                    for name, field, color in (
+                        (first_label, 'NET mattina', '#596EFF'),
+                        (second_label, 'NET pomeriggio', '#F2A93B'),
+                    ):
+                        fig.add_bar(
+                            name=name,
+                            y=[_price_label(r) for r in main_ordered],
+                            x=[float(r[field]) for r in main_ordered],
+                            orientation='h',
+                            marker_color=color,
+                            hovertemplate='%{y}<br>NET GAMMA: %{x:.2f}<extra>' + name + '</extra>',
+                        )
+                    st.markdown(f'**Confronto NET GAMMA {selected_profile} — {day:%d/%m/%Y}**')
+                    st.caption(f'Primo rilevamento: {first_label} (Roma) · '
+                               f'Secondo rilevamento: {second_label} (Roma). '
+                               'Blu = primo; arancione = secondo.')
+                    fig.update_layout(
+                        title='Concentrazioni NET GAMMA — 1° blu / 2° arancione',
+                        barmode='group', template='plotly_dark', height=440,
+                        margin=dict(l=10, r=10, t=53, b=30),
+                        showlegend=False,
+                        xaxis_title='NET GAMMA', yaxis_title=None,
+                    )
+                    fig.add_vline(x=0, line_color='#999', line_width=1)
+                    st.plotly_chart(fig, use_container_width=True,
+                                    key=f'v38_main_{selected_profile}_{first_name}_{second_name}')
+
+                    # Un secondo grafico dedicato rende evidente il PASSAGGIO di segno.
+                    # La selezione di cinque e' soltanto per leggibilita': la tabella
+                    # delle transizioni continua a mostrare tutti i livelli rilevati.
+                    if selected_profile == '0DTE':
+                        # Gli stessi livelli della tabella "zone di transizione".
+                        zone_rows = {}
+                        for zone in transition_zones(comparisons):
+                            for rec in zone['rows']:
+                                zone_rows[float(rec['Strike SPX'])] = rec
+                        transitions = list(zone_rows.values())
+                        if transitions:
+                            transitions.sort(key=lambda r: float(r['Strike SPX']))
+                            def _transition_label(r):
+                                old, new = float(r['NET mattina']), float(r['NET pomeriggio'])
+                                return ('PUT → CALL' if old < 0 < new else
+                                            'CALL → PUT' if old > 0 > new else
+                                            ('CALL ' if new > 0 else 'PUT ') +
+                                            ('↑' if abs(new) > abs(old) else
+                                             '↓' if abs(new) < abs(old) else '='))
+                            names = [_price_label(r) + '  ·  ' + _transition_label(r) for r in transitions]
+                            # PRECEDENTE: sola sagoma (contorno del segno iniziale).
+                            # FINALE: barra piena (segno e dimensione attuali).
+                            # Nessun arrotondamento nei calcoli.
+                            original = [float(r['NET mattina']) for r in transitions]
+                            final = [float(r['NET pomeriggio']) for r in transitions]
+                            fig_transition = go.Figure()
+                            fig_transition.add_bar(
+                                name='Primo (contorno)', y=names, x=original,
+                                orientation='h', width=0.56,
+                                marker=dict(
+                                    color='rgba(0,0,0,0)',
+                                    line=dict(
+                                        color=['#22C55E' if v > 0 else '#EF4444'
+                                               for v in original],
+                                        width=2.5,
+                                    ),
+                                ),
+                                customdata=original,
+                                hovertemplate='%{y}<br>Prima: %{customdata:+.2f}<extra></extra>',
+                            )
+                            fig_transition.add_bar(
+                                name='Secondo (pieno)', y=names, x=final,
+                                orientation='h', width=0.38,
+                                marker=dict(color=['#22C55E' if v > 0 else '#EF4444'
+                                                   for v in final]),
+                                customdata=final,
+                                hovertemplate='%{y}<br>Dopo: %{customdata:+.2f}<extra></extra>',
+                            )
+                            max_value = max(abs(v) for v in original + final)
+                            fig_transition.update_layout(
+                                title='Evoluzione zona — contorno PRIMA / pieno DOPO',
+                                barmode='overlay', template='plotly_dark',
+                                height=max(370, 70 * len(transitions) + 135),
+                                margin=dict(l=18, r=45, t=58, b=50),
+                                showlegend=False,
+                                xaxis=dict(title='NET GAMMA',
+                                           range=[-1.08 * max_value, 1.08 * max_value],
+                                           zeroline=True),
+                                yaxis=dict(title=None, automargin=True),
+                            )
+                            fig_transition.add_vline(x=0, line_color='#999', line_width=1)
+                            st.plotly_chart(fig_transition, use_container_width=True,
+                                key=f'v38_transitions_{first_name}_{second_name}')
+                            st.caption(
+                                f'Primo: {first_label} Roma = solo CONTORNO '
+                                f'(verde positivo / rosso negativo). '
+                                f'Secondo: {second_label} Roma = barra PIENA '
+                                '(verde positivo / rosso negativo). '
+                                'Dimensioni effettive leggibili passando il mouse sulle barre. '
+                                'CALL/PUT indicano soltanto il segno NET GAMMA.'
+                            )
+
+                    for _line in operational_summary(main_levels):
+                        st.markdown(_line)
+                    if selected_profile == 'Weekly':
+                        # Weekly: enfasi sulle concentrazioni di maggiore intensita',
+                        # non sulle transizioni di segno di ampiezza minima.
+                        st.markdown('#### Concentrazioni Weekly principali')
+                        ranked_weekly = sorted(
+                            comparisons,
+                            key=lambda r: max(abs(float(r['NET mattina'])),
+                                              abs(float(r['NET pomeriggio']))),
+                            reverse=True,
+                        )[:4]
+                        if ranked_weekly:
+                            def _weekly_value(v):
+                                color = '#22c55e' if v > 0 else '#ef4444' if v < 0 else '#d1d5db'
+                                label = f"{v:+.2f}".replace('.', ',').replace('-', '−')
+                                return f'<span style="color:{color};font-weight:650">{label}</span>'
+
+                            def _weekly_change(a, b):
+                                if a > 0 > b:
+                                    return 'Passaggio da CALL a PUT'
+                                if a < 0 < b:
+                                    return 'Passaggio da PUT a CALL'
+                                if a == 0 or b == 0:
+                                    return 'Passaggio per zero' if a != b else 'Invariato'
+                                if abs(b) > abs(a) + 1e-8:
+                                    return 'Aumento di CALL' if b > 0 else 'Aumento di PUT'
+                                if abs(b) < abs(a) - 1e-8:
+                                    return 'Riduzione di CALL' if b > 0 else 'Riduzione di PUT'
+                                return 'Invariato'
+
+                            tr = []
+                            for r in ranked_weekly:
+                                morning = float(r['NET mattina'])
+                                afternoon = float(r['NET pomeriggio'])
+                                price = r.get('Prezzo ES')
+                                label = (f"{price:,.0f}".replace(',', '.') if price is not None
+                                         else f"SPX {r['Strike SPX']:g}")
+                                tr.append(
+                                    '<tr>'
+                                    f'<td style="padding:9px 12px;border-bottom:1px solid #40454b;font-weight:600">{escape(label)}</td>'
+                                    f'<td style="padding:9px 12px;border-bottom:1px solid #40454b;white-space:nowrap">{_weekly_value(morning)} <span style="color:#a1a1aa;padding:0 9px">:</span> {_weekly_value(afternoon)}</td>'
+                                    f'<td style="padding:9px 12px;border-bottom:1px solid #40454b">{escape(_weekly_change(morning, afternoon))}</td>'
+                                    '</tr>'
+                                )
+                            st.markdown(
+                                '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;text-align:left;font-size:0.95rem">'
+                                '<thead><tr style="background:rgba(125,125,125,0.13)"><th style="padding:10px 12px">Livello ES</th>'
+                                f'<th style="padding:10px 12px">{escape(interval_label)}</th>'
+                                '<th style="padding:10px 12px">Variazione</th></tr></thead><tbody>'
+                                + ''.join(tr) + '</tbody></table></div>',
+                                unsafe_allow_html=True,
+                            )
+                            st.caption('Quattro concentrazioni principali per intensità NET GAMMA, non quattro livelli operativi. I piccoli cambi di segno Weekly non generano zone automatiche.')
+                    else:
+                        # Transizioni CONTIGUE osservate nei due snapshot, non segnali di ingresso.
+                        zones = transition_zones(comparisons)
+                        if zones:
+                            st.markdown('#### Evoluzione NET GAMMA — zone di transizione')
+                            st.caption(f'I valori indicano due rilevazioni distinte ({interval_label}), non si sommano.')
+                            def _price(r):
+                                return (f"{r['Prezzo ES']:,.0f}".replace(',', '.') if r['Prezzo ES'] is not None
+                                        else f"SPX {r['Strike SPX']:g}")
+                            def _colored(v):
+                                color = '#22c55e' if v > 0 else '#ef4444' if v < 0 else '#d1d5db'
+                                value = f"{v:+.2f}".replace('.', ',').replace('-', '−')
+                                return f'<span style="color:{color};font-weight:650;font-variant-numeric:tabular-nums">{value}</span>'
+                            def _description(old, new):
+                                if old > 0 > new:
+                                    return 'Passaggio da CALL a PUT'
+                                if old < 0 < new:
+                                    return 'Passaggio da PUT a CALL'
+                                if old == 0 or new == 0:
+                                    return 'Valore zero / cambio di segno' if old != new else 'Invariato'
+                                if abs(new) > abs(old) + 1e-8:
+                                    return 'Aumento di CALL' if new > 0 else 'Aumento di PUT'
+                                if abs(new) < abs(old) - 1e-8:
+                                    return 'Riduzione di CALL' if new > 0 else 'Riduzione di PUT'
+                                return 'Invariato'
+                            for num, zone in enumerate(zones, start=1):
+                                rows = sorted(zone['rows'], key=lambda r: r['Strike SPX'], reverse=True)
+                                if len(zones) > 1:
+                                    st.markdown(f"**Zona {num} — {escape(zone['direction'])}**")
+                                body = []
+                                for item in rows:
+                                    old, new = float(item['NET mattina']), float(item['NET pomeriggio'])
+                                    desc = _description(old, new)
+                                    emphasis = 'font-weight:650;' if old * new < 0 else ''
+                                    body.append(
+                                        '<tr>'
+                                        f'<td style="padding:9px 12px;border-bottom:1px solid #40454b;font-weight:600;white-space:nowrap">{escape(_price(item))}</td>'
+                                        f'<td style="padding:9px 12px;border-bottom:1px solid #40454b;white-space:nowrap">{_colored(old)} <span style="color:#a1a1aa;padding:0 9px">:</span> {_colored(new)}</td>'
+                                        f'<td style="padding:9px 12px;border-bottom:1px solid #40454b;{emphasis}">{escape(desc)}</td>'
+                                        '</tr>'
+                                    )
+                                table_html = ('<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;text-align:left;font-size:0.95rem">'
+                                              f'<thead><tr style="background:rgba(125,125,125,0.13)"><th style="padding:10px 12px">Livello ES</th><th style="padding:10px 12px">{escape(interval_label)}</th><th style="padding:10px 12px">Variazione</th></tr></thead>'
+                                              '<tbody>' + ''.join(body) + '</tbody></table></div>')
+                                st.markdown(table_html, unsafe_allow_html=True)
+                                st.markdown(f'**Sintesi operativa:** {_transition_summary(rows, zone["direction"])}')
+                        else:
+                            st.caption('Nessun cambiamento di segno netto nei livelli comuni ai due snapshot.')
+
+                    st.caption('Grafico principale: 8 concentrazioni. Evoluzione zona: tutti i livelli della tabella, anche quelli senza cambio di segno. Nessun segnale operativo automatico.')
+                    if stats['solo_mattina'] or stats['solo_pomeriggio']:
+                        st.caption(f"Strike confrontati: {stats['comuni']} · non comuni: "
+                                   f"{stats['solo_mattina'] + stats['solo_pomeriggio']}.")
+        except Exception as exc:
+            st.error(f'Confronto non disponibile: {type(exc).__name__}: {str(exc)[:220]}')
+
+
+
 def render(store, week, snaps, logs):
     st.header('NET GAMMA · replica formula Serafini — verifica')
     st.info('NET GAMMA invariato (25+25 strike). 0DTE prioritario; Weekly del venerdì = venerdì successivo. C1–C3/P1–P3: proposte modificabili. Volume Profile annuale e deviazione standard si visualizzano su TradingView; qui si possono confrontare i soli valori UP/DOWN già verificati. Esclusi CFD, stocastico e probabilità macro.')
@@ -262,280 +549,9 @@ def render(store, week, snaps, logs):
     if day.weekday() >= 5:
         st.error('Snapshot in giorno non operativo: scegliere manualmente una giornata valida.'); return
     st.caption(f'0DTE: {day.isoformat()} · Weekly: {weekly_exp.isoformat()} (lun–gio venerdì corrente; venerdì successivo). In caso di festività controllare la scadenza effettiva.')
-    # Sintesi breve: due fotografie, stessi strike SPX, una sola visualizzazione.
-    with st.expander('Confronto NET GAMMA · rilevamenti selezionati (v37)', expanded=True):
-        same_day = sorted(n for n in names if n.startswith(f'SPX_CBOE_{day:%Y%m%d}_'))
-        # Escludere dal confronto gli snapshot senza Gamma, compresi gli storici
-        # precedenti all'introduzione del controllo qualita' nel downloader.
-        valid_names = []
-        rejected = []
-        for candidate in same_day:
-            try:
-                candidate_data = read_snapshot(store.download(f'{week}/snapshots/{candidate}'))
-                if _has_usable_gamma(candidate_data):
-                    valid_names.append(candidate)
-                else:
-                    rejected.append(candidate)
-            except Exception:
-                rejected.append(candidate)
-        if rejected:
-            st.warning(f'{len(rejected)} snapshot esclusi dal confronto: Gamma assenti o file non leggibili. '
-                       'Restano conservati nell’archivio, con la segnalazione nella colonna Qualità dati.')
-        same_day = valid_names
-        if len(same_day) < 2:
-            st.info('Servono due snapshot validi della stessa giornata per il confronto NET GAMMA.')
-        else:
-            col_a, col_b = st.columns(2)
-            with col_a:
-                first_name = st.selectbox('Snapshot iniziale (es. 15:46)', same_day[:-1], index=0, key=f'v19_first_{day}')
-            later = [n for n in same_day if n > first_name]
-            if not later:
-                st.info('Non ci sono snapshot successivi per il confronto.')
-                st.stop()
-            with col_b:
-                second_name = st.selectbox('Snapshot finale (anche manuale)', later, index=len(later)-1,
-                                           key=f'v19_second_{day}_{first_name}')
-            first_clock = _snapshot_download_clock(store, week, logs, first_name)
-            second_clock = _snapshot_download_clock(store, week, logs, second_name)
-            first_label = first_clock or 'Iniziale (ora n.d.)'
-            second_label = second_clock or 'Finale (ora n.d.)'
-            interval_label = f'{first_label} : {second_label}'
-            if first_clock is None or second_clock is None:
-                st.caption('Orario di download non presente nei registri per almeno uno snapshot: non viene ricavato dal timestamp Cboe.')
-            selected_profile = st.radio('Profilo', ['0DTE', 'Weekly'], horizontal=True,
-                                        key=f'v19_profile_{day}', label_visibility='collapsed')
-            try:
-                older = read_snapshot(store.download(f'{week}/snapshots/{first_name}'))
-                newer = read_snapshot(store.download(f'{week}/snapshots/{second_name}'))
-                old_ref = older['data'].get('prev_day_close')
-                new_ref = newer['data'].get('prev_day_close')
-                if old_ref is not None and new_ref is not None and abs(float(old_ref) - float(new_ref)) > 0.001:
-                    st.warning('Chiusure SPX precedenti diverse nei due file; il confronto applica a entrambi il riferimento scelto sopra.')
-                expiry = day if selected_profile == '0DTE' else weekly_exp
-                old_prof = profile(older, expiry, ref)
-                new_prof = profile(newer, expiry, ref)
-                if not old_prof['rows'] or not new_prof['rows']:
-                    st.info(f'Profilo {selected_profile} non disponibile in uno dei due snapshot.')
-                else:
-                    comparisons, stats = compare_profiles(old_prof, new_prof, offset)
-                    main_levels = select_key_levels(comparisons, count_per_sign=4, minimum_separation=5.0)
-                    if not main_levels:
-                        st.info('Non ci sono strike confrontabili per la scadenza selezionata. Verificare scadenza e riferimento SPX.')
-                    else:
-                        import plotly.graph_objects as go
-                        # Grafico principale: solo otto concentrazioni, colori per ORARIO.
-                        # Grafico di transizione separato: colori per SEGNO NET (rosso/verde).
-                        def _price_label(r):
-                            return (f"{r['Prezzo ES']:,.0f}".replace(',', '.')
-                                    if r['Prezzo ES'] is not None else f"{r['Strike SPX']:g} SPX")
-
-                        fig = go.Figure()
-                        main_ordered = sorted(main_levels, key=lambda r: float(r['Strike SPX']))
-                        for name, field, color in (
-                            (first_label, 'NET mattina', '#596EFF'),
-                            (second_label, 'NET pomeriggio', '#F2A93B'),
-                        ):
-                            fig.add_bar(
-                                name=name,
-                                y=[_price_label(r) for r in main_ordered],
-                                x=[float(r[field]) for r in main_ordered],
-                                orientation='h',
-                                marker_color=color,
-                                hovertemplate='%{y}<br>NET GAMMA: %{x:.2f}<extra>' + name + '</extra>',
-                            )
-                        st.markdown(f'**Confronto NET GAMMA {selected_profile} — {day:%d/%m/%Y}**')
-                        st.caption(f'Primo rilevamento: {first_label} (Roma) · '
-                                   f'Secondo rilevamento: {second_label} (Roma). '
-                                   'Blu = primo; arancione = secondo.')
-                        fig.update_layout(
-                            title='Concentrazioni NET GAMMA — 1° blu / 2° arancione',
-                            barmode='group', template='plotly_dark', height=440,
-                            margin=dict(l=10, r=10, t=53, b=30),
-                            showlegend=False,
-                            xaxis_title='NET GAMMA', yaxis_title=None,
-                        )
-                        fig.add_vline(x=0, line_color='#999', line_width=1)
-                        st.plotly_chart(fig, use_container_width=True,
-                                        key=f'v38_main_{selected_profile}_{first_name}_{second_name}')
-
-                        # Un secondo grafico dedicato rende evidente il PASSAGGIO di segno.
-                        # La selezione di cinque e' soltanto per leggibilita': la tabella
-                        # delle transizioni continua a mostrare tutti i livelli rilevati.
-                        if selected_profile == '0DTE':
-                            transitions = sorted(
-                                (r for r in comparisons
-                                 if float(r['NET mattina']) * float(r['NET pomeriggio']) < 0),
-                                key=lambda r: abs(float(r['NET pomeriggio']) - float(r['NET mattina'])),
-                                reverse=True,
-                            )[:5]
-                            if transitions:
-                                transitions.sort(key=lambda r: float(r['Strike SPX']))
-                                def _transition_label(r):
-                                    old, new = float(r['NET mattina']), float(r['NET pomeriggio'])
-                                    return 'PUT → CALL' if old < 0 < new else 'CALL → PUT'
-                                names = [_price_label(r) + '  ·  ' + _transition_label(r) for r in transitions]
-                                # PRECEDENTE: sola sagoma (contorno del segno iniziale).
-                                # FINALE: barra piena (segno e dimensione attuali).
-                                # Nessun arrotondamento nei calcoli.
-                                original = [float(r['NET mattina']) for r in transitions]
-                                final = [float(r['NET pomeriggio']) for r in transitions]
-                                fig_transition = go.Figure()
-                                fig_transition.add_bar(
-                                    name='Primo (contorno)', y=names, x=original,
-                                    orientation='h', width=0.56,
-                                    marker=dict(
-                                        color='rgba(0,0,0,0)',
-                                        line=dict(
-                                            color=['#22C55E' if v > 0 else '#EF4444'
-                                                   for v in original],
-                                            width=2.5,
-                                        ),
-                                    ),
-                                    customdata=original,
-                                    hovertemplate='%{y}<br>Prima: %{customdata:+.2f}<extra></extra>',
-                                )
-                                fig_transition.add_bar(
-                                    name='Secondo (pieno)', y=names, x=final,
-                                    orientation='h', width=0.38,
-                                    marker=dict(color=['#22C55E' if v > 0 else '#EF4444'
-                                                       for v in final]),
-                                    customdata=final,
-                                    hovertemplate='%{y}<br>Dopo: %{customdata:+.2f}<extra></extra>',
-                                )
-                                max_value = max(abs(v) for v in original + final)
-                                fig_transition.update_layout(
-                                    title='Cambi di segno — contorno PRIMA / pieno DOPO',
-                                    barmode='overlay', template='plotly_dark',
-                                    height=max(320, 68 * len(transitions) + 115),
-                                    margin=dict(l=18, r=45, t=58, b=50),
-                                    showlegend=False,
-                                    xaxis=dict(title='NET GAMMA',
-                                               range=[-1.20 * max_value, 1.20 * max_value],
-                                               zeroline=True),
-                                    yaxis=dict(title=None, automargin=True),
-                                )
-                                fig_transition.add_vline(x=0, line_color='#999', line_width=1)
-                                st.plotly_chart(fig_transition, use_container_width=True,
-                                    key=f'v38_transitions_{first_name}_{second_name}')
-                                st.caption(
-                                    f'Primo: {first_label} Roma = solo CONTORNO '
-                                    f'(verde positivo / rosso negativo). '
-                                    f'Secondo: {second_label} Roma = barra PIENA '
-                                    '(verde positivo / rosso negativo). '
-                                    'Dimensioni effettive leggibili passando il mouse sulle barre. '
-                                    'CALL/PUT indicano soltanto il segno NET GAMMA.'
-                                )
-
-                        for _line in operational_summary(main_levels):
-                            st.markdown(_line)
-                        if selected_profile == 'Weekly':
-                            # Weekly: enfasi sulle concentrazioni di maggiore intensita',
-                            # non sulle transizioni di segno di ampiezza minima.
-                            st.markdown('#### Concentrazioni Weekly principali')
-                            ranked_weekly = sorted(
-                                comparisons,
-                                key=lambda r: max(abs(float(r['NET mattina'])),
-                                                  abs(float(r['NET pomeriggio']))),
-                                reverse=True,
-                            )[:4]
-                            if ranked_weekly:
-                                def _weekly_value(v):
-                                    color = '#22c55e' if v > 0 else '#ef4444' if v < 0 else '#d1d5db'
-                                    label = f"{v:+.2f}".replace('.', ',').replace('-', '−')
-                                    return f'<span style="color:{color};font-weight:650">{label}</span>'
-
-                                def _weekly_change(a, b):
-                                    if a > 0 > b:
-                                        return 'Passaggio da CALL a PUT'
-                                    if a < 0 < b:
-                                        return 'Passaggio da PUT a CALL'
-                                    if a == 0 or b == 0:
-                                        return 'Passaggio per zero' if a != b else 'Invariato'
-                                    if abs(b) > abs(a) + 1e-8:
-                                        return 'Aumento di CALL' if b > 0 else 'Aumento di PUT'
-                                    if abs(b) < abs(a) - 1e-8:
-                                        return 'Riduzione di CALL' if b > 0 else 'Riduzione di PUT'
-                                    return 'Invariato'
-
-                                tr = []
-                                for r in ranked_weekly:
-                                    morning = float(r['NET mattina'])
-                                    afternoon = float(r['NET pomeriggio'])
-                                    price = r.get('Prezzo ES')
-                                    label = (f"{price:,.0f}".replace(',', '.') if price is not None
-                                             else f"SPX {r['Strike SPX']:g}")
-                                    tr.append(
-                                        '<tr>'
-                                        f'<td style="padding:9px 12px;border-bottom:1px solid #40454b;font-weight:600">{escape(label)}</td>'
-                                        f'<td style="padding:9px 12px;border-bottom:1px solid #40454b;white-space:nowrap">{_weekly_value(morning)} <span style="color:#a1a1aa;padding:0 9px">:</span> {_weekly_value(afternoon)}</td>'
-                                        f'<td style="padding:9px 12px;border-bottom:1px solid #40454b">{escape(_weekly_change(morning, afternoon))}</td>'
-                                        '</tr>'
-                                    )
-                                st.markdown(
-                                    '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;text-align:left;font-size:0.95rem">'
-                                    '<thead><tr style="background:rgba(125,125,125,0.13)"><th style="padding:10px 12px">Livello ES</th>'
-                                    f'<th style="padding:10px 12px">{escape(interval_label)}</th>'
-                                    '<th style="padding:10px 12px">Variazione</th></tr></thead><tbody>'
-                                    + ''.join(tr) + '</tbody></table></div>',
-                                    unsafe_allow_html=True,
-                                )
-                                st.caption('Quattro concentrazioni principali per intensità NET GAMMA, non quattro livelli operativi. I piccoli cambi di segno Weekly non generano zone automatiche.')
-                        else:
-                            # Transizioni CONTIGUE osservate nei due snapshot, non segnali di ingresso.
-                            zones = transition_zones(comparisons)
-                            if zones:
-                                st.markdown('#### Evoluzione NET GAMMA — zone di transizione')
-                                st.caption(f'I valori indicano due rilevazioni distinte ({interval_label}), non si sommano.')
-                                def _price(r):
-                                    return (f"{r['Prezzo ES']:,.0f}".replace(',', '.') if r['Prezzo ES'] is not None
-                                            else f"SPX {r['Strike SPX']:g}")
-                                def _colored(v):
-                                    color = '#22c55e' if v > 0 else '#ef4444' if v < 0 else '#d1d5db'
-                                    value = f"{v:+.2f}".replace('.', ',').replace('-', '−')
-                                    return f'<span style="color:{color};font-weight:650;font-variant-numeric:tabular-nums">{value}</span>'
-                                def _description(old, new):
-                                    if old > 0 > new:
-                                        return 'Passaggio da CALL a PUT'
-                                    if old < 0 < new:
-                                        return 'Passaggio da PUT a CALL'
-                                    if old == 0 or new == 0:
-                                        return 'Valore zero / cambio di segno' if old != new else 'Invariato'
-                                    if abs(new) > abs(old) + 1e-8:
-                                        return 'Aumento di CALL' if new > 0 else 'Aumento di PUT'
-                                    if abs(new) < abs(old) - 1e-8:
-                                        return 'Riduzione di CALL' if new > 0 else 'Riduzione di PUT'
-                                    return 'Invariato'
-                                for num, zone in enumerate(zones, start=1):
-                                    rows = sorted(zone['rows'], key=lambda r: r['Strike SPX'], reverse=True)
-                                    if len(zones) > 1:
-                                        st.markdown(f"**Zona {num} — {escape(zone['direction'])}**")
-                                    body = []
-                                    for item in rows:
-                                        old, new = float(item['NET mattina']), float(item['NET pomeriggio'])
-                                        desc = _description(old, new)
-                                        emphasis = 'font-weight:650;' if old * new < 0 else ''
-                                        body.append(
-                                            '<tr>'
-                                            f'<td style="padding:9px 12px;border-bottom:1px solid #40454b;font-weight:600;white-space:nowrap">{escape(_price(item))}</td>'
-                                            f'<td style="padding:9px 12px;border-bottom:1px solid #40454b;white-space:nowrap">{_colored(old)} <span style="color:#a1a1aa;padding:0 9px">:</span> {_colored(new)}</td>'
-                                            f'<td style="padding:9px 12px;border-bottom:1px solid #40454b;{emphasis}">{escape(desc)}</td>'
-                                            '</tr>'
-                                        )
-                                    table_html = ('<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;text-align:left;font-size:0.95rem">'
-                                                  f'<thead><tr style="background:rgba(125,125,125,0.13)"><th style="padding:10px 12px">Livello ES</th><th style="padding:10px 12px">{escape(interval_label)}</th><th style="padding:10px 12px">Variazione</th></tr></thead>'
-                                                  '<tbody>' + ''.join(body) + '</tbody></table></div>')
-                                    st.markdown(table_html, unsafe_allow_html=True)
-                                    st.markdown(f'**Sintesi operativa:** {_transition_summary(rows, zone["direction"])}')
-                            else:
-                                st.caption('Nessun cambiamento di segno netto nei livelli comuni ai due snapshot.')
-
-                        st.caption('Grafico: 8 concentrazioni principali (4 positive e 4 negative iniziali), più fino a 5 cambi di segno 0DTE evidenziati. Stessi strike SPX; nessun segnale operativo automatico.')
-                        if stats['solo_mattina'] or stats['solo_pomeriggio']:
-                            st.caption(f"Strike confrontati: {stats['comuni']} · non comuni: "
-                                       f"{stats['solo_mattina'] + stats['solo_pomeriggio']}.")
-            except Exception as exc:
-                st.error(f'Confronto non disponibile: {type(exc).__name__}: {str(exc)[:220]}')
-
+    st.session_state[f'gamma_compare_context_{week}'] = {
+        'day': day, 'ref': ref, 'offset': offset, 'weekly_exp': weekly_exp,
+    }
     computed_profiles = {}
     candidate_0dte = None
     if day.weekday() == 4:
