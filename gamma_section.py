@@ -343,11 +343,15 @@ def render(store, week, snaps, logs):
                                 marker_color=color,
                                 hovertemplate='%{y}<br>NET GAMMA: %{x:.2f}<extra>' + name + '</extra>',
                             )
+                        st.markdown(f'**Confronto NET GAMMA {selected_profile} — {day:%d/%m/%Y}**')
+                        st.caption(f'Primo rilevamento: {first_label} (Roma) · '
+                                   f'Secondo rilevamento: {second_label} (Roma). '
+                                   'Blu = primo; arancione = secondo.')
                         fig.update_layout(
-                            title=f'NET GAMMA {selected_profile} — {day:%d/%m/%Y}',
+                            title='Concentrazioni NET GAMMA — 1° blu / 2° arancione',
                             barmode='group', template='plotly_dark', height=440,
-                            margin=dict(l=10, r=10, t=42, b=15),
-                            legend=dict(orientation='h', y=1.10, x=0),
+                            margin=dict(l=10, r=10, t=53, b=30),
+                            showlegend=False,
                             xaxis_title='NET GAMMA', yaxis_title=None,
                         )
                         fig.add_vline(x=0, line_color='#999', line_width=1)
@@ -370,30 +374,57 @@ def render(store, week, snaps, logs):
                                     old, new = float(r['NET mattina']), float(r['NET pomeriggio'])
                                     return 'PUT → CALL' if old < 0 < new else 'CALL → PUT'
                                 names = [_price_label(r) + '  ·  ' + _transition_label(r) for r in transitions]
+                                # PRECEDENTE: sola sagoma (contorno del segno iniziale).
+                                # FINALE: barra piena (segno e dimensione attuali).
+                                # Nessun arrotondamento nei calcoli.
+                                original = [float(r['NET mattina']) for r in transitions]
+                                final = [float(r['NET pomeriggio']) for r in transitions]
                                 fig_transition = go.Figure()
-                                for name, field in ((first_label, 'NET mattina'),
-                                                    (second_label, 'NET pomeriggio')):
-                                    vals = [float(r[field]) for r in transitions]
-                                    fig_transition.add_bar(
-                                        name=name, y=names, x=vals, orientation='h',
-                                        marker_color=['#22C55E' if v > 0 else '#EF4444' for v in vals],
-                                        text=[f'{v:+.2f}'.replace('.', ',') for v in vals],
-                                        textposition='outside', cliponaxis=False,
-                                        hovertemplate='%{y}<br>NET GAMMA: %{x:.2f}<extra>' + name + '</extra>',
-                                    )
+                                fig_transition.add_bar(
+                                    name='Primo (contorno)', y=names, x=original,
+                                    orientation='h', width=0.56,
+                                    marker=dict(
+                                        color='rgba(0,0,0,0)',
+                                        line=dict(
+                                            color=['#22C55E' if v > 0 else '#EF4444'
+                                                   for v in original],
+                                            width=2.5,
+                                        ),
+                                    ),
+                                    customdata=original,
+                                    hovertemplate='%{y}<br>Prima: %{customdata:+.2f}<extra></extra>',
+                                )
+                                fig_transition.add_bar(
+                                    name='Secondo (pieno)', y=names, x=final,
+                                    orientation='h', width=0.38,
+                                    marker=dict(color=['#22C55E' if v > 0 else '#EF4444'
+                                                       for v in final]),
+                                    customdata=final,
+                                    hovertemplate='%{y}<br>Dopo: %{customdata:+.2f}<extra></extra>',
+                                )
+                                max_value = max(abs(v) for v in original + final)
                                 fig_transition.update_layout(
-                                    title='Cambi di segno — Gamma negativo (rosso) / positivo (verde)',
-                                    barmode='group', template='plotly_dark',
-                                    height=max(300, 52 * len(transitions) + 110),
-                                    margin=dict(l=10, r=55, t=45, b=15),
-                                    showlegend=False, xaxis_title='NET GAMMA', yaxis_title=None,
+                                    title='Cambi di segno — contorno PRIMA / pieno DOPO',
+                                    barmode='overlay', template='plotly_dark',
+                                    height=max(320, 68 * len(transitions) + 115),
+                                    margin=dict(l=18, r=45, t=58, b=50),
+                                    showlegend=False,
+                                    xaxis=dict(title='NET GAMMA',
+                                               range=[-1.20 * max_value, 1.20 * max_value],
+                                               zeroline=True),
+                                    yaxis=dict(title=None, automargin=True),
                                 )
                                 fig_transition.add_vline(x=0, line_color='#999', line_width=1)
                                 st.plotly_chart(fig_transition, use_container_width=True,
                                     key=f'v38_transitions_{first_name}_{second_name}')
-                                st.caption(f'Primo valore: {first_label}; secondo valore: {second_label}. '
-                                           'I colori indicano il segno, non l’orario. '
-                                           'PUT/CALL sono etichette del NET GAMMA, non operazioni osservate.')
+                                st.caption(
+                                    f'Primo: {first_label} Roma = solo CONTORNO '
+                                    f'(verde positivo / rosso negativo). '
+                                    f'Secondo: {second_label} Roma = barra PIENA '
+                                    '(verde positivo / rosso negativo). '
+                                    'Dimensioni effettive leggibili passando il mouse sulle barre. '
+                                    'CALL/PUT indicano soltanto il segno NET GAMMA.'
+                                )
 
                         for _line in operational_summary(main_levels):
                             st.markdown(_line)
