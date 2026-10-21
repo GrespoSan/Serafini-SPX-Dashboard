@@ -105,6 +105,8 @@ def _acquisition_label(store, week, logs, file_name):
                 label = 'Mattina 07:30'
             elif slot == '46 15 * * 1-5':
                 label = 'Pomeriggio 15:46'
+            elif slot == '50 15 * * 1-5':
+                label = 'Pomeriggio 15:50'
             elif slot == '30 15 * * 1-5':
                 label = 'Pomeriggio 15:30 (storico)'
             elif slot == '45 7 * * 1-5':
@@ -515,7 +517,8 @@ def render(store, week, snaps, logs):
         computed_profiles[title] = result
         if title == '0DTE' and result['rows']:
             candidate_0dte = find_candidates(result['rows'], ref)
-        st.subheader(f'{title} · scadenza {expiry.isoformat()}')
+        st.subheader(f'{title} · dati Cboe del {day:%d/%m/%Y} · scadenza {expiry:%d/%m/%Y}')
+        st.caption(f'Snapshot acquisito: {acquisition_label} · Timestamp originale Cboe: {timestamp} (fuso non dichiarato)')
         if not result['rows']:
             st.warning('Nessun contratto trovato per questa scadenza nello snapshot: nessun risultato inventato.')
             continue
