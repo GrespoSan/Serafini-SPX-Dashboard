@@ -166,6 +166,7 @@ def render(store, week, snaps, logs):
         return
     timestamp = str(snap.get('timestamp', ''))
     acquisition_label = _acquisition_label(store, week, logs, choice)
+    download_clock = _snapshot_download_clock(store, week, logs, choice)
     st.caption(f'Rilevamento selezionato: {acquisition_label} · Timestamp Cboe: {timestamp} · file {choice}')
     # Si usa la data dello snapshot per gli esempi e per impedire look-ahead.
     try:
@@ -517,8 +518,10 @@ def render(store, week, snaps, logs):
         computed_profiles[title] = result
         if title == '0DTE' and result['rows']:
             candidate_0dte = find_candidates(result['rows'], ref)
-        st.subheader(f'{title} · dati Cboe del {day:%d/%m/%Y} · scadenza {expiry:%d/%m/%Y}')
-        st.caption(f'Snapshot acquisito: {acquisition_label} · Timestamp originale Cboe: {timestamp} (fuso non dichiarato)')
+        capture_info = (f'{acquisition_label} · download ore {download_clock} Roma'
+                        if download_clock else f'{acquisition_label} · ora download non disponibile')
+        st.subheader(f'{title} — RILEVAMENTO {day:%d/%m/%Y} · {capture_info}')
+        st.caption(f'Scadenza opzioni: {expiry:%d/%m/%Y} · Timestamp originale Cboe: {timestamp} (fuso non dichiarato)')
         if not result['rows']:
             st.warning('Nessun contratto trovato per questa scadenza nello snapshot: nessun risultato inventato.')
             continue
@@ -547,7 +550,7 @@ def render(store, week, snaps, logs):
         fig.update_layout(
             height=max(520, len(y) * 15),
             margin=dict(l=15, r=20, t=40, b=30),
-            title='NET GAMMA per strike — positivo a destra / negativo a sinistra',
+            title=f'{title} | {day:%d/%m/%Y} | {capture_info}<br><sup>NET GAMMA per strike — positivo a destra / negativo a sinistra</sup>',
             xaxis=dict(title='NET GAMMA (unità della formula Serafini)', zeroline=True,
                        zerolinewidth=1, zerolinecolor='#b7bec8'),
             yaxis=dict(title='Strike ES' if offset is not None else 'Strike SPX',
