@@ -36,7 +36,7 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
     warning = ('// NOTA: 0DTE e Weekly hanno LA STESSA SCADENZA in questa data: i due profili sono identici per definizione.\n' if same_exp else '')
     return f'''//@version=6
 indicator("Serafini SPX NET GAMMA | {date_text}{tag}", overlay=true, max_lines_count=250, max_labels_count=20)
-// EXPORT REVISION: V33-ACQUISITION-LABELS (width=5; Weekly=100, min=55; label=50)
+// EXPORT REVISION: V47-FIXED-ABSOLUTE-GAMMA-SCALE
 // Rilevamento selezionato: {clean_label or "Non identificato"}
 // Esportazione STATICA da uno snapshot Cboe; aggiornare ricopiando il Pine generato dalla dashboard.
 // Fonte: {origin}
@@ -45,9 +45,10 @@ indicator("Serafini SPX NET GAMMA | {date_text}{tag}", overlay=true, max_lines_c
 // Formula originale: (OI_CALL+VOL_CALL)*GAMMA_CALL - (OI_PUT+VOL_PUT)*GAMMA_PUT.
 // 25 strike SOPRA e 25 SOTTO la chiusura SPX: regola confermata direttamente da Serafini.
 // Profili graficamente separati come slide 139: 0DTE vicino alle candele, Weekly piu' a destra.
-{warning}// Non calcola gamma flip e non usa dati opzioni live in TradingView.
+{warning}// Scala NET GAMMA fissa: le barre sono confrontabili tra snapshot con lo stesso gammaPerCandle.
+// Non calcola gamma flip e non usa dati opzioni live in TradingView.
 
-barsWidth = input.int(22, "Larghezza massima barre (in candele)", minval=2, maxval=45)
+gammaPerCandle = input.float(5.0, "Scala fissa: punti NET GAMMA per candela", minval=0.1, step=0.5, tooltip="Mantieni lo STESSO valore per tutti gli snapshot: con scala 5, +50 Gamma sono 10 candele e +150 Gamma sono 30 candele.")
 offsetOdte = input.int(48, "Distanza 0DTE da ultima candela", minval=45, maxval=170)
 offsetWeekly = input.int(100, "Distanza Weekly da ultima candela", minval=55, maxval=300)
 positiveColor = input.color(color.lime, "NET GAMMA positivo")
@@ -67,9 +68,6 @@ var array<float> weeklyValues = {_pine_array(weekly['rows'], 'net_gamma')}
 renderProfile(array<float> levels, array<float> gamma, int center, string heading) =>
     int count = array.size(levels)
     if count > 0
-        float largest = 0.0
-        for j = 0 to count - 1
-            largest := math.max(largest, math.abs(array.get(gamma, j)))
         float bottom = array.get(levels, 0)
         float top = array.get(levels, count - 1)
         line baseline = line.new(center, bottom, center, top, xloc=xloc.bar_index, extend=extend.none, color=color.gray, style=line.style_dotted, width=1)
@@ -77,7 +75,7 @@ renderProfile(array<float> levels, array<float> gamma, int center, string headin
         for j = 0 to count - 1
             float level = array.get(levels, j)
             float g = array.get(gamma, j)
-            int length = largest > 0 and g != 0 ? math.max(1, int(math.round(math.abs(g) / largest * barsWidth))) : 0
+            int length = g != 0 ? math.max(1, int(math.round(math.abs(g) / gammaPerCandle))) : 0
             if length > 0
                 int farX = center + (g > 0 ? length : -length)
                 line segment = line.new(center, level, farX, level, xloc=xloc.bar_index, extend=extend.none, color=g >= 0 ? positiveColor : negativeColor, width=5)
