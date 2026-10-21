@@ -73,11 +73,11 @@ def make_combined_payoff_figure(strikes: dict[str, float], offset: float = 0.0) 
     quello delle opzioni SPX. Non sono inclusi premi, commissioni o moltiplicatori.
     """
     s = {key: float(value) for key, value in strikes.items()}
-    ordered = ['P3', 'P2', 'P1', 'C1', 'C2', 'C3']
+    ordered = sorted(('P3', 'P2', 'P1', 'C1', 'C2', 'C3'), key=lambda key: s[key])
     values = [s[key] for key in ordered]
-    if any(right <= left for left, right in zip(values, values[1:])):
-        raise ValueError('Per il payoff combinato gli strike devono essere ordinati P3 < P2 < P1 < C1 < C2 < C3.')
-    span = values[-1] - values[0]
+    if not (s['P3'] < s['P2'] < s['P1'] and s['C1'] < s['C2'] < s['C3']):
+        raise ValueError('Ordine interno dei vertical e dello strangle non valido.')
+    span = max(values) - min(values)
     margin = max(20.0, span * 0.18)
     points = np.linspace(values[0] - margin, values[-1] + margin, 600)
     # Vertici agli strike esatti, per mostrare le pendenze corrette.
