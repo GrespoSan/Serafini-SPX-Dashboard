@@ -275,29 +275,23 @@ def render_comparison(store, week, snaps, logs):
                             '<br>PRIMA: %{customdata[1]:+.2f}<extra></extra>'
                         ),
                     )
+                    # Plotly disegna i trace Bar sopra i trace Scatter, anche
+                    # quando gli Scatter sono stati aggiunti dopo. Perciò le
+                    # vecchie sagome sparivano sotto le nuove barre.
+                    # Le SHAPES con layer='above' restano davvero sopra i bar.
                     half_height = bar_height / 2
                     for idx, before in enumerate(old_values):
-                        top, bottom = idx + half_height, idx - half_height
-                        fig.add_trace(go.Scatter(
-                            x=[0, before, before, 0, 0],
-                            y=[bottom, bottom, top, top, bottom],
-                            mode='lines',
-                            line=dict(color=previous_colors[idx], width=3),
-                            fill='none',
-                            name=f'PRIMA {first_label}',
-                            showlegend=False,
-                            hoverinfo='skip',
-                        ))
-                    # Piccolo marcatore del valore PRIMA per il tooltip,
-                    # indipendente dall'ordine di rendering delle barre.
-                    fig.add_trace(go.Scatter(
-                        x=old_values, y=row_y, mode='markers',
-                        marker=dict(size=7, symbol='line-ns-open',
-                                    color=previous_colors, line=dict(width=2)),
-                        customdata=levels, showlegend=False,
-                        hovertemplate=('%{customdata}<br>PRIMA: %{x:+.2f}'
-                                       '<extra></extra>'),
-                    ))
+                        old_border = '#86EFAC' if before >= 0 else '#FDA4AF'
+                        fig.add_shape(
+                            type='rect',
+                            xref='x', yref='y',
+                            x0=min(0.0, before), x1=max(0.0, before),
+                            y0=idx - half_height, y1=idx + half_height,
+                            fillcolor='rgba(0,0,0,0)',
+                            line=dict(color=old_border, width=3, dash='dash'),
+                            layer='above',
+                        )
+                    # Valori esatti PRIMA e DOPO sono nel tooltip della barra.
                     extent = max(abs(val) for val in old_values + new_values)
                     extent = max(extent, 1.0)
                     st.markdown(f'**Confronto NET GAMMA {selected_profile} — {day:%d/%m/%Y}**')
@@ -324,7 +318,7 @@ def render_comparison(store, week, snaps, logs):
                     fig.add_vline(x=0, line_color='#CBD5E1', line_width=1)
                     st.plotly_chart(
                         fig, use_container_width=True,
-                        key=f'v41_one_gamma_{selected_profile}_{first_name}_{second_name}',
+                        key=f'v42_one_gamma_{selected_profile}_{first_name}_{second_name}',
                     )
                     st.caption(
                         'Ogni riga indica lo stesso strike nei due rilevamenti. '
