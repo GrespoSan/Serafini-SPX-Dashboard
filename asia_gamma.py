@@ -173,7 +173,18 @@ def render(target: date, c1_es, p1_es):
         verdict = "CHIUSURA ASIATICA FRA P1 E C1 — AREA FLIP"
         distance = f"{price - p1_es:,.2f} punti sopra P1; {c1_es - price:,.2f} punti sotto C1"
         relevant = p1_events + c1_events
-    st.markdown(f"### Verdetto ore 09:00: {verdict}")
+    if price < p1_es:
+        st.markdown(
+            f'### Verdetto ore 09:00: <span style="color:#ef4444">{verdict}</span>',
+            unsafe_allow_html=True,
+        )
+    elif price > c1_es:
+        st.markdown(
+            f'### Verdetto ore 09:00: <span style="color:#22c55e">{verdict}</span>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(f"### Verdetto ore 09:00: {verdict}")
     st.write(distance + ".")
     if relevant:
         st.caption("Ultimo attraversamento confermato (chiusure 5m): " +
