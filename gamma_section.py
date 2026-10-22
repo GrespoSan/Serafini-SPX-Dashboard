@@ -458,7 +458,6 @@ def render_comparison(store, week, snaps, logs):
 
 def render(store, week, snaps, logs):
     st.header('NET GAMMA · replica formula Serafini — verifica')
-    st.info('NET GAMMA invariato (25+25 strike). 0DTE prioritario; Weekly del venerdì = venerdì successivo. C1–C3/P1–P3: proposte modificabili. Volume Profile annuale e deviazione standard si visualizzano su TradingView; qui si possono confrontare i soli valori UP/DOWN già verificati. Esclusi CFD, stocastico e probabilità macro.')
     if not snaps:
         st.info('Nessuno snapshot disponibile nella settimana selezionata.')
         return
@@ -490,8 +489,6 @@ def render(store, week, snaps, logs):
         return result
 
     st.markdown('**Differenziale ES − SPX (sessione precedente)**')
-    st.caption('Metodo Serafini: media delle distanze sulle barre a 15 minuti della sessione cash precedente. '
-               'Qui usiamo le chiusure sincronizzate, una scelta tecnica da verificare su TradingView.')
     basis_key = f'basis_override_{day.isoformat()}'
     attempt_key = f'basis_auto_attempted_{day.isoformat()}'
     if 'auto_basis_results' not in st.session_state:
@@ -557,9 +554,6 @@ def render(store, week, snaps, logs):
                    f"seduta {auto_result['reference_date']} · {auto_result['bar_count']} barre a 15 minuti "
                    f"· min {auto_result['minimum']:.2f} / max {auto_result['maximum']:.2f} "
                    f"· ultimo {auto_result['last']:.2f}. Fonte: {auto_result['source']}.")
-        st.info('Confronta la proposta con il grafico TradingView ES1! − SPX a 15 minuti. '
-                'Yahoo ES=F potrebbe differire dal contratto CME specifico o da TradingView. '
-                'Se necessario correggi il campo: prevale sempre il valore che hai verificato.')
     try:
         offset = None if not offset_txt.strip() else float(offset_txt.replace(',', '.'))
     except ValueError:
@@ -627,7 +621,6 @@ def render(store, week, snaps, logs):
         )
         fig.add_vline(x=0, line_width=1, line_color='#b7bec8')
         st.plotly_chart(fig, use_container_width=True, key=f'gamma_net_{title}_{choice}')
-        st.caption('Gamma positivo (verde) e negativo (rosso) sono il segno del NET GAMMA per strike. Il Gamma Flip non viene calcolato né disegnato in questa versione: la sua definizione operativa resta da validare sul materiale Serafini.')
         with st.expander(f'Dettaglio numerico {title} (50 strike)', expanded=False):
             st.dataframe(frame, use_container_width=True, hide_index=True)
         st.download_button(f'Scarica calcolo CSV {title}', profile_csv(result, offset),
@@ -711,57 +704,6 @@ def render(store, week, snaps, logs):
                             st.write('Target principale ipotizzato: **P2** · target esteso: **P3**')
                         st.caption('Ampiezze strike SPX (uguali in punti ES con differenziale costante): '
                                    + ' · '.join(f'{k}: {v:g}' for k,v in measures.items()))
-                        with st.expander('Range asiatico ES — 00:00–09:00 Roma (automatico)', expanded=False):
-                            st.caption('Box del giorno dello snapshot, ore italiane; 36 barre a 15 minuti. '
-                                       'Fonte Yahoo ES=F, da confrontare con il future TradingView. '
-                                       'Per gli snapshot mattutini il range completo è disponibile solo dopo le 09:00.')
-                            @st.cache_data(ttl=900, show_spinner=False)
-                            def _load_asia(target_day):
-                                return download_asia_range(target_day)
-                            auto_asia = None
-                            if st.button('Calcola massimo/minimo ES automaticamente', key=f'asia_fetch_v27_{choice}'):
-                                try:
-                                    auto_asia = _load_asia(day)
-                                    st.session_state[f'asia_result_v27_{day}'] = auto_asia
-                                    st.session_state.pop(f'asia_error_v27_{day}', None)
-                                except Exception as exc:
-                                    st.session_state.pop(f'asia_result_v27_{day}', None)
-                                    st.session_state[f'asia_error_v27_{day}'] = str(exc)
-                            auto_asia = st.session_state.get(f'asia_result_v27_{day}')
-                            if auto_asia:
-                                hi, lo = auto_asia['high'], auto_asia['low']
-                                st.success(f"Range asiatico ES {day:%d/%m/%Y}: **{lo:,.2f} – {hi:,.2f}** "
-                                           f"(ampiezza {hi-lo:,.2f} punti, {auto_asia['bars']}/36 barre)")
-                                st.caption(auto_asia['source'])
-                            else:
-                                msg = st.session_state.get(f'asia_error_v27_{day}')
-                                if msg:
-                                    st.warning(msg)
-                                st.caption('Se non sono disponibili tutte le barre, nessun range automatico viene utilizzato.')
-                            if st.checkbox('Usa valori ES manuali (verifica TradingView)',
-                                           key=f'asia_manual_v27_{choice}'):
-                                ah, al = st.columns(2)
-                                with ah:
-                                    hi = st.number_input('Massimo ES 00:00–09:00', min_value=0.0,
-                                                         value=float(auto_asia['high']) if auto_asia else 0.0,
-                                                         step=0.25, key=f'asia_hi_v27_{choice}')
-                                with al:
-                                    lo = st.number_input('Minimo ES 00:00–09:00', min_value=0.0,
-                                                         value=float(auto_asia['low']) if auto_asia else 0.0,
-                                                         step=0.25, key=f'asia_lo_v27_{choice}')
-                                if hi <= lo or lo <= 0:
-                                    st.warning('Inserisci un massimo maggiore del minimo e valori ES positivi.')
-                                    hi = lo = None
-                            elif auto_asia is None:
-                                hi = lo = None
-                            if hi is not None and lo is not None:
-                                if offset is None:
-                                    st.info('Per confrontare i livelli Gamma con il range ES inserisci il differenziale ES−SPX.')
-                                else:
-                                    for r in role_rows:
-                                        es = r['Prezzo ES']
-                                        where = ('sotto' if es < lo else 'sopra' if es > hi else 'dentro')
-                                        st.caption(f"{r['Livello']} ({es:,.2f} ES): {where} il range")
                         st.caption('Il superamento dei livelli esterni richiede lettura del contesto e conferme; '
                                    'qui non si calcolano segnali, volatilità attesa o probabilità.')
             st.download_button('Scarica graduatoria barre NET GAMMA 0DTE (CSV)',
@@ -769,7 +711,6 @@ def render(store, week, snaps, logs):
                                file_name=f'Candidati_Top3_Gamma_{day.isoformat()}_{choice}.csv',
                                mime='text/csv', key=f'v9_candidates_{choice}')
     st.subheader('Esporta i due profili su TradingView')
-    st.caption('Il Pine Script disegna 0DTE vicino alle candele e Weekly più a destra, come nella slide 139. I prezzi ES sono SPX + differenziale inserito qui; il NET GAMMA rimane invariato.')
     if offset is None:
         st.warning('Per esportare sul grafico del future ES inserisci prima un differenziale ES − SPX verificato. Non assumiamo zero automaticamente.')
     elif not (computed_profiles.get('0DTE', {}).get('rows') and computed_profiles.get('Weekly', {}).get('rows')):
