@@ -565,8 +565,6 @@ def render(store, week, snaps, logs):
     st.session_state[f'gamma_compare_context_{week}'] = {
         'day': day, 'ref': ref, 'offset': offset, 'weekly_exp': weekly_exp,
     }
-    # Riserviamo la posizione in alto; C1/P1 saranno letti dai selettori piu' sotto.
-    quadro_operativo = st.empty()
     asia_c1 = None
     asia_p1 = None
     computed_profiles = {}
@@ -720,9 +718,8 @@ def render(store, week, snaps, logs):
                                candidate_csv(candidate_0dte, offset),
                                file_name=f'Candidati_Top3_Gamma_{day.isoformat()}_{choice}.csv',
                                mime='text/csv', key=f'v9_candidates_{choice}')
-    # Il placeholder compare sopra i profili, ma viene riempito dopo la selezione C/P.
-    # Streamlit aggiorna il quadro al cambiamento di snapshot, basis o selettori.
-    with quadro_operativo.container():
+    # Quadro visibile dopo grafici e selezione livelli, fuori dal pannello sperimentale.
+    with st.container():
         st.subheader('QUADRO OPERATIVO — ORE 09:00')
         from vix_regime import render as render_vix_regime
         from asia_gamma import render as render_asia_gamma
