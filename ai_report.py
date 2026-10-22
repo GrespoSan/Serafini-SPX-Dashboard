@@ -172,6 +172,39 @@ def build_report(store, week, day, reference, offset=None):
     if offset is None:
         report['warnings'].append('Differenziale ES–SPX assente: strike_es=null; usare soltanto strike SPX.')
     report['warnings'].append('Le concentrazioni e le variazioni sono descrittive, non dimostrano acquisti/vendite reali di opzioni.')
+    # Contesto indipendente: non modifica la formula NET GAMMA.
+    report['schema_version'] = 'serafini_spx_ai_report_v2'
+    report['market_context'] = {'vix_curve': {'status': 'NON DISPONIBILE'},
+                                'asia_session': {'status': 'NON DISPONIBILE'}}
+    try:
+        from vix_regime import previous_vix_curve
+        vx = previous_vix_curve(day)
+        pct = float(vx['contango_pct'])
+        report['market_context']['vix_curve'] = {
+            **vx, 'status': 'VALIDO',
+            'regime': 'BACKWARDATION' if pct < 0 else 'CONTANGO',
+            'breakout_buffer_es_points': 15 if pct < 1.5 else 10,
+            'note': 'Settlement futures VX mensili della seduta precedente; non VIX spot intraday'}
+    except Exception as exc:
+        report['market_context']['vix_curve']['reason'] = type(exc).__name__
+        report['warnings'].append('Regime VX precedente non disponibile: non stimare il buffer.')
+    try:
+        from asia_range import download_asia_range
+        asia = download_asia_range(day)
+        report['market_context']['asia_session'] = {
+            **asia, 'status': 'VALIDO', 'session': '00:00–09:00 Europe/Rome',
+            'close_0900_es': None, 'relative_to_c1_p1': 'NON DETERMINABILE',
+            'note': 'Range high/low verificato su 36 barre; il modulo non restituisce la chiusura alle 09:00'}
+    except Exception as exc:
+        report['market_context']['asia_session']['reason'] = type(exc).__name__
+        report['warnings'].append('Range asiatico non disponibile o incompleto.')
+    report['operational_verdict'] = {
+        'direction': 'NEUTRO — DA CONFERMARE',
+        'status': 'CONTESTO INCOMPLETO',
+        'note': 'Il segno NET GAMMA e il regime VX non sono da soli segnali LONG/SHORT. '
+                'Servono chiusura asiatica alle 09:00, C1/P1 confermati e reazione del prezzo ES.'}
+    report['sources']['vix_curve'] = 'Cboe VX mensili: settlement seduta precedente, se disponibile'
+    report['sources']['asia_session'] = 'Yahoo ES=F 15m: range 00:00–09:00, se completo'
     return report
 
 
@@ -225,6 +258,27 @@ def pdf_summary(report):
                                ('BOTTOMPADDING',(0,0),(-1,-1),5),('TOPPADDING',(0,0),(-1,-1),5),
                                ('LINEBELOW',(0,1),(-1,-1),0.35,colors.HexColor('#d1d5db'))]))
         return t
+    ctx = report.get('market_context', {})
+    vx = ctx.get('vix_curve', {})
+    asia = ctx.get('asia_session', {})
+    story.append(Paragraph('Contesto di mercato', styles['SPXHeading']))
+    if vx.get('status') == 'VALIDO':
+        story.append(Paragraph(
+            f"VX mensili ({vx['day']}): M1 {vx['m1']:.2f}, M2 {vx['m2']:.2f}; "
+            f"{vx['regime']} {vx['contango_pct']:+.2f}%; "
+            f"buffer breakout {vx['breakout_buffer_es_points']} punti ES.", styles['SPXSmall']))
+    else:
+        story.append(Paragraph('Regime VX: NON DISPONIBILE.', styles['SPXSmall']))
+    if asia.get('status') == 'VALIDO':
+        story.append(Paragraph(
+            f"Sessione asiatica ES 00:00-09:00 Roma: minimo {asia['low']:.2f}, "
+            f"massimo {asia['high']:.2f} (36 barre complete). "
+            "Chiusura rispetto a C1/P1: NON DETERMINABILE.", styles['SPXSmall']))
+    else:
+        story.append(Paragraph('Sessione asiatica ES: NON DISPONIBILE.', styles['SPXSmall']))
+    story.append(Paragraph('Verdetto: NEUTRO - DA CONFERMARE. '
+                           'Mancano la chiusura asiatica alle 09:00, i livelli C1/P1 '
+                           'confermati e la reazione del prezzo ES.', styles['SPXSmall']))
     story.append(Paragraph('Archivio e qualita dati', styles['SPXHeading']))
     entries=[]
     for rec in report['snapshots']:
