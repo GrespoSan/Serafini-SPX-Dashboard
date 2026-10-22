@@ -119,10 +119,6 @@ def week_choice() -> str:
 st.title('Serafini · SPX — archivio Cboe')
 st.caption('Solo dati acquisiti. Nessun calcolo NET GAMMA applicato ai file originali.')
 
-# Notizie macro USA: servizio gratuito e separato dai dati Cboe.
-from macro_calendar import render as render_macro_calendar
-render_macro_calendar()
-
 try:
     url = st.secrets['SUPABASE_URL']
     service_key = st.secrets['SUPABASE_SERVICE_ROLE_KEY']
@@ -186,6 +182,10 @@ with st.sidebar:
 
 # La connessione al bucket viene creata SOLO DOPO il controllo password.
 store = Store(url, service_key, bucket)
+
+# Avviso macro al termine del login, in cima alla dashboard.
+from macro_calendar import render as render_macro_calendar
+render_macro_calendar()
 week = week_choice()
 
 try:
