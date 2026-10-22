@@ -117,7 +117,7 @@ def week_choice() -> str:
 
 
 st.title('Serafini · SPX — archivio Cboe')
-st.caption('Solo dati acquisiti. Nessun calcolo NET GAMMA applicato ai file originali.')
+
 
 try:
     url = st.secrets['SUPABASE_URL']
