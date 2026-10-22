@@ -199,10 +199,6 @@ c1, c2 = st.columns(2)
 c1.metric('Snapshot distinti', len(snaps))
 c2.metric('Registri', len(logs))
 
-# Acquisizione supplementare riservata all'amministratore: gli orari ufficiali restano invariati.
-from manual_acquisition import render as render_manual_acquisition
-render_manual_acquisition(role, week, store)
-
 if logs:
     rows = []
     for obj in logs:
@@ -234,6 +230,10 @@ if logs:
                  use_container_width=True, hide_index=True)
 else:
     st.info('Non sono presenti registri per questa settimana.')
+
+# Acquisizione supplementare riservata all'amministratore: gli orari ufficiali restano invariati.
+from manual_acquisition import render as render_manual_acquisition
+render_manual_acquisition(role, week, store)
 
 # Calcolo di sola lettura, anche per il ruolo amici. Nessuna cancellazione qui.
 with st.expander('NET GAMMA 0DTE / Weekly — modulo in verifica', expanded=False):
