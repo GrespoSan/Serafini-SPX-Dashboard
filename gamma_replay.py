@@ -140,6 +140,8 @@ def render(store, week, logs):
                        key=f"replay_day_{week}")
     kind = st.radio("Scadenza", ("0DTE", "Weekly"), horizontal=True,
                     key=f"replay_expiry_{week}")
+    view_mode = st.radio("Visualizzazione", ("Solo NET GAMMA", "Candele ES + NET GAMMA"),
+                         horizontal=True, key=f"replay_visual_{week}")
     if st.button("Aggiorna replay", key=f"replay_reload_{week}"):
         st.rerun()
     with st.spinner("Caricamento profili compatti e snapshot ufficiali..."):
@@ -279,8 +281,22 @@ def render(store, week, logs):
                  currentvalue={"prefix": "Orario: "}, steps=steps)]
                  if len(available) > 1 else []),
     )
+    if view_mode == "Candele ES + NET GAMMA":
+        if offset is None:
+            st.warning("Per affiancare le candele ES occorre il differenziale ES − SPX. "
+                       "Senza differenziale i livelli Cboe sono strike SPX, non prezzi ES.")
+        else:
+            try:
+                from replay_candles import combined_graph
+                graph = combined_graph(graph, available, day, kind, offset, bounds, ybounds)
+                st.caption("Sinistra: candele ES=F Yahoo 5m, soltanto barre chiuse entro l'ora "
+                           "di download di ciascun frame. Destra: identico istogramma NET GAMMA "
+                           "Cboe e linea SPX traslata. Le due fonti possono differire; "
+                           "i dati 5m Yahoo hanno uno storico limitato.")
+            except Exception as exc:
+                st.warning(f"Candele ES non disponibili ({exc}). Resta visibile il Replay NET GAMMA originale.")
     st.plotly_chart(graph, use_container_width=True,
-                    key=f"replay_chart_{week}_{day}_{kind}")
+                    key=f"replay_chart_{week}_{day}_{kind}_{view_mode}")
     st.caption("Linea gialla tratteggiata: prezzo SPX rilevato da Cboe, "
                "traslato sul future ES con il differenziale indicato (se presente). "
                "Prezzo potenzialmente ritardato; ogni frame usa il proprio prezzo "
