@@ -101,52 +101,54 @@ def previous_vix_curve(target_day):
 
 
 def render(target_day):
-    st.markdown("**Regime VIX — chiusura precedente**")
+    """Mostra regime e buffer affiancati; nessun impatto sui calcoli NET GAMMA."""
     auto = None
     try:
         auto = previous_vix_curve(target_day)
     except Exception:
-        st.warning("Contango VIX non verificabile automaticamente: inserisci il valore letto "
-                   "su Volchart alla chiusura precedente. Nessun buffer viene stimato.")
+        st.warning("Settlement VIX non disponibile automaticamente: puoi inserire "
+                   "la percentuale manualmente, senza stimare valori mancanti.")
 
     key = f"vix_contango_override_{target_day.isoformat()}"
-    left, right = st.columns([2.5, 1], gap="medium")
-    with left:
+    with st.expander("Dettagli VIX e percentuale manuale", expanded=False):
         if auto:
             st.caption(f"Cboe {auto['day']} · {auto['m1_symbol']} ({auto['m1_expiry']}): "
                        f"{auto['m1']:.4f} · {auto['m2_symbol']} ({auto['m2_expiry']}): "
-                       f"{auto['m2']:.4f} · contango **{auto['contango_pct']:+.2f}%**")
+                       f"{auto['m2']:.4f} · contango {auto['contango_pct']:+.2f}%")
         override = st.text_input(
             "Contango % manuale (facoltativo, prevale sul dato automatico)",
-            key=key, placeholder="Es. 1,65",
+            key=key, placeholder="Es. -3,36",
         )
-    with right:
         st.markdown(f"[Settlement Cboe]({SOURCE_PAGE}) · [Volchart](https://volchart.io/historical)")
+        st.caption("Primi due futures VX mensili non scaduti, settlement della seduta "
+                   "precedente. Nessuna modifica ai livelli NET GAMMA.")
+
     pct = None
-    origin = ""
     if override.strip():
         try:
             value = float(override.strip().replace(",", "."))
             if not -100 < value < 100:
                 raise ValueError()
             pct = value
-            origin = "manuale"
         except ValueError:
             st.error("Contango manuale non valido: inserisci una percentuale numerica.")
     elif auto:
         pct = auto["contango_pct"]
-        origin = "Cboe automatico"
 
     if pct is None:
-        st.info("Regime non determinato — nessuna soglia di breakout automatica.")
-    elif pct > 1.5:
-        st.success(f"Contango {pct:+.2f}% ({origin}) > 1,5% · buffer breakout: **10 punti**")
+        regime, buffer = "Non disponibile", "Non determinato"
+    elif pct < 0:
+        regime, buffer = f"Backwardation {pct:+.2f}%", "15 punti"
     elif pct < 1.5:
-        label = "Backwardation" if pct < 0 else "Contango inferiore all'1,5%"
-        st.warning(f"{label} {pct:+.2f}% ({origin}) · buffer breakout: **15 punti**")
+        regime, buffer = f"Contango {pct:+.2f}%", "15 punti"
+    elif pct > 1.5:
+        regime, buffer = f"Contango {pct:+.2f}%", "10 punti"
     else:
-        st.info("Contango esattamente 1,50%: soglia limite, buffer non assegnato.")
-    st.caption("Calcolo su prezzi di settlement dei primi due futures VX mensili non scaduti; "
-               "il dato puo' non coincidere con l'ultima quotazione su Volchart. "
-               "Nessuna modifica ai livelli NET GAMMA.")
+        regime, buffer = "Contango +1.50%", "Non determinato"
+
+    col_regime, col_buffer = st.columns(2, gap="medium")
+    with col_regime:
+        st.markdown(f"**Regime VIX:** {regime}")
+    with col_buffer:
+        st.markdown(f"**Buffer breakout:** {buffer}")
     return pct
