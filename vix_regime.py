@@ -119,7 +119,13 @@ def render(target_day):
 
     col_regime, col_buffer = st.columns(2, gap="medium")
     with col_regime:
-        st.markdown(f"**Regime VIX:** {regime}")
+        if pct is not None and pct < 0:
+            st.markdown(f'**Regime VIX:** <span style="color:#e53935;font-weight:700">Backwardation</span> {pct:+.2f}%', unsafe_allow_html=True)
+        else:
+            st.markdown(f"**Regime VIX:** {regime}")
     with col_buffer:
-        st.markdown(f"**Buffer breakout:** {buffer}")
+        if buffer == "15 punti":
+            st.markdown('**Buffer breakout:** <span style="color:#e53935;font-weight:700">15 punti</span>', unsafe_allow_html=True)
+        else:
+            st.markdown(f"**Buffer breakout:** {buffer}")
     return pct
