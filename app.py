@@ -318,7 +318,7 @@ with st.expander('Confronto NET GAMMA — due rilevamenti', expanded=False):
     render_comparison(store, week, snaps, logs)
 
 # Replay temporaneo: profili compatti isolati dagli snapshot ufficiali.
-with st.expander('Replay NET GAMMA intraday — 07:30 → 17:30', expanded=False):
+with st.expander('Replay NET GAMMA intraday — 07:30 → 18:30', expanded=False):
     from gamma_replay import render as render_gamma_replay
     render_gamma_replay(store, week, logs)
 
