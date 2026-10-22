@@ -1,4 +1,4 @@
-"""Replay temporaneo intraday: 2 snapshot ufficiali + 7 frame compatti di studio.
+"""Replay temporaneo intraday: 2 snapshot ufficiali + 9 frame compatti di studio.
 
 Il grafico espone ORARI DI DOWNLOAD a Roma; il timestamp Cboe non viene
 interpretato come tempo UTC o come ora italiana. Nessuna scrittura in Supabase.
@@ -15,7 +15,7 @@ from net_gamma import profile, read_snapshot
 
 ROME = ZoneInfo("Europe/Rome")
 SLOTS = ("07:30", "11:00", "13:30", "15:46", "16:01", "16:16",
-         "16:31", "16:46", "17:30")
+         "16:31", "16:46", "17:30", "18:00", "18:30")
 OFFICIAL = {"07:30": "30 7 * * 1-5", "15:46": "46 15 * * 1-5"}
 
 def weekly_expiry(day):
@@ -126,7 +126,7 @@ def _study_frames(store, week, day):
 def render(store, week, logs):
     st.subheader("Replay / History — evoluzione NET GAMMA")
     st.caption("Studio intraday, separato dal metodo ufficiale. "
-               "I frame intermedi sono temporanei; vengono rimossi dopo circa 2 giorni "
+               "I nove frame intermedi sono temporanei; vengono rimossi dopo circa 2 giorni "
                "dal processo Cloud. Nessun file originale Cboe aggiuntivo archiviato.")
     iso_year, iso_week = map(int, week.split("-W"))
     from datetime import timedelta
@@ -148,7 +148,7 @@ def render(store, week, logs):
     available = [(slot, frames[slot]) for slot in SLOTS if slot in frames
                  and frames[slot].get("profiles", {}).get(kind, {}).get("rows")]
     missing = [s for s in SLOTS if s not in frames]
-    st.caption(f"Frame disponibili: {len(available)}/9 · "
+    st.caption(f"Frame disponibili: {len(available)}/{len(SLOTS)} · "
                f"Assenti: {', '.join(missing) if missing else 'nessuno'}")
     if not available:
         st.info("Nessun frame replay disponibile per questa data. I frame futuri "
@@ -307,5 +307,5 @@ def render(store, week, logs):
                       "Top 3 negativo": fmt(lower)})
     st.dataframe(table, hide_index=True, use_container_width=True)
     st.caption("I due frame ufficiali provengono dall'archivio invariato. "
-               "I sette frame intermedi NON entrano nei report ufficiali. "
+               "I nove frame intermedi NON entrano nei report ufficiali. "
                "L'orario di download non garantisce la freschezza della chain Cboe.")
