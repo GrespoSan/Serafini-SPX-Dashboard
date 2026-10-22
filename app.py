@@ -253,15 +253,24 @@ with st.expander('NET GAMMA 0DTE / Weekly — modulo in verifica', expanded=Fals
     from gamma_section import render
     render(store, week, snaps, logs)
 
-# Il confronto e' un modulo autonomo, distinto dal profilo singolo.
-with st.expander('Confronto NET GAMMA — due rilevamenti', expanded=False):
-    from gamma_section import render_comparison
-    render_comparison(store, week, snaps, logs)
-
-# Replay temporaneo: profili compatti isolati dagli snapshot ufficiali.
-with st.expander('Replay NET GAMMA intraday — 07:30 → 18:30', expanded=False):
-    from gamma_replay import render as render_gamma_replay
-    render_gamma_replay(store, week, logs)
+# Confronto e Replay condividono la stessa sezione, con calcoli invariati.
+with st.expander('Replay e Confronto NET GAMMA', expanded=False):
+    mode = st.radio(
+        'Modalità di analisi',
+        ('Confronto diretto tra due rilevamenti',
+         'Replay intraday — evoluzione delle barre',
+         'Replay con candele ES'),
+        index=0,
+        key='gamma_analysis_mode',
+    )
+    if mode == 'Confronto diretto tra due rilevamenti':
+        from gamma_section import render_comparison
+        render_comparison(store, week, snaps, logs)
+    else:
+        from gamma_replay import render as render_gamma_replay
+        replay_view = ('Candele ES + NET GAMMA'
+                       if mode == 'Replay con candele ES' else 'Solo NET GAMMA')
+        render_gamma_replay(store, week, logs, view_mode=replay_view)
 
 # Report descrittivo e riproducibile per analisi AI (nessuna chiamata a servizi AI).
 with st.expander('Report giornaliero per analisi AI — JSON + PDF', expanded=False):
