@@ -457,7 +457,7 @@ def render_comparison(store, week, snaps, logs):
 
 
 def render(store, week, snaps, logs):
-    st.header('NET GAMMA · replica formula Serafini — verifica')
+    st.header('NET GAMMA · formula Serafini')
     if not snaps:
         st.info('Nessuno snapshot disponibile nella settimana selezionata.')
         return
