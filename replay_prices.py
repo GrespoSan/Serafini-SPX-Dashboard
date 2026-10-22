@@ -26,7 +26,7 @@ def load_es_candles(day):
     if (datetime.now(UTC) - local_start.astimezone(UTC)).days > 59:
         raise ValueError("Yahoo 5m non conserva normalmente questa giornata (>59 giorni)")
     raw = yf.download(
-        "ES=F", start=local_start.date().isoformat(),
+        "ES=F", start=(day - timedelta(days=1)).isoformat(),
         end=(day + timedelta(days=2)).isoformat(),
         interval="5m", auto_adjust=False, progress=False,
         prepost=True, threads=False,
