@@ -148,6 +148,7 @@ def render():
     now = datetime.now(ROME)
     today = now.date()
     st.markdown("### Calendario macro USA — eventi da monitorare")
+    st.caption("Dati: [Finance Calendar](https://www.financecalendar.com)")
     try:
         # Includiamo ieri UTC/NY per gestire la finestra di cambiamento DST;
         # date nel UI filtrate invece in Europe/Rome.
@@ -179,8 +180,4 @@ def render():
             for item in upcoming:
                 st.markdown(f"**{item['day']:%d/%m/%Y} · {item['clock']} Roma** — "
                             f"{item['kind']} · [Fonte]({item['source']})")
-    st.caption("Controllati: CPI, PCE, PPI, Jobless Claims, NFP e Retail Sales. "
-               "Aggiornamento cache ogni 30 min durante l'uso dell'app. "
-               "Le date possono essere revisionate; confermare prima dei trade.")
-    st.markdown("Dati calendario: [Finance Calendar](https://www.financecalendar.com) "
-                "· fonte terza gratuita, non un segnale di trading.")
+    
