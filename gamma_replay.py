@@ -123,7 +123,7 @@ def _study_frames(store, week, day):
     return data
 
 
-def render(store, week, logs):
+def render(store, week, logs, view_mode=None):
     st.subheader("Replay / History — evoluzione NET GAMMA")
     st.caption("Studio intraday, separato dal metodo ufficiale. "
                "I nove frame intermedi sono temporanei; vengono rimossi dopo circa 2 giorni "
@@ -140,8 +140,11 @@ def render(store, week, logs):
                        key=f"replay_day_{week}")
     kind = st.radio("Scadenza", ("0DTE", "Weekly"), horizontal=True,
                     key=f"replay_expiry_{week}")
-    view_mode = st.radio("Visualizzazione", ("Solo NET GAMMA", "Candele ES + NET GAMMA"),
-                         horizontal=True, key=f"replay_visual_{week}")
+    if view_mode is None:
+        view_mode = st.radio("Visualizzazione", ("Solo NET GAMMA", "Candele ES + NET GAMMA"),
+                             horizontal=True, key=f"replay_visual_{week}")
+    elif view_mode not in ("Solo NET GAMMA", "Candele ES + NET GAMMA"):
+        raise ValueError("Modalità Replay non valida")
     if st.button("Aggiorna replay", key=f"replay_reload_{week}"):
         st.rerun()
     with st.spinner("Caricamento profili compatti e snapshot ufficiali..."):
