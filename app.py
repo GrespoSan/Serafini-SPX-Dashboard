@@ -212,7 +212,12 @@ if logs:
             value = json.loads(store.download(f"{week}/logs/{obj['name']}"))
             rows.append({
                 'Download (ora di Roma)': format_download_rome(value.get('download_utc')),
-                'Acquisizione': describe_slot(value.get('scheduled_slot')),
+                'Acquisizione': (
+                    'Test manuale'
+                    if str(value.get('scheduled_slot') or '') == '30 13 * * 1-5'
+                    and str(value.get('download_rome') or '').startswith('2026-10-22T17:57:')
+                    else describe_slot(value.get('scheduled_slot'))
+                ),
                 'Stato': value.get('status', ''),
                 'Qualità dati': describe_quality(value, store),
                 'Timestamp Cboe (originale)': value.get('cboe_timestamp', ''),
