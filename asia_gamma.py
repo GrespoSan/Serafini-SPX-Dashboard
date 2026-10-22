@@ -91,17 +91,17 @@ def level_events(result, level, name):
     """Transizioni sulle CHIUSURE 5m, senza inventare ordine degli spike intrabar."""
     events = []
     rows = result["timeline"]
-    missing = set(result["missing_times"])
     for prev, current in zip(rows, rows[1:]):
         prev_time = datetime.strptime(prev["time"], "%H:%M")
         cur_time = datetime.strptime(current["time"], "%H:%M")
         if (cur_time - prev_time).total_seconds() != 300:
             continue  # Una lacuna impedisce di localizzare l'attraversamento.
         a, b = prev["close"] - level, current["close"] - level
+        clock = (cur_time + timedelta(minutes=5)).strftime("%H:%M")
         if a <= 0 < b:
-            events.append(f'{name} superato al rialzo: chiusura {current["time"]}')
+            events.append(f"{name} superato al rialzo: chiusura {clock}")
         elif a >= 0 > b:
-            events.append(f'{name} perso al ribasso: chiusura {current["time"]}')
+            events.append(f"{name} perso al ribasso: chiusura {clock}")
     touched = any(row["low"] <= level <= row["high"] for row in rows)
     recovered = rows[-1]["close"] > level
     return events, touched, recovered
@@ -159,7 +159,29 @@ def render(target: date, c1_es, p1_es):
     st.markdown(f"**Posizione alle 09:00:** {zone}")
     st.markdown(f"**Andamento della sessione:** {behavior}" +
                 (" (provvisorio: barra mancante)" if result["missing_times"] else ""))
-    with st.expander("Cronologia attraversamenti C1 / P1 (chiusure 5 minuti)", expanded=True):
+    p1_events, _, _ = level_events(result, p1_es, "P1")
+    c1_events, _, _ = level_events(result, c1_es, "C1")
+    if price < p1_es:
+        verdict = "CHIUSURA ASIATICA SOTTO P1 — ZONA INFERIORE"
+        distance = f"{p1_es - price:,.2f} punti sotto P1"
+        relevant = p1_events
+    elif price > c1_es:
+        verdict = "CHIUSURA ASIATICA SOPRA C1 — ZONA SUPERIORE"
+        distance = f"{price - c1_es:,.2f} punti sopra C1"
+        relevant = c1_events
+    else:
+        verdict = "CHIUSURA ASIATICA FRA P1 E C1 — AREA FLIP"
+        distance = f"{price - p1_es:,.2f} punti sopra P1; {c1_es - price:,.2f} punti sotto C1"
+        relevant = p1_events + c1_events
+    st.markdown(f"### Verdetto ore 09:00: {verdict}")
+    st.write(distance + ".")
+    if relevant:
+        st.caption("Ultimo attraversamento confermato (chiusure 5m): " +
+                   relevant[-1] + ".")
+    if result["missing_times"]:
+        st.caption("La posizione delle 09:00 è confermata dalla barra finale; "
+                   "la cronologia può essere incompleta per la barra mancante.")
+    with st.expander("Cronologia attraversamenti C1 / P1 (chiusure 5 minuti)", expanded=False):
         for name, level in (("P1", p1_es), ("C1", c1_es)):
             events, touched, recovered = level_events(result, level, name)
             st.markdown(f"**{name} — {level:,.2f} ES**")
