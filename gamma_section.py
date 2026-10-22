@@ -686,6 +686,14 @@ def render(store, week, snaps, logs):
                            if offset is not None and 'C1' in chosen else None)
                 asia_p1 = (chosen['P1']['strike_spx'] + offset
                            if offset is not None and 'P1' in chosen else None)
+                # Espone i livelli effettivamente selezionati al report AI,
+                # identificando snapshot e riferimento: mai riusare livelli di un altro giorno.
+                st.session_state[f'asia_levels_{day.isoformat()}'] = {
+                    'snapshot': choice, 'reference_spx': float(ref),
+                    'basis': offset, 'c1_spx': chosen.get('C1', {}).get('strike_spx'),
+                    'p1_spx': chosen.get('P1', {}).get('strike_spx'),
+                    'selection': 'manuale su candidati sperimentali',
+                }
                 # Sezione separata: interpretazione della struttura, mai inferenza
                 # automatica sul verso delle singole transazioni.
                 with st.expander('Struttura opzionale — 2 Vertical + Strangle (SPERIMENTALE v13)', expanded=True):
