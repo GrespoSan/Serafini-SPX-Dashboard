@@ -479,6 +479,10 @@ def render(store, week, snaps, logs):
     except Exception:
         st.error('Data dello snapshot non riconosciuta nel nome del file.')
         return
+    # Regime VIX della seduta precedente: visualizzazione, nessun effetto sul NET GAMMA.
+    from vix_regime import render as render_vix_regime
+    render_vix_regime(day)
+
     previous = snap['data'].get('prev_day_close')
     st.caption(f'Chiusura SPX precedente dichiarata nel payload Cboe: {previous} (da confrontare con chiusura cash ufficiale)')
     @st.cache_data(ttl=3600, show_spinner=False)
