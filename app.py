@@ -235,11 +235,31 @@ if logs:
 else:
     st.info('Non sono presenti registri per questa settimana.')
 
+# Calcolo di sola lettura, anche per il ruolo amici. Nessuna cancellazione qui.
+with st.expander('NET GAMMA 0DTE / Weekly — modulo in verifica', expanded=False):
+    from gamma_section import render
+    render(store, week, snaps, logs)
+
+# Il confronto e' un modulo autonomo, distinto dal profilo singolo.
+with st.expander('Confronto NET GAMMA — due rilevamenti', expanded=False):
+    from gamma_section import render_comparison
+    render_comparison(store, week, snaps, logs)
+
+# Replay temporaneo: profili compatti isolati dagli snapshot ufficiali.
+with st.expander('Replay NET GAMMA intraday — 07:30 → 18:30', expanded=False):
+    from gamma_replay import render as render_gamma_replay
+    render_gamma_replay(store, week, logs)
+
+# Report descrittivo e riproducibile per analisi AI (nessuna chiamata a servizi AI).
+with st.expander('Report giornaliero per analisi AI — JSON + PDF', expanded=False):
+    from ai_report import render as render_ai_report
+    render_ai_report(store, week, snaps, logs)
+
 # Archivio settimanale e amministrazione sulla stessa riga.
 col_zip, col_admin = st.columns([1, 1], gap='medium')
 with col_zip:
     # Il file ZIP non contiene trasformazioni sui dati originali.
-    if st.button('Prepara ZIP della settimana', disabled=not (snaps or logs)):
+    if st.button('Prepara ZIP dati Cboe della settimana', disabled=not (snaps or logs)):
         try:
             with st.spinner('Lettura dei file e creazione ZIP...'):
                 out = io.BytesIO()
@@ -310,23 +330,3 @@ with col_admin:
                         st.error('Impossibile completare la cancellazione. Controlla il bucket.')
     else:
         st.caption('Accesso lettore: download consentito, cancellazione non disponibile.')
-
-# Calcolo di sola lettura, anche per il ruolo amici. Nessuna cancellazione qui.
-with st.expander('NET GAMMA 0DTE / Weekly — modulo in verifica', expanded=False):
-    from gamma_section import render
-    render(store, week, snaps, logs)
-
-# Il confronto e' un modulo autonomo, distinto dal profilo singolo.
-with st.expander('Confronto NET GAMMA — due rilevamenti', expanded=False):
-    from gamma_section import render_comparison
-    render_comparison(store, week, snaps, logs)
-
-# Replay temporaneo: profili compatti isolati dagli snapshot ufficiali.
-with st.expander('Replay NET GAMMA intraday — 07:30 → 18:30', expanded=False):
-    from gamma_replay import render as render_gamma_replay
-    render_gamma_replay(store, week, logs)
-
-# Report descrittivo e riproducibile per analisi AI (nessuna chiamata a servizi AI).
-with st.expander('Report giornaliero per analisi AI — JSON + PDF', expanded=False):
-    from ai_report import render as render_ai_report
-    render_ai_report(store, week, snaps, logs)
