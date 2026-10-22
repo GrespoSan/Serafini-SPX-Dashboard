@@ -14,9 +14,10 @@ import streamlit as st
 from net_gamma import profile, read_snapshot
 
 ROME = ZoneInfo("Europe/Rome")
-SLOTS = ("07:30", "11:00", "13:30", "15:46", "16:01", "16:16",
-         "16:31", "16:46", "17:30")
-OFFICIAL = {"07:30": "30 7 * * 1-5", "15:46": "46 15 * * 1-5"}
+SLOTS = ("07:30", "11:00", "13:30", "15:50", "16:01", "16:16",
+         "16:31", "16:46", "17:30", "18:00", "18:30")
+OFFICIAL = {"07:30": "30 7 * * 1-5", "13:30": "30 13 * * 1-5",
+            "15:50": "50 15 * * 1-5"}
 
 def weekly_expiry(day):
     from datetime import timedelta
