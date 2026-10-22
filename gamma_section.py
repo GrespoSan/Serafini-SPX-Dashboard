@@ -479,10 +479,6 @@ def render(store, week, snaps, logs):
     except Exception:
         st.error('Data dello snapshot non riconosciuta nel nome del file.')
         return
-    # Regime VIX della seduta precedente: visualizzazione, nessun effetto sul NET GAMMA.
-    from vix_regime import render as render_vix_regime
-    render_vix_regime(day)
-
     previous = snap['data'].get('prev_day_close')
     st.caption(f'Chiusura SPX precedente dichiarata nel payload Cboe: {previous} (da confrontare con chiusura cash ufficiale)')
     @st.cache_data(ttl=3600, show_spinner=False)
@@ -569,6 +565,10 @@ def render(store, week, snaps, logs):
     st.session_state[f'gamma_compare_context_{week}'] = {
         'day': day, 'ref': ref, 'offset': offset, 'weekly_exp': weekly_exp,
     }
+    # Riserviamo la posizione in alto; C1/P1 saranno letti dai selettori piu' sotto.
+    quadro_operativo = st.empty()
+    asia_c1 = None
+    asia_p1 = None
     computed_profiles = {}
     candidate_0dte = None
     if day.weekday() == 4:
@@ -682,13 +682,12 @@ def render(store, week, snaps, logs):
                 if offset is None:
                     st.caption('Inserisci un differenziale ES − SPX verificato per visualizzare anche i prezzi ES.')
                 st.caption('La numerazione resta SPERIMENTALE. Da Serafini: C1 vicino al Gamma Flip, C2 gamma particolarmente pronunciato, C3 livello esterno vicino a 1 deviazione standard; per Put logica analoga da verificare. Qui il Gamma Flip NON è calcolato; i tre top-per-intensità sono solo una proposta modificabile.')
-                # Contesto della chiusura asiatica, senza interventi sulla formula NET GAMMA.
-                from asia_gamma import render as render_asia_gamma
+                # Unica fonte dei livelli: selettori C1/P1 già esistenti.
+                # Non visualizziamo ancora il quadro: verrà reso nel placeholder in alto.
                 asia_c1 = (chosen['C1']['strike_spx'] + offset
                            if offset is not None and 'C1' in chosen else None)
                 asia_p1 = (chosen['P1']['strike_spx'] + offset
                            if offset is not None and 'P1' in chosen else None)
-                render_asia_gamma(day, asia_c1, asia_p1)
                 # Sezione separata: interpretazione della struttura, mai inferenza
                 # automatica sul verso delle singole transazioni.
                 with st.expander('Struttura opzionale — 2 Vertical + Strangle (SPERIMENTALE v13)', expanded=True):
@@ -721,6 +720,15 @@ def render(store, week, snaps, logs):
                                candidate_csv(candidate_0dte, offset),
                                file_name=f'Candidati_Top3_Gamma_{day.isoformat()}_{choice}.csv',
                                mime='text/csv', key=f'v9_candidates_{choice}')
+    # Il placeholder compare sopra i profili, ma viene riempito dopo la selezione C/P.
+    # Streamlit aggiorna il quadro al cambiamento di snapshot, basis o selettori.
+    with quadro_operativo.container():
+        st.subheader('QUADRO OPERATIVO — ORE 09:00')
+        from vix_regime import render as render_vix_regime
+        from asia_gamma import render as render_asia_gamma
+        render_vix_regime(day)
+        st.divider()
+        render_asia_gamma(day, asia_c1, asia_p1)
     st.subheader('Esporta i due profili su TradingView')
     if offset is None:
         st.warning('Per esportare sul grafico del future ES inserisci prima un differenziale ES − SPX verificato. Non assumiamo zero automaticamente.')
