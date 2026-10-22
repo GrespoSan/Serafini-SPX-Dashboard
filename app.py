@@ -77,6 +77,8 @@ def describe_slot(slot):
     name = str(slot or '').strip()
     if name == '30 7 * * 1-5':
         return 'Mattina 07:30'
+    if name == '30 13 * * 1-5':
+        return '13:30'
     if name == '30 15 * * 1-5':
         return 'Pomeriggio 15:30 (storico)'
     if name == '46 15 * * 1-5':
