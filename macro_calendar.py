@@ -147,8 +147,16 @@ def _prepare(raw, today):
 def render():
     now = datetime.now(ROME)
     today = now.date()
-    st.markdown("### Calendario macro USA — eventi da monitorare")
-    st.caption("Dati: [Finance Calendar](https://www.financecalendar.com)")
+    st.markdown(
+        '<div style="display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap;'
+        'margin:0 0 0.65rem 0">'
+        '<h3 style="margin:0;padding:0">Calendario macro USA — eventi da monitorare</h3>'
+        '<span style="font-size:0.82rem;color:#999">Dati: '
+        '<a href="https://www.financecalendar.com" target="_blank" '
+        'rel="noopener noreferrer">Finance Calendar</a></span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
     try:
         # Includiamo ieri UTC/NY per gestire la finestra di cambiamento DST;
         # date nel UI filtrate invece in Europe/Rome.
