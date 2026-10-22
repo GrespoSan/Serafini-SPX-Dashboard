@@ -186,7 +186,10 @@ store = Store(url, service_key, bucket)
 # Avviso macro al termine del login, in cima alla dashboard.
 from macro_calendar import render as render_macro_calendar
 render_macro_calendar()
-week = week_choice()
+# Una sola riga: scelta della settimana a sinistra e conteggi a destra.
+col_week, col_snapshots, col_logs = st.columns([2.2, 1, 1], gap='medium', vertical_alignment='bottom')
+with col_week:
+    week = week_choice()
 
 try:
     snaps = store.list(f'{week}/snapshots/')
@@ -195,9 +198,8 @@ except Exception:
     st.error('Impossibile elencare gli snapshot. Controlla Secrets e bucket Supabase.')
     st.stop()
 
-c1, c2 = st.columns(2)
-c1.metric('Snapshot distinti', len(snaps))
-c2.metric('Registri', len(logs))
+col_snapshots.metric('Snapshot distinti', len(snaps))
+col_logs.metric('Registri', len(logs))
 
 if logs:
     rows = []
