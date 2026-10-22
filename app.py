@@ -251,7 +251,7 @@ with st.container(key="manual_cboe_centered"):
     render_manual_acquisition(role, week, store)
 
 # Calcolo di sola lettura, anche per il ruolo amici. Nessuna cancellazione qui.
-with st.expander('NET GAMMA 0DTE / Weekly — modulo in verifica', expanded=False):
+with st.expander('NET GAMMA 0DTE / Weekly', expanded=False):
     from gamma_section import render
     render(store, week, snaps, logs)
 
