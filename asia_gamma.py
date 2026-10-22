@@ -48,12 +48,15 @@ def asian_session(target: date):
         raise ValueError("Timestamp ES duplicati nella sessione asiatica.")
     missing = expected.difference(bars.index)
     extra = bars.index.difference(expected)
-    if len(missing) or len(extra) or len(bars) != len(expected):
+    if len(extra) or len(missing) > 1 or len(bars) < len(expected) - 1:
         raise ValueError(
             f"Sessione incompleta: {len(bars)}/{len(expected)} barre; "
-            f"{len(missing)} mancanti, {len(extra)} fuori griglia. "
-            "Non stimiamo massimo/minimo su una sessione incompleta."
+            f"{len(missing)} mancanti, {len(extra)} fuori griglia."
         )
+    if expected[-1] not in bars.index:
+        raise ValueError("Manca la barra conclusiva 08:55–09:00: chiusura non verificabile.")
+    # Una sola barra mancante non impedisce la lettura dei prezzi disponibili;
+    # gli estremi pero' restano provvisori.
     high = pd.to_numeric(_column(bars, "High"), errors="coerce")
     low = pd.to_numeric(_column(bars, "Low"), errors="coerce")
     close = pd.to_numeric(_column(bars, "Close"), errors="coerce")
@@ -68,6 +71,7 @@ def asian_session(target: date):
     return {
         "high": hi, "low": lo, "close": last,
         "bars": len(bars), "expected": len(expected),
+        "missing_times": [t.strftime("%H:%M") for t in missing],
         "source": "Yahoo Finance ES=F · barre 5 minuti, 00:00–09:00 Roma",
     }
 
@@ -92,14 +96,20 @@ def render(target: date, c1_es, p1_es):
     a.metric("Massimo Asia", f"{hi:,.2f}")
     b.metric("Minimo Asia", f"{lo:,.2f}")
     c.metric("Chiusura ore 09:00", f"{price:,.2f}")
-    st.caption(f"{result['source']} · {result['bars']}/{result['expected']} barre verificate.")
+    if result["missing_times"]:
+        st.warning("Massimo e minimo PROVVISORI: manca la barra delle " +
+                   ", ".join(result["missing_times"]) +
+                   f" ({result['bars']}/{result['expected']} barre). "
+                   "La chiusura delle 09:00 è disponibile; gli estremi potrebbero cambiare.")
+    else:
+        st.caption(f"{result['source']} · {result['bars']}/{result['expected']} barre verificate.")
 
     if c1_es is None or p1_es is None or not p1_es < c1_es:
         st.info("Per classificare la posizione, seleziona C1 e P1 validi "
                 "e indica il differenziale ES − SPX.")
         return
 
-    st.caption(f"Riferimenti NET GAMMA in ES: C1 {c1_es:,.2f} · P1 {p1_es:,.2f}")
+    st.markdown(f"**Riferimenti NET GAMMA (ES): C1 {c1_es:,.2f} · P1 {p1_es:,.2f}**")
     if price > c1_es:
         zone = "Sopra C1 — zona superiore"
     elif price < p1_es:
@@ -123,6 +133,7 @@ def render(target: date, c1_es, p1_es):
         behavior = "La sessione ha toccato uno o entrambi i livelli"
 
     st.markdown(f"**Posizione alle 09:00:** {zone}")
-    st.markdown(f"**Andamento della sessione:** {behavior}")
+    st.markdown(f"**Andamento della sessione:** {behavior}" +
+                (" (provvisorio: barra mancante)" if result["missing_times"] else ""))
     st.caption("Confronto con candidati C1/P1 sperimentali: "
                "non è una misura diretta del gamma dei dealer.")
