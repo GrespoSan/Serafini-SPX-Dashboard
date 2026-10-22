@@ -72,6 +72,9 @@ def asian_session(target: date):
         "high": hi, "low": lo, "close": last,
         "bars": len(bars), "expected": len(expected),
         "missing_times": [t.strftime("%H:%M") for t in missing],
+        "timeline": [{"time": t.strftime("%H:%M"), "high": float(high.loc[t]),
+                      "low": float(low.loc[t]), "close": float(close.loc[t])}
+                     for t in bars.index],
         "source": "Yahoo Finance ES=F · barre 5 minuti, 00:00–09:00 Roma",
     }
 
@@ -81,6 +84,27 @@ def close_at_nine(target: date):
     result = asian_session(target)
     return {"price": result["close"], "source": result["source"],
             "time": target.isoformat() + " 09:00"}
+
+
+
+def level_events(result, level, name):
+    """Transizioni sulle CHIUSURE 5m, senza inventare ordine degli spike intrabar."""
+    events = []
+    rows = result["timeline"]
+    missing = set(result["missing_times"])
+    for prev, current in zip(rows, rows[1:]):
+        prev_time = datetime.strptime(prev["time"], "%H:%M")
+        cur_time = datetime.strptime(current["time"], "%H:%M")
+        if (cur_time - prev_time).total_seconds() != 300:
+            continue  # Una lacuna impedisce di localizzare l'attraversamento.
+        a, b = prev["close"] - level, current["close"] - level
+        if a <= 0 < b:
+            events.append(f'{name} superato al rialzo: chiusura {current["time"]}')
+        elif a >= 0 > b:
+            events.append(f'{name} perso al ribasso: chiusura {current["time"]}')
+    touched = any(row["low"] <= level <= row["high"] for row in rows)
+    recovered = rows[-1]["close"] > level
+    return events, touched, recovered
 
 
 def render(target: date, c1_es, p1_es):
@@ -135,5 +159,20 @@ def render(target: date, c1_es, p1_es):
     st.markdown(f"**Posizione alle 09:00:** {zone}")
     st.markdown(f"**Andamento della sessione:** {behavior}" +
                 (" (provvisorio: barra mancante)" if result["missing_times"] else ""))
+    with st.expander("Cronologia attraversamenti C1 / P1 (chiusure 5 minuti)", expanded=True):
+        for name, level in (("P1", p1_es), ("C1", c1_es)):
+            events, touched, recovered = level_events(result, level, name)
+            st.markdown(f"**{name} — {level:,.2f} ES**")
+            if events:
+                for event in events:
+                    st.write("• " + event)
+            else:
+                st.caption("Nessun attraversamento confermato dalle chiusure consecutive a 5 minuti.")
+            if touched and not events:
+                st.caption("Livello toccato dalle oscillazioni High/Low, ma senza attraversamento "
+                           "confermato dalle chiusure consecutive.")
+            st.caption("Alle 09:00: " + ("sopra il livello (recuperato/tenuto)" if recovered
+                                       else "al livello o sotto il livello") +
+                       ". Le transizioni vicine a eventuali barre mancanti non sono verificabili.")
     st.caption("Confronto con candidati C1/P1 sperimentali: "
                "non è una misura diretta del gamma dei dealer.")
