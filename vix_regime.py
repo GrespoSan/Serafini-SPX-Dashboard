@@ -101,39 +101,12 @@ def previous_vix_curve(target_day):
 
 
 def render(target_day):
-    """Mostra regime e buffer affiancati; nessun impatto sui calcoli NET GAMMA."""
-    auto = None
+    """Mostra regime e buffer affiancati, senza modificare NET GAMMA."""
     try:
         auto = previous_vix_curve(target_day)
-    except Exception:
-        st.warning("Settlement VIX non disponibile automaticamente: puoi inserire "
-                   "la percentuale manualmente, senza stimare valori mancanti.")
-
-    key = f"vix_contango_override_{target_day.isoformat()}"
-    with st.expander("Dettagli VIX e percentuale manuale", expanded=False):
-        if auto:
-            st.caption(f"Cboe {auto['day']} · {auto['m1_symbol']} ({auto['m1_expiry']}): "
-                       f"{auto['m1']:.4f} · {auto['m2_symbol']} ({auto['m2_expiry']}): "
-                       f"{auto['m2']:.4f} · contango {auto['contango_pct']:+.2f}%")
-        override = st.text_input(
-            "Contango % manuale (facoltativo, prevale sul dato automatico)",
-            key=key, placeholder="Es. -3,36",
-        )
-        st.markdown(f"[Settlement Cboe]({SOURCE_PAGE}) · [Volchart](https://volchart.io/historical)")
-        st.caption("Primi due futures VX mensili non scaduti, settlement della seduta "
-                   "precedente. Nessuna modifica ai livelli NET GAMMA.")
-
-    pct = None
-    if override.strip():
-        try:
-            value = float(override.strip().replace(",", "."))
-            if not -100 < value < 100:
-                raise ValueError()
-            pct = value
-        except ValueError:
-            st.error("Contango manuale non valido: inserisci una percentuale numerica.")
-    elif auto:
         pct = auto["contango_pct"]
+    except Exception:
+        pct = None
 
     if pct is None:
         regime, buffer = "Non disponibile", "Non determinato"
@@ -141,10 +114,8 @@ def render(target_day):
         regime, buffer = f"Backwardation {pct:+.2f}%", "15 punti"
     elif pct < 1.5:
         regime, buffer = f"Contango {pct:+.2f}%", "15 punti"
-    elif pct > 1.5:
-        regime, buffer = f"Contango {pct:+.2f}%", "10 punti"
     else:
-        regime, buffer = "Contango +1.50%", "Non determinato"
+        regime, buffer = f"Contango {pct:+.2f}%", "10 punti"
 
     col_regime, col_buffer = st.columns(2, gap="medium")
     with col_regime:
