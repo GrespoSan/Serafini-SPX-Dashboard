@@ -121,10 +121,14 @@ def render(target: date, c1_es, p1_es):
     b.metric("Minimo Asia", f"{lo:,.2f}")
     c.metric("Chiusura ore 09:00", f"{price:,.2f}")
     if result["missing_times"]:
-        st.warning("Massimo e minimo PROVVISORI: manca la barra delle " +
+        message = ("Massimo e minimo PROVVISORI: manca la barra delle " +
                    ", ".join(result["missing_times"]) +
                    f" ({result['bars']}/{result['expected']} barre). "
                    "La chiusura delle 09:00 è disponibile; gli estremi potrebbero cambiare.")
+        st.markdown(
+            f'<span style="color:#ef4444;font-size:0.88rem">{message}</span>',
+            unsafe_allow_html=True,
+        )
     else:
         st.caption(f"{result['source']} · {result['bars']}/{result['expected']} barre verificate.")
 
