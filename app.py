@@ -81,6 +81,8 @@ def describe_slot(slot):
         return 'Pomeriggio 15:30 (storico)'
     if name == '46 15 * * 1-5':
         return 'Pomeriggio 15:46'
+    if name == '50 15 * * 1-5':
+        return 'Pomeriggio 15:50 (verifica ritardo Cboe)'
     if name == '45 7 * * 1-5':
         return 'Recupero mattina 07:45'
     if name == '45 15 * * 1-5':
