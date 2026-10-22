@@ -297,7 +297,7 @@ with col_zip:
         st.caption('Verifica sul tuo PC di poter aprire lo ZIP. Scaricare non elimina i file dal cloud.')
 with col_admin:
     if role == 'admin':
-        with st.expander('Amministrazione — cancellazione dei file cloud', expanded=False):
+        with st.expander('Cancella dati Cboe della settimana dal cloud', expanded=False):
             st.warning('Operazione irreversibile. Prima salva e verifica lo ZIP sul tuo PC.')
             if st.session_state.get('archive_week') != week or not st.session_state.get('archive'):
                 st.info('Prepara lo ZIP prima di cancellare la settimana.')
