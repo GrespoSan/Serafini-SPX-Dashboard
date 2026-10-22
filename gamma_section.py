@@ -682,6 +682,13 @@ def render(store, week, snaps, logs):
                 if offset is None:
                     st.caption('Inserisci un differenziale ES − SPX verificato per visualizzare anche i prezzi ES.')
                 st.caption('La numerazione resta SPERIMENTALE. Da Serafini: C1 vicino al Gamma Flip, C2 gamma particolarmente pronunciato, C3 livello esterno vicino a 1 deviazione standard; per Put logica analoga da verificare. Qui il Gamma Flip NON è calcolato; i tre top-per-intensità sono solo una proposta modificabile.')
+                # Contesto della chiusura asiatica, senza interventi sulla formula NET GAMMA.
+                from asia_gamma import render as render_asia_gamma
+                asia_c1 = (chosen['C1']['strike_spx'] + offset
+                           if offset is not None and 'C1' in chosen else None)
+                asia_p1 = (chosen['P1']['strike_spx'] + offset
+                           if offset is not None and 'P1' in chosen else None)
+                render_asia_gamma(day, asia_c1, asia_p1)
                 # Sezione separata: interpretazione della struttura, mai inferenza
                 # automatica sul verso delle singole transazioni.
                 with st.expander('Struttura opzionale — 2 Vertical + Strangle (SPERIMENTALE v13)', expanded=True):
