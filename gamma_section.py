@@ -260,7 +260,7 @@ def render_comparison(store, week, snaps, logs):
                         f"Passati a dato mancante: {raw_check.get('contracts_become_missing', 0)}.")
                     st.dataframe(raw_check.get('example_largest_declines', []),
                                  hide_index=True, use_container_width=True)
-                if volume_check['alert']:
+                if volume_check['alert'] and not raw_check.get('possible_new_session_volume_reset'):
                     st.warning(
                         f"ATTENZIONE — volumi Cboe potenzialmente non omogenei: "
                         f"{selected_profile} su {volume_check['common_strikes']} strike comuni. "
@@ -271,6 +271,10 @@ def render_comparison(store, week, snaps, logs):
                         "Le variazioni NET GAMMA possono riflettere anche dati Volume "
                         "non confrontabili; non dimostrano l'apertura o chiusura di posizioni."
                     )
+                if volume_check['alert'] and raw_check.get('possible_new_session_volume_reset'):
+                    st.caption("I volumi prima e dopo l'apertura USA non sono "
+                               "direttamente confrontabili come variazione intraday "
+                               "delle posizioni: probabile cambio di sessione Volume.")
                 comparisons, stats = compare_profiles(old_prof, new_prof, offset)
                 main_levels = select_key_levels(comparisons, count_per_sign=4, minimum_separation=5.0)
                 if not main_levels:
