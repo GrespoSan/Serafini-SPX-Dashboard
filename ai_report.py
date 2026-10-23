@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 
 import streamlit as st
 from net_gamma import profile, read_snapshot
+from volume_audit import compare_volume_profiles
 
 ROME = ZoneInfo('Europe/Rome')
 
@@ -150,7 +151,7 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
     for old, new in zip(ordered, ordered[1:]):
         comp = {'initial_file': old['file'], 'final_file': new['file'],
                 'initial_download_rome': old.get('download_rome'), 'final_download_rome': new.get('download_rome'),
-                'profiles': {}}
+                'profiles': {}, 'volume_audit': {}}
         for label in ('0DTE', 'Weekly'):
             a = old['profiles'].get(label, {}).get('strikes', [])
             b = new['profiles'].get(label, {}).get('strikes', [])
@@ -168,12 +169,22 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
                                 'sign_transition': ('PUT_TO_CALL' if prior < 0 < later else
                                                     'CALL_TO_PUT' if prior > 0 > later else None)})
             comp['profiles'][label] = {'common_strikes': len(common), 'changes': changes}
+            audit = compare_volume_profiles(a, b, old.get('quality_counts'), new.get('quality_counts'))
+            comp['volume_audit'][label] = audit
+            if audit['alert']:
+                report['warnings'].append(
+                    f"ALLERTA VOLUME {label}: {old['file'].split('/')[-1]} -> "
+                    f"{new['file'].split('/')[-1]}; "
+                    f"volume {audit['volume_initial']:.0f} -> {audit['volume_final']:.0f} "
+                    f"({audit['volume_change_pct']:+.1f}%), OI {audit['oi_change_pct']:+.1f}%. "
+                    "NET GAMMA potrebbe non essere direttamente confrontabile."
+                )
         report['pairwise_changes'].append(comp)
     if offset is None:
         report['warnings'].append('Differenziale ES–SPX assente: strike_es=null; usare soltanto strike SPX.')
     report['warnings'].append('Le concentrazioni e le variazioni sono descrittive, non dimostrano acquisti/vendite reali di opzioni.')
     # Contesto indipendente: non modifica la formula NET GAMMA.
-    report['schema_version'] = 'serafini_spx_ai_report_v2'
+    report['schema_version'] = 'serafini_spx_ai_report_v3'
     report['market_context'] = {'vix_curve': {'status': 'NON DISPONIBILE'},
                                 'asia_session': {'status': 'NON DISPONIBILE'}}
     try:
@@ -208,13 +219,23 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
                     elif close > c1_es:
                         verdict, zone, color = 'CHIUSURA ASIATICA SOPRA C1 — ZONA SUPERIORE', 'SUPERIORE', 'VERDE'
                     else:
-                        verdict, zone, color = 'CHIUSURA ASIATICA FRA P1 E C1 — AREA FLIP', 'INTERMEDIA', 'NEUTRO'
+                        verdict, zone, color = 'CHIUSURA ASIATICA FRA P1 E C1 — FASCIA INTERMEDIA / FLIP NON VERIFICATO', 'INTERMEDIA', 'AMBRA'
+                    reading = None
+                    if zone == 'INTERMEDIA':
+                        if float(asia['low']) < p1_es and float(asia['high']) < c1_es:
+                            reading = ('Lettura contestuale incerta, con elementi di debolezza: '
+                                       'minimo disponibile sotto P1, massimo disponibile sotto C1, '
+                                       'chiusura sopra P1. Non e un segnale short.')
+                        else:
+                            reading = ('Fra P1 e C1: fascia intermedia; '
+                                       'non identifica il vero Gamma Flip.')
                     result.update({'c1_es': c1_es, 'p1_es': p1_es,
                                    'c1_spx': float(c1), 'p1_spx': float(p1),
                                    'level_source_snapshot': levels.get('snapshot'),
                                    'level_selection': levels.get('selection'),
                                    'relative_to_c1_p1': zone, 'verdict_0900': verdict,
-                                   'display_color': color,
+                                   'display_color': color, 'gamma_flip_calculated': False,
+                                   'context_reading_0900': reading,
                                    'p1_crossings': level_events(asia, p1_es, 'P1')[0],
                                    'c1_crossings': level_events(asia, c1_es, 'C1')[0]})
         report['market_context']['asia_session'] = result
@@ -300,6 +321,11 @@ def pdf_summary(report):
             f"massimo {asia['high']:.2f}; chiusura 09:00 {asia['close_0900_es']:.2f}; "
             f"barre {asia['bars']}/{asia['expected']}.", styles['SPXSmall']))
         story.append(Paragraph(asia.get('verdict_0900', 'Posizione rispetto a C1/P1: NON DETERMINABILE.'), styles['SPXSmall']))
+        if asia.get('context_reading_0900'):
+            story.append(Paragraph(asia['context_reading_0900'], styles['SPXSmall']))
+        if asia.get('missing_times'):
+            story.append(Paragraph('Massimo/minimo Asia provvisori: barre mancanti ' +
+                                   ', '.join(asia['missing_times']) + '.', styles['SPXSmall']))
     else:
         story.append(Paragraph('Sessione asiatica ES: NON DISPONIBILE.', styles['SPXSmall']))
     story.append(Paragraph('Verdetto direzionale: NON DETERMINATO. '
@@ -311,6 +337,22 @@ def pdf_summary(report):
                         _acquisition_label(rec)[:22],
                         rec['file'].split('/')[-1].replace('SPX_CBOE_','')[:24]])
     story.append(table(['Download Roma','Qualita','Slot','File Cboe'],entries,[39*mm,36*mm,38*mm,61*mm]))
+    audits = [(comp, label, check)
+              for comp in report.get('pairwise_changes', [])
+              for label, check in comp.get('volume_audit', {}).items()
+              if check.get('alert')]
+    if audits:
+        story.append(Paragraph('ATTENZIONE: comparabilita del Volume tra snapshot', styles['SPXHeading']))
+        for comp, label, check in audits:
+            story.append(Paragraph(
+                f"<b>{label}</b>: {comp.get('initial_download_rome') or 'n.d.'} &gt; "
+                f"{comp.get('final_download_rome') or 'n.d.'}; "
+                f"Volume sugli strike comuni "
+                f"{check['volume_initial']:.0f} &gt; {check['volume_final']:.0f} "
+                f"({check['volume_change_pct']:+.1f}%), OI ({check['oi_change_pct']:+.1f}%). "
+                "Possibile disomogeneita dei volumi: "
+                "non attribuire automaticamente il cambiamento NET GAMMA alle posizioni.",
+                styles['SPXSmall']))
     story.append(Paragraph('Concentrazioni principali per snapshot (magnitudine NET)', styles['SPXHeading']))
     for rec in report['snapshots']:
         if rec['status'] != 'VALIDO':
@@ -336,7 +378,7 @@ def pdf_summary(report):
             if len(transitions)>12: message+=f' ... +{len(transitions)-12}'
             story.append(Paragraph(f'<b>{label}:</b> {p["common_strikes"]} strike comuni; {len(transitions)} cambi di segno. {message}',styles['SPXSmall']))
     story.append(Spacer(1,5*mm))
-    story.append(Paragraph('Limiti: nessun prezzo successivo ES, Volume Profile, deviazione standard o esito dei trade. Controllare lo snapshot Cboe e il riferimento SPX prima di ogni analisi causale. Gli strike netti non indicano il lato effettivo delle operazioni.', styles['SPXSmall']))
+    story.append(Paragraph('Limiti: nessun prezzo successivo ES, Volume Profile, deviazione standard o esito dei trade. La comparabilita dei volumi non e garantita. Controllare lo snapshot Cboe e il riferimento SPX prima di ogni analisi causale. Gli strike netti non indicano il lato effettivo delle operazioni.', styles['SPXSmall']))
     doc.build(story)
     return buf.getvalue()
 
