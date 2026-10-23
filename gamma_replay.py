@@ -153,9 +153,23 @@ def render(store, week, logs, view_mode=None):
         frames.update(_official_frames(store, week, day, logs))
     available = [(slot, frames[slot]) for slot in SLOTS if slot in frames
                  and frames[slot].get("profiles", {}).get(kind, {}).get("rows")]
-    missing = [s for s in SLOTS if s not in frames]
+    missing = [slot for slot in SLOTS if slot not in frames]
     st.caption(f"Frame disponibili: {len(available)}/{len(SLOTS)} · "
                f"Assenti: {', '.join(missing) if missing else 'nessuno'}")
+    if kind == "Weekly":
+        expiry_selected = weekly_expiry(day)
+        st.caption(f"Weekly osservata: scadenza {expiry_selected:%d/%m/%Y}. "
+                   "Il venerdi si passa alla settimana successiva; non confrontare "
+                   "direttamente giornate con scadenze Weekly differenti.")
+    timestamps = [(slot, str(frame.get("cboe_timestamp_original") or "").strip())
+                  for slot, frame in available]
+    repeated = [(prev_slot, slot) for (prev_slot, prev), (slot, stamp)
+                in zip(timestamps, timestamps[1:]) if stamp and stamp == prev]
+    if repeated:
+        st.warning("Timestamp Cboe identico in rilevamenti consecutivi: " +
+                   ", ".join(f"{start} → {end}" for start, end in repeated) +
+                   ". Possibile chain ripetuta: non attribuire automaticamente "
+                   "a questi frame un nuovo aggiornamento informativo.")
     if not available:
         st.info("Nessun frame replay disponibile per questa data. I frame futuri "
                 "non possono essere ricostruiti retroattivamente.")
