@@ -8,6 +8,7 @@ import streamlit as st
 from net_gamma import profile, profile_csv, read_snapshot
 from volatility_levels import weekly_expiry
 from gamma_compare import compare_profiles
+from volume_audit import compare_volume_profiles
 from gamma_brief import select_key_levels, operational_summary, transition_zones
 from pine_export import make_pine
 from operational_levels import find_candidates, proposed_levels, candidate_csv
@@ -229,6 +230,18 @@ def render_comparison(store, week, snaps, logs):
             if not old_prof['rows'] or not new_prof['rows']:
                 st.info(f'Profilo {selected_profile} non disponibile in uno dei due snapshot.')
             else:
+                volume_check = compare_volume_profiles(old_prof['rows'], new_prof['rows'])
+                if volume_check['alert']:
+                    st.warning(
+                        f"ATTENZIONE — volumi Cboe potenzialmente non omogenei: "
+                        f"{selected_profile} su {volume_check['common_strikes']} strike comuni. "
+                        f"Volume {volume_check['volume_initial']:.0f} → "
+                        f"{volume_check['volume_final']:.0f} "
+                        f"({volume_check['volume_change_pct']:+.1f}%), "
+                        f"Open Interest {volume_check['oi_change_pct']:+.1f}%. "
+                        "Le variazioni NET GAMMA possono riflettere anche dati Volume "
+                        "non confrontabili; non dimostrano l'apertura o chiusura di posizioni."
+                    )
                 comparisons, stats = compare_profiles(old_prof, new_prof, offset)
                 main_levels = select_key_levels(comparisons, count_per_sign=4, minimum_separation=5.0)
                 if not main_levels:
