@@ -217,10 +217,33 @@ def render(store, week, logs, view_mode=None):
             hovertemplate="Livello %{y:,.2f}<br>NET Gamma %{x:+.3f}<extra></extra>",
             name=f"NET Gamma {slot}",
         )
-        # Segnaposto vuoto: conserva i due indici delle tracce per tutti i frame
-        # e per il replay con candele ES, senza mostrare la vecchia linea gialla.
-        marker = go.Scatter(x=[], y=[], mode="lines", showlegend=False)
-        return [bars, marker]
+        # Le tre concentrazioni NET positive/negative piu' intense nel frame.
+        # Il testo compare dalla parte OPPOSTA della barra rispetto all'asse zero:
+        # positivo (verde) a sinistra; negativo (rosso) a destra.
+        selected_positive = sorted(
+            ((strike, v) for strike, v in vals.items() if v > 0),
+            key=lambda item: item[1], reverse=True,
+        )[:3]
+        selected_negative = sorted(
+            ((strike, v) for strike, v in vals.items() if v < 0),
+            key=lambda item: item[1],
+        )[:3]
+        selected = [(strike, v, "middle left") for strike, v in selected_positive]
+        selected += [(strike, v, "middle right") for strike, v in selected_negative]
+        # Piccolo margine per evitare che le cifre tocchino la linea dello zero.
+        label_gap = (bounds[1] - bounds[0]) * 0.012
+        labels = go.Scatter(
+            x=[-label_gap if v > 0 else label_gap for strike, v, side in selected],
+            y=[strike + (offset or 0) for strike, v, side in selected],
+            text=[f"{v:+.1f}" if abs(v) >= 1 else f"{v:+.3f}"
+                  for strike, v, side in selected],
+            textposition=[side for strike, v, side in selected],
+            mode="text", textfont=dict(color="#e2e8f0", size=11),
+            hoverinfo="skip", showlegend=False, cliponaxis=False,
+        )
+        # Restano due tracce per frame: istogramma e sole etichette.
+        # Compatibile anche con l'animazione candele ES + NET GAMMA.
+        return [bars, labels]
 
     def frame_title(slot, item):
         spot = numeric_spot(item)
@@ -292,8 +315,10 @@ def render(store, week, logs, view_mode=None):
                "sull'istogramma. Il timestamp Cboe non dichiara il fuso orario.")
 
     st.caption("Scala NET GAMMA fissa per tutti i frame. Barre verdi: NET positivo; "
-               "rosse: NET negativo. Lo spostamento apparente puo' dipendere "
-               "sia da variazioni delle posizioni sia della Gamma delle opzioni.")
+               "rosse: NET negativo. Accanto all'asse zero: valori delle tre barre "
+               "positive piu' intense a sinistra e delle tre negative piu' intense "
+               "a destra (aggiornati a ogni frame). Lo spostamento apparente puo' "
+               "dipendere sia da variazioni delle posizioni sia della Gamma delle opzioni.")
     table = []
     for slot, item in available:
         rows = item["profiles"][kind]["rows"]
