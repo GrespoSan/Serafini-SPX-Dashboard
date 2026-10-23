@@ -268,9 +268,9 @@ with st.expander('NET GAMMA 0DTE / Weekly', expanded=False):
 with st.expander('Replay e Confronto NET GAMMA', expanded=False):
     mode = st.radio(
         'Modalità di analisi',
-        ('Confronto diretto tra due rilevamenti',
+        ('Replay con candele ES',
          'Replay intraday — evoluzione delle barre',
-         'Replay con candele ES'),
+         'Confronto diretto tra due rilevamenti'),
         index=0,
         key='gamma_analysis_mode',
     )
