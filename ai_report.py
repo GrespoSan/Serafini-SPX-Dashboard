@@ -180,6 +180,20 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
                     "NET GAMMA potrebbe non essere direttamente confrontabile."
                 )
         report['pairwise_changes'].append(comp)
+    volume_alerts = [
+        {'initial_file': comp['initial_file'], 'final_file': comp['final_file'],
+         'profile': label, 'audit': audit}
+        for comp in report['pairwise_changes']
+        for label, audit in comp['volume_audit'].items()
+        if audit.get('alert')
+    ]
+    report['volume_integrity'] = {
+        'status': 'ALLERTA' if volume_alerts else 'NESSUNA ALLERTA DA SOGLIA',
+        'alert_count': len(volume_alerts),
+        'alerts': volume_alerts,
+        'note': ('Solo un filtro di comparabilita per i Volume Cboe; '
+                 'nessuna normalizzazione e nessuna modifica al NET GAMMA.')
+    }
     if offset is None:
         report['warnings'].append('Differenziale ES–SPX assente: strike_es=null; usare soltanto strike SPX.')
     report['warnings'].append('Le concentrazioni e le variazioni sono descrittive, non dimostrano acquisti/vendite reali di opzioni.')
@@ -442,18 +456,22 @@ def render(store, week, snaps, logs):
         st.info('Per includere C1/P1, apri NET GAMMA 0DTE / Weekly e seleziona i livelli per questa data.')
     st.caption('Include tutti gli snapshot della giornata; quelli senza Gamma sono segnalati e non elaborati. '
                'I 50 strike 0DTE e Weekly sono nel JSON. Il PDF e una sintesi, non contiene analisi AI.')
+    # Firma del formato: impedisce il download del vecchio ZIP v2 salvato
+    # nella sessione dopo l'aggiornamento di codice, a parita di parametri.
+    report_key = (week, day.isoformat(), ref, offset,
+                  json.dumps(levels, sort_keys=True), 'serafini_spx_ai_report_v3')
     if st.button('Prepara report per analisi AI',key=f'ai_build_{week}',type='primary'):
         try:
             with st.spinner('Lettura snapshot Cboe e preparazione report...'):
                 report=build_report(store,week,day,ref,offset,selected_levels=levels)
                 binary=export_zip(report)
-            st.session_state['ai_report_ready']={'key':(week,day.isoformat(),ref,offset,json.dumps(levels,sort_keys=True)),
+            st.session_state['ai_report_ready']={'key':report_key,
                                                   'data':binary,'valid':sum(x['status']=='VALIDO' for x in report['snapshots']),
                                                   'total':len(report['snapshots'])}
         except Exception as exc:
             st.error(f'Impossibile preparare il report: {type(exc).__name__}: {str(exc)[:180]}')
     ready=st.session_state.get('ai_report_ready')
-    if ready and ready['key']==(week,day.isoformat(),ref,offset,json.dumps(levels,sort_keys=True)):
+    if ready and ready['key']==report_key:
         st.success(f"Report pronto: {ready['valid']} snapshot validi su {ready['total']} acquisiti.")
         st.download_button('Scarica report JSON + PDF (ZIP)',data=ready['data'],
                            file_name=f'Serafini_SPX_AI_{day.isoformat()}.zip',mime='application/zip',
