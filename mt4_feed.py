@@ -10,6 +10,7 @@ import io
 import json
 import math
 import os
+from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, timezone
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -23,9 +24,12 @@ ROME = ZoneInfo('Europe/Rome')
 
 
 def build_feed(store, day, basis_result):
-    basis = float(basis_result['basis'])
-    if not math.isfinite(basis):
+    basis_raw = float(basis_result['basis'])
+    if not math.isfinite(basis_raw):
         raise ValueError('Differenziale automatico ES-SPX non valido')
+    # Stessa regola della Dashboard: arrotondamento all'intero con ROUND_HALF_UP.
+    # Non spostare le barre MT4 di frazioni di punto (es. +40.307674 -> +40).
+    basis = int(Decimal(str(basis_raw)).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
     iso = day.isocalendar()
     week = f'{iso.year}-W{iso.week:02d}'
     logs = store.list(f'{week}/logs/')
