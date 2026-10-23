@@ -212,12 +212,23 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
         for label, audit in comp['volume_audit'].items()
         if audit.get('alert')
     ]
+    possible_resets = [
+        {'initial_file': comp['initial_file'], 'final_file': comp['final_file'],
+         'profile': label, 'diagnostic': diag}
+        for comp in report['pairwise_changes']
+        for label, diag in comp.get('raw_volume_diagnostic', {}).items()
+        if diag.get('possible_new_session_volume_reset')
+    ]
     report['volume_integrity'] = {
         'status': 'ALLERTA' if volume_alerts else 'NESSUNA ALLERTA DA SOGLIA',
         'alert_count': len(volume_alerts),
+        'possible_us_open_reset_count': len(possible_resets),
+        'possible_us_open_resets': possible_resets,
         'alerts': volume_alerts,
-        'note': ('Solo un filtro di comparabilita per i Volume Cboe; '
-                 'nessuna normalizzazione e nessuna modifica al NET GAMMA.')
+        'note': ('Audit sullo stesso contratto Cboe; distinguere campi mancanti '
+                 'da valori zero. Un possibile reset all apertura USA e una '
+                 'ipotesi da verificare, non una causa certificata. '
+                 'Nessuna modifica a NET GAMMA.')
     }
     if offset is None:
         report['warnings'].append('Differenziale ES–SPX assente: strike_es=null; usare soltanto strike SPX.')
@@ -420,6 +431,20 @@ def pdf_summary(report):
                 f"({check['volume_change_pct']:+.1f}%), OI ({check['oi_change_pct']:+.1f}%). "
                 "Possibile disomogeneita dei volumi: "
                 "non attribuire automaticamente il cambiamento NET GAMMA alle posizioni.",
+                styles['SPXSmall']))
+    resets = report.get('volume_integrity', {}).get('possible_us_open_resets', [])
+    if resets:
+        story.append(Paragraph('Possibile reset giornaliero Volume alla riapertura USA', styles['SPXHeading']))
+        for item in resets:
+            check = item['diagnostic']
+            story.append(Paragraph(
+                f"<b>{item['profile']}</b>: {check['common_contracts']} contratti comuni, "
+                f"Volume {check['volume_previous']:.0f} &gt; {check['volume_current']:.0f} "
+                f"({check['volume_change_pct']:+.1f}%), "
+                f"contratti con calo {check['contracts_volume_lower']}, "
+                f"diventati zero {check['contracts_positive_to_zero']}, "
+                f"diventati mancanti {check['contracts_become_missing']}. "
+                "Ipotesi coerente con l'azzeramento di inizio seduta, non confermata.",
                 styles['SPXSmall']))
     story.append(Paragraph('Concentrazioni principali per snapshot (magnitudine NET)', styles['SPXHeading']))
     for rec in report['snapshots']:
