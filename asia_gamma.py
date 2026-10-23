@@ -284,6 +284,22 @@ def render_asia_context(target: date, profile_0dte, profile_weekly, offset):
                "La soglia di 15 punti è un filtro di esplorazione, non una regola attribuita a Serafini.")
 
 
+def render_context_auto(target: date, profile_0dte, profile_weekly, offset):
+    """Aggiorna le confluenze Asia fino alle 09:45 senza F5."""
+    now = datetime.now(ROME)
+    live = target == now.date() and now.time() < time(9, 45)
+    if not live:
+        render_asia_context(target, profile_0dte, profile_weekly, offset)
+        return
+
+    @st.fragment(run_every="2min")
+    def _live_context():
+        if datetime.now(ROME).time() >= time(9, 45):
+            st.rerun()
+        render_asia_context(target, profile_0dte, profile_weekly, offset)
+    _live_context()
+
+
 def render_auto(target: date, c1_es, p1_es):
     """Aggiorna soltanto il riquadro Asia, senza F5 o ricalcolo NET GAMMA."""
     now = datetime.now(ROME)
