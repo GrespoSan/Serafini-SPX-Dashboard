@@ -217,22 +217,9 @@ def render(store, week, logs, view_mode=None):
             hovertemplate="Livello %{y:,.2f}<br>NET Gamma %{x:+.3f}<extra></extra>",
             name=f"NET Gamma {slot}",
         )
-        spot = numeric_spot(item)
-        if spot is not None:
-            estimated = spot + (offset or 0)
-            price_note = (f"ES stimato {estimated:,.2f}" if offset is not None
-                          else f"SPX Cboe {spot:,.2f}")
-            marker = go.Scatter(
-                x=[bounds[0], bounds[1]], y=[estimated, estimated],
-                mode="lines", line={"color": "#fbbf24", "width": 2.5, "dash": "dash"},
-                name=price_note, showlegend=False,
-                hovertemplate=price_note + "<extra></extra>",
-            )
-        else:
-            marker = go.Scatter(
-                x=[], y=[], mode="lines", showlegend=False,
-                name="Prezzo Cboe non disponibile",
-            )
+        # Segnaposto vuoto: conserva i due indici delle tracce per tutti i frame
+        # e per il replay con candele ES, senza mostrare la vecchia linea gialla.
+        marker = go.Scatter(x=[], y=[], mode="lines", showlegend=False)
         return [bars, marker]
 
     def frame_title(slot, item):
@@ -294,17 +281,15 @@ def render(store, week, logs, view_mode=None):
                 graph = combined_graph(graph, available, day, kind, offset, bounds, ybounds)
                 st.caption("Sinistra: candele ES=F Yahoo 5m, soltanto barre chiuse entro l'ora "
                            "di download di ciascun frame. Destra: identico istogramma NET GAMMA "
-                           "Cboe e linea SPX traslata. Le due fonti possono differire; "
+                           "Cboe. Le due fonti possono differire; "
                            "i dati 5m Yahoo hanno uno storico limitato.")
             except Exception as exc:
                 st.warning(f"Candele ES non disponibili ({exc}). Resta visibile il Replay NET GAMMA originale.")
     st.plotly_chart(graph, use_container_width=True,
                     key=f"replay_chart_{week}_{day}_{kind}_{view_mode}")
-    st.caption("Linea gialla tratteggiata: prezzo SPX rilevato da Cboe, "
-               "traslato sul future ES con il differenziale indicato (se presente). "
-               "Prezzo potenzialmente ritardato; ogni frame usa il proprio prezzo "
-               "storico, mai la quotazione al momento del replay. "
-               "Orario Cboe senza fuso dichiarato.")
+    st.caption("Il prezzo SPX Cboe e l'eventuale ES stimato rimangono nel titolo "
+               "e nella tabella dei rilevamenti; non sono tracciati come linea "
+               "sull'istogramma. Il timestamp Cboe non dichiara il fuso orario.")
 
     st.caption("Scala NET GAMMA fissa per tutti i frame. Barre verdi: NET positivo; "
                "rosse: NET negativo. Lo spostamento apparente puo' dipendere "
