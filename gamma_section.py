@@ -628,9 +628,9 @@ def render(store, week, snaps, logs):
         st.download_button(f'Scarica calcolo CSV {title}', profile_csv(result, offset),
                            file_name=f'NET_GAMMA_{title}_{day.isoformat()}_{choice}.csv', mime='text/csv', key=f'csv_{title}_{choice}')
     if offset is not None and computed_profiles.get('0DTE', {}).get('rows'):
-        from asia_gamma import render_asia_context
+        from asia_gamma import render_context_auto
         with st.expander('Confronto range Asia / concentrazioni Gamma 0DTE + Weekly', expanded=True):
-            render_asia_context(day, computed_profiles.get('0DTE'),
+            render_context_auto(day, computed_profiles.get('0DTE'),
                                 computed_profiles.get('Weekly'), offset)
             st.caption('Dati Gamma dello snapshot selezionato: non attribuire valori '
                        'di rilevamenti successivi alle ore 09:00.')
