@@ -730,7 +730,7 @@ def render(store, week, snaps, logs):
     with st.container():
         st.subheader('QUADRO OPERATIVO — ORE 09:00')
         from vix_regime import render as render_vix_regime
-        from asia_gamma import render as render_asia_gamma
+        from asia_gamma import render_auto as render_asia_gamma
         render_vix_regime(day)
         st.divider()
         render_asia_gamma(day, asia_c1, asia_p1)
