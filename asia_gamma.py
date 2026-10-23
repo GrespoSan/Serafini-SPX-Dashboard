@@ -147,7 +147,7 @@ def render(target: date, c1_es, p1_es):
     elif price < p1_es:
         zone = "Sotto P1 — zona inferiore"
     else:
-        zone = "Tra P1 e C1 — area flip operativa"
+        zone = "Tra P1 e C1 — fascia intermedia (Gamma Flip non calcolato)"
 
     if hi < p1_es:
         behavior = "Intera sessione sotto P1"
@@ -178,7 +178,7 @@ def render(target: date, c1_es, p1_es):
         distance = f"{price - c1_es:,.2f} punti sopra C1"
         relevant = c1_events
     else:
-        verdict = "CHIUSURA ASIATICA FRA P1 E C1 — AREA FLIP"
+        verdict = "CHIUSURA ASIATICA FRA P1 E C1 — FASCIA INTERMEDIA / FLIP NON VERIFICATO"
         distance = f"{price - p1_es:,.2f} punti sopra P1; {c1_es - price:,.2f} punti sotto C1"
         relevant = p1_events + c1_events
     if price < p1_es:
@@ -197,6 +197,19 @@ def render(target: date, c1_es, p1_es):
             unsafe_allow_html=True,
         )
     st.write(distance + ".")
+    if p1_es <= price <= c1_es:
+        if lo < p1_es and hi < c1_es:
+            st.markdown("**Lettura indicativa:** incerta, con elementi di debolezza: "
+                        "il minimo disponibile è sotto P1, mentre il massimo "
+                        "disponibile non raggiunge C1. "
+                        "La chiusura ha comunque recuperato P1. "
+                        "Non è una misura del Gamma Flip né un segnale short.")
+        else:
+            st.caption("Tra P1 e C1 si identifica soltanto una fascia di prezzo, "
+                       "non il Gamma Flip matematico dei dealer.")
+        if result["missing_times"]:
+            st.caption("Massimo/minimo provvisori: le barre assenti possono "
+                       "modificare la lettura del percorso, non la chiusura delle 09:00.")
     if relevant:
         st.caption("Ultimo attraversamento confermato (chiusure 5m): " +
                    relevant[-1] + ".")
@@ -220,6 +233,55 @@ def render(target: date, c1_es, p1_es):
                        ". Le transizioni vicine a eventuali barre mancanti non sono verificabili.")
     st.caption("Confronto con candidati C1/P1 sperimentali: "
                "non è una misura diretta del gamma dei dealer.")
+
+
+
+def render_asia_context(target: date, profile_0dte, profile_weekly, offset):
+    """Evidenzia vicinanze fra estremi Asia e barre 0DTE; NON assegna C/P."""
+    if offset is None or not profile_0dte or not profile_0dte.get("rows"):
+        return
+    try:
+        result = asian_session(target)
+    except Exception as exc:
+        st.caption(f"Confluenze Asia/NET GAMMA non disponibili: {exc}")
+        return
+    weekly_rows = (profile_weekly or {}).get("rows") or []
+    weekly_by_strike = {float(r["strike_spx"]): float(r["net_gamma"])
+                        for r in weekly_rows}
+    data = []
+    # 15 punti e' SOLO una finestra di esplorazione, non un criterio del docente.
+    for edge_name, value in (("Massimo Asia", result["high"]),
+                             ("Minimo Asia", result["low"])):
+        candidates = []
+        for item in profile_0dte["rows"]:
+            strike = float(item["strike_spx"])
+            level = strike + float(offset)
+            distance = level - value
+            if abs(distance) > 15.0:
+                continue
+            net = float(item["net_gamma"])
+            candidates.append((abs(distance), -abs(net), strike, level, net, distance))
+        candidates.sort()
+        for _, _, strike, level, net, distance in candidates[:5]:
+            weekly = weekly_by_strike.get(strike)
+            data.append({
+                "Estremo": edge_name + (" (provv.)" if result["missing_times"] else ""),
+                "Livello ES": round(level, 2),
+                "Scarto ES": round(distance, 2),
+                "NET 0DTE": round(net, 3),
+                "Segno 0DTE": ("Positivo" if net > 0 else "Negativo" if net < 0 else "Zero"),
+                "NET Weekly": (round(weekly, 3) if weekly is not None else None),
+            })
+    st.markdown("**Concentrazioni NET GAMMA vicine al range Asia (studio sperimentale)**")
+    if data:
+        st.dataframe(data, use_container_width=True, hide_index=True)
+    else:
+        st.caption("Nessuno strike 0DTE entro 15 punti dagli estremi disponibili.")
+    st.caption("Mostrati fino a 5 strike 0DTE per estremo, a distanza massima 15 punti ES; "
+               "lo scarto è livello meno estremo (segno positivo = sopra). "
+               "Weekly riporta lo stesso strike, non una conferma automatica. "
+               "La prossimità NON prova concentrazione significativa, Gamma Flip o ruolo C/P. "
+               "La soglia di 15 punti è un filtro di esplorazione, non una regola attribuita a Serafini.")
 
 
 def render_auto(target: date, c1_es, p1_es):
