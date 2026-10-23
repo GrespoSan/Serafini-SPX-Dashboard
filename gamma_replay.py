@@ -305,6 +305,41 @@ def render(store, week, logs, view_mode=None):
                 st.warning(f"Candele ES non disponibili ({exc}). Resta visibile il Replay NET GAMMA originale.")
     st.plotly_chart(graph, use_container_width=True,
                     key=f"replay_chart_{week}_{day}_{kind}_{view_mode}")
+
+    # GIF solo su richiesta: nessuna generazione nei normali rerun del replay.
+    # Conserviamo una sola GIF in memoria per sessione e invalidiamo la cache
+    # se cambiano giorno, scadenza, differenziale o gli snapshot disponibili.
+    gif_signature = (day.isoformat(), kind, offset,
+                     tuple((slot, item.get("clock"),
+                            tuple((float(x["strike_spx"]), float(x["net_gamma"]))
+                                  for x in item["profiles"][kind]["rows"]))
+                           for slot, item in available))
+    gif_key = "replay_gif_last"
+    if st.button("Esporta GIF giornata", key=f"gif_prepare_{week}_{day}_{kind}",
+                 disabled=offset is None or len(available) < 2,
+                 help="Genera solo su richiesta la GIF di tutti i rilevamenti "
+                      "disponibili, con le candele ES fino a ciascun download."):
+        try:
+            from replay_gif import generate_gif
+            with st.spinner("Creazione GIF dai rilevamenti disponibili..."):
+                gif_data, gif_frames = generate_gif(available, day, kind, offset)
+            st.session_state[gif_key] = {
+                "signature": gif_signature, "data": gif_data, "count": gif_frames
+            }
+        except Exception as exc:
+            st.session_state.pop(gif_key, None)
+            st.warning(f"GIF non disponibile: {str(exc)[:220]}")
+    gif_saved = st.session_state.get(gif_key)
+    if gif_saved is not None and gif_saved["signature"] == gif_signature:
+        st.download_button(
+            f"Scarica GIF giornata ({gif_saved['count']} rilevamenti)",
+            data=gif_saved["data"],
+            file_name=f"NET_GAMMA_{kind}_{day:%Y-%m-%d}.gif",
+            mime="image/gif", key=f"gif_download_{week}_{day}_{kind}",
+        )
+    st.caption("GIF manuale: usa solo i rilevamenti disponibili nel replay, "
+               "senza interpolarli. Sono inclusi soltanto i prezzi ES a 5 minuti "
+               "già chiusi al momento di ciascun download.")
     st.caption("Il prezzo SPX Cboe e l'eventuale ES stimato rimangono nel titolo "
                "e nella tabella dei rilevamenti; non sono tracciati come linea "
                "sull'istogramma. Il timestamp Cboe non dichiara il fuso orario.")
