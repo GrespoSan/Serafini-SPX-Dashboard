@@ -217,32 +217,27 @@ def render(store, week, logs, view_mode=None):
             hovertemplate="Livello %{y:,.2f}<br>NET Gamma %{x:+.3f}<extra></extra>",
             name=f"NET Gamma {slot}",
         )
-        # Le tre concentrazioni NET positive/negative piu' intense nel frame.
-        # Il testo compare dalla parte OPPOSTA della barra rispetto all'asse zero:
-        # positivo (verde) a sinistra; negativo (rosso) a destra.
-        selected_positive = sorted(
-            ((strike, v) for strike, v in vals.items() if v > 0),
-            key=lambda item: item[1], reverse=True,
-        )[:3]
-        selected_negative = sorted(
-            ((strike, v) for strike, v in vals.items() if v < 0),
-            key=lambda item: item[1],
-        )[:3]
-        selected = [(strike, v, "middle left") for strike, v in selected_positive]
-        selected += [(strike, v, "middle right") for strike, v in selected_negative]
-        # Piccolo margine per evitare che le cifre tocchino la linea dello zero.
+        # Ogni barra NET GAMMA visualizza il proprio STRIKE SPX accanto
+        # all'asse zero, sul lato opposto rispetto alla barra stessa.
+        # La posizione verticale resta sul prezzo ES convertito, se disponibile.
+        # Non si mostra il valore numerico NET GAMMA come etichetta:
+        # rimane disponibile passando il mouse sulla barra.
+        selected = [(strike, vals[strike]) for strike in strikes
+                    if strike in vals and vals[strike] != 0]
         label_gap = (bounds[1] - bounds[0]) * 0.012
         labels = go.Scatter(
-            x=[-label_gap if v > 0 else label_gap for strike, v, side in selected],
-            y=[strike + (offset or 0) for strike, v, side in selected],
-            text=[f"{v:+.1f}" if abs(v) >= 1 else f"{v:+.3f}"
-                  for strike, v, side in selected],
-            textposition=[side for strike, v, side in selected],
-            mode="text", textfont=dict(color="#e2e8f0", size=11),
+            x=[-label_gap if gamma > 0 else label_gap
+               for strike, gamma in selected],
+            y=[strike + (offset or 0) for strike, gamma in selected],
+            text=[f"{strike:,.2f}".rstrip("0").rstrip(".")
+                  for strike, gamma in selected],
+            textposition=["middle left" if gamma > 0 else "middle right"
+                          for strike, gamma in selected],
+            mode="text", textfont=dict(color="#e2e8f0", size=10),
             hoverinfo="skip", showlegend=False, cliponaxis=False,
         )
-        # Restano due tracce per frame: istogramma e sole etichette.
-        # Compatibile anche con l'animazione candele ES + NET GAMMA.
+        # Esattamente due tracce per frame: barre + etichette degli strike.
+        # Compatibile con l'animazione e con le candele ES.
         return [bars, labels]
 
     def frame_title(slot, item):
@@ -315,10 +310,12 @@ def render(store, week, logs, view_mode=None):
                "sull'istogramma. Il timestamp Cboe non dichiara il fuso orario.")
 
     st.caption("Scala NET GAMMA fissa per tutti i frame. Barre verdi: NET positivo; "
-               "rosse: NET negativo. Accanto all'asse zero: valori delle tre barre "
-               "positive piu' intense a sinistra e delle tre negative piu' intense "
-               "a destra (aggiornati a ogni frame). Lo spostamento apparente puo' "
-               "dipendere sia da variazioni delle posizioni sia della Gamma delle opzioni.")
+               "rosse: NET negativo. Le etichette accanto all'asse zero mostrano "
+               "lo strike SPX di ogni barra (non il valore NET GAMMA): quelle delle "
+               "barre verdi sono a sinistra, quelle delle rosse a destra. "
+               "Se è applicato il differenziale ES−SPX, le barre restano allineate "
+               "ai prezzi ES; gli strike nelle etichette restano SPX. "
+               "Il valore NET GAMMA è disponibile al passaggio del mouse.")
     table = []
     for slot, item in available:
         rows = item["profiles"][kind]["rows"]
