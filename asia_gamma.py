@@ -230,9 +230,10 @@ def render_auto(target: date, c1_es, p1_es):
 
     @st.fragment(run_every="2min")
     def _asian_live_fragment():
-        render(target, c1_es, p1_es)
         current = datetime.now(ROME)
-        if current.time() < time(9, 45):
-            st.caption("Sessione asiatica: aggiornamento automatico ogni 2 minuti "
-                       "fino alle 09:45, senza ricaricare l'app.")
+        if current.time() >= time(9, 45):
+            st.rerun()  # una sola esecuzione completa per interrompere il timer
+        render(target, c1_es, p1_es)
+        st.caption("Sessione asiatica: aggiornamento automatico ogni 2 minuti "
+                   "fino alle 09:45, senza ricaricare l'app.")
     _asian_live_fragment()
