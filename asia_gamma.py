@@ -192,7 +192,10 @@ def render(target: date, c1_es, p1_es):
             unsafe_allow_html=True,
         )
     else:
-        st.markdown(f"### Verdetto ore 09:00: {verdict}")
+        st.markdown(
+            f'### Verdetto ore 09:00: <span style="color:#f59e0b">{verdict}</span>',
+            unsafe_allow_html=True,
+        )
     st.write(distance + ".")
     if relevant:
         st.caption("Ultimo attraversamento confermato (chiusure 5m): " +
