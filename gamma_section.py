@@ -1,14 +1,14 @@
 """Modulo di sola lettura per l'app Serafini SPX Dashboard v2."""
 import gzip
 import json
-from datetime import date, timedelta
+from datetime import date, timedelta, time
 from zoneinfo import ZoneInfo
 from datetime import datetime
 import streamlit as st
 from net_gamma import profile, profile_csv, read_snapshot
 from volatility_levels import weekly_expiry
 from gamma_compare import compare_profiles
-from volume_audit import compare_volume_profiles
+from volume_audit import compare_volume_profiles, inspect_raw_expiry, raw_transition_diagnostic
 from gamma_brief import select_key_levels, operational_summary, transition_zones
 from pine_export import make_pine
 from operational_levels import find_candidates, proposed_levels, candidate_csv
@@ -229,8 +229,37 @@ def render_comparison(store, week, snaps, logs):
             new_prof = profile(newer, expiry, ref)
             if not old_prof['rows'] or not new_prof['rows']:
                 st.info(f'Profilo {selected_profile} non disponibile in uno dei due snapshot.')
+            elif old_prof['expiry'] != new_prof['expiry']:
+                st.warning('Scadenze diverse: i profili non sono confrontabili. '
+                           'Non attribuire a flussi Gamma il cambio di contratto.')
             else:
-                volume_check = compare_volume_profiles(old_prof['rows'], new_prof['rows'])
+                volume_check = compare_volume_profiles(
+                    old_prof['rows'], new_prof['rows'],
+                    old_expiry=old_prof['expiry'], new_expiry=new_prof['expiry'])
+                selected_strikes = {float(x['strike_spx']) for x in old_prof['rows']}
+                selected_strikes &= {float(x['strike_spx']) for x in new_prof['rows']}
+                raw_old = inspect_raw_expiry(older['data']['options'], expiry, selected_strikes)
+                raw_new = inspect_raw_expiry(newer['data']['options'], expiry, selected_strikes)
+                def clock_as_iso(clock):
+                    if not clock:
+                        return None
+                    return datetime.combine(day, time.fromisoformat(clock),
+                                            tzinfo=ZoneInfo('Europe/Rome')).isoformat()
+                raw_check = raw_transition_diagnostic(
+                    raw_old, raw_new, clock_as_iso(first_clock), clock_as_iso(second_clock))
+                if raw_check.get('possible_new_session_volume_reset'):
+                    st.info('Il calo di Volume coincide con il passaggio attraverso '
+                            'l\'apertura USA delle 09:30 New York, con Open Interest '
+                            'stabile: possibile reset giornaliero dei contatori. '
+                            'È un\'ipotesi, non un errore Cboe dimostrato.')
+                with st.expander('Diagnostica Volume originale Cboe (stessi contratti)', expanded=False):
+                    st.caption(
+                        f"Contratti comuni: {raw_check.get('common_contracts', 0)} · "
+                        f"Volume diminuito: {raw_check.get('contracts_volume_lower', 0)} · "
+                        f"Passati a zero: {raw_check.get('contracts_positive_to_zero', 0)} · "
+                        f"Passati a dato mancante: {raw_check.get('contracts_become_missing', 0)}.")
+                    st.dataframe(raw_check.get('example_largest_declines', []),
+                                 hide_index=True, use_container_width=True)
                 if volume_check['alert']:
                     st.warning(
                         f"ATTENZIONE — volumi Cboe potenzialmente non omogenei: "
