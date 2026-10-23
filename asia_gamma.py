@@ -20,7 +20,7 @@ def _column(frame, field):
     return frame[field]
 
 
-@st.cache_data(ttl=900, max_entries=90, show_spinner=False)
+@st.cache_data(ttl=120, max_entries=90, show_spinner=False)
 def asian_session(target: date):
     """Barre 5m [00:00,09:00) Roma; verifica integrita' e OHLC."""
     import yfinance as yf
@@ -48,15 +48,15 @@ def asian_session(target: date):
         raise ValueError("Timestamp ES duplicati nella sessione asiatica.")
     missing = expected.difference(bars.index)
     extra = bars.index.difference(expected)
-    if len(extra) or len(missing) > 1 or len(bars) < len(expected) - 1:
+    # Fino a 3 lacune: rendi gli estremi PROVVISORI, non bloccare anche la chiusura.
+    if len(extra) or len(missing) > 3 or len(bars) < len(expected) - 3:
         raise ValueError(
             f"Sessione incompleta: {len(bars)}/{len(expected)} barre; "
             f"{len(missing)} mancanti, {len(extra)} fuori griglia."
         )
     if expected[-1] not in bars.index:
         raise ValueError("Manca la barra conclusiva 08:55–09:00: chiusura non verificabile.")
-    # Una sola barra mancante non impedisce la lettura dei prezzi disponibili;
-    # gli estremi pero' restano provvisori.
+    # Le barre mancanti non consentono di certificare gli estremi di tutta la sessione.
     high = pd.to_numeric(_column(bars, "High"), errors="coerce")
     low = pd.to_numeric(_column(bars, "Low"), errors="coerce")
     close = pd.to_numeric(_column(bars, "Close"), errors="coerce")
@@ -121,10 +121,14 @@ def render(target: date, c1_es, p1_es):
     b.metric("Minimo Asia", f"{lo:,.2f}")
     c.metric("Chiusura ore 09:00", f"{price:,.2f}")
     if result["missing_times"]:
-        message = ("Massimo e minimo PROVVISORI: manca la barra delle " +
+        missing_count = len(result["missing_times"])
+        description = ("manca la barra delle " if missing_count == 1
+                       else "mancano le barre delle ")
+        message = ("Massimo e minimo PROVVISORI: " + description +
                    ", ".join(result["missing_times"]) +
                    f" ({result['bars']}/{result['expected']} barre). "
-                   "La chiusura delle 09:00 è disponibile; gli estremi potrebbero cambiare.")
+                   "Chiusura delle 09:00 verificata sulla barra finale; "
+                   "gli estremi potrebbero cambiare.")
         st.markdown(
             f'<span style="color:#ef4444;font-size:0.88rem">{message}</span>',
             unsafe_allow_html=True,
@@ -213,3 +217,22 @@ def render(target: date, c1_es, p1_es):
                        ". Le transizioni vicine a eventuali barre mancanti non sono verificabili.")
     st.caption("Confronto con candidati C1/P1 sperimentali: "
                "non è una misura diretta del gamma dei dealer.")
+
+
+def render_auto(target: date, c1_es, p1_es):
+    """Aggiorna soltanto il riquadro Asia, senza F5 o ricalcolo NET GAMMA."""
+    now = datetime.now(ROME)
+    # Solo la giornata odierna, dalla prima apertura della pagina fino alle 09:45.
+    live = target == now.date() and now.time() < time(9, 45)
+    if not live:
+        render(target, c1_es, p1_es)
+        return
+
+    @st.fragment(run_every="2min")
+    def _asian_live_fragment():
+        render(target, c1_es, p1_es)
+        current = datetime.now(ROME)
+        if current.time() < time(9, 45):
+            st.caption("Sessione asiatica: aggiornamento automatico ogni 2 minuti "
+                       "fino alle 09:45, senza ricaricare l'app.")
+    _asian_live_fragment()
