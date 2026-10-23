@@ -265,7 +265,7 @@ with st.expander('NET GAMMA 0DTE / Weekly', expanded=False):
     render(store, week, snaps, logs)
 
 # Confronto e Replay condividono la stessa sezione, con calcoli invariati.
-with st.expander('Replay e Confronto NET GAMMA', expanded=False):
+with st.expander('REPLAY e confronto NET GAMMA', expanded=False):
     mode = st.radio(
         'Modalità di analisi',
         ('Replay con candele ES',
@@ -284,7 +284,7 @@ with st.expander('Replay e Confronto NET GAMMA', expanded=False):
         render_gamma_replay(store, week, logs, view_mode=replay_view)
 
 # Report descrittivo e riproducibile per analisi AI (nessuna chiamata a servizi AI).
-with st.expander('Report giornaliero per analisi AI — JSON + PDF', expanded=False):
+with st.expander('REPORT giornaliero per analisi AI — JSON + PDF', expanded=False):
     from ai_report import render as render_ai_report
     render_ai_report(store, week, snaps, logs)
 
