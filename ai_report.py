@@ -10,7 +10,7 @@ import json
 import math
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, datetime
+from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
 import streamlit as st
@@ -222,7 +222,35 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
                   'close_0900_es': asia['close'],
                   'relative_to_c1_p1': 'NON DETERMINABILE'}
         levels = selected_levels or {}
-        if levels.get('basis') is not None and offset is not None and abs(float(levels['basis'])-float(offset)) < 1e-8 and abs(float(levels.get('reference_spx', -1))-float(reference)) < 1e-8:
+        # Anti-look-ahead: un livello definito dopo le 09:00 non puo'
+        # essere presentato come un verdetto conoscibile alle 09:00.
+        source_name = str(levels.get('snapshot') or '')
+        source_rec = next((item for item in report['snapshots']
+                           if item['file'].rsplit('/', 1)[-1] == source_name), None)
+        source_time = None
+        if source_rec and source_rec.get('download_utc'):
+            try:
+                source_time = datetime.fromisoformat(
+                    str(source_rec['download_utc']).replace('Z', '+00:00'))
+                if source_time.tzinfo is None:
+                    source_time = None
+                else:
+                    source_time = source_time.astimezone(ROME)
+            except (TypeError, ValueError, OverflowError):
+                source_time = None
+        cutoff = datetime.combine(day, time(9, 0), tzinfo=ROME)
+        levels_known_at_0900 = bool(
+            source_time and source_time.date() == day and source_time <= cutoff)
+        if source_name and not levels_known_at_0900:
+            result['level_source_snapshot'] = source_name
+            result['level_selection_timing'] = 'SUCCESSIVO ALLE 09:00 O NON VERIFICATO'
+            result['context_reading_0900'] = (
+                'Livelli C1/P1 selezionati da uno snapshot successivo alle 09:00 '
+                'o senza orario attendibile: confronto ex post, non verdetto delle 09:00.')
+            report['warnings'].append(
+                'Anti-look-ahead Asia: livelli C1/P1 esclusi dal verdetto delle 09:00 '
+                'perche lo snapshot selezionato non risulta acquisito entro le 09:00 Roma.')
+        if levels_known_at_0900 and levels.get('basis') is not None and offset is not None and abs(float(levels['basis'])-float(offset)) < 1e-8 and abs(float(levels.get('reference_spx', -1))-float(reference)) < 1e-8:
             c1, p1 = levels.get('c1_spx'), levels.get('p1_spx')
             if c1 is not None and p1 is not None:
                 c1_es, p1_es = float(c1)+offset, float(p1)+offset
@@ -253,8 +281,9 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
                                    'p1_crossings': level_events(asia, p1_es, 'P1')[0],
                                    'c1_crossings': level_events(asia, c1_es, 'C1')[0]})
         report['market_context']['asia_session'] = result
-        if result['relative_to_c1_p1'] == 'NON DETERMINABILE':
-            report['warnings'].append('Chiusura asiatica disponibile, ma C1/P1 selezionati e basis coerente non disponibili.')
+        if result['relative_to_c1_p1'] == 'NON DETERMINABILE' and not (
+                source_name and not levels_known_at_0900):
+            report['warnings'].append('Chiusura asiatica disponibile, ma C1/P1 selezionati, snapshot antecedente alle 09:00 e basis coerente non disponibili.')
     except Exception as exc:
         report['market_context']['asia_session']['reason'] = type(exc).__name__
         report['warnings'].append('Sessione asiatica 5m non disponibile o incompleta.')
@@ -459,7 +488,7 @@ def render(store, week, snaps, logs):
     # Firma del formato: impedisce il download del vecchio ZIP v2 salvato
     # nella sessione dopo l'aggiornamento di codice, a parita di parametri.
     report_key = (week, day.isoformat(), ref, offset,
-                  json.dumps(levels, sort_keys=True), 'serafini_spx_ai_report_v3')
+                  json.dumps(levels, sort_keys=True), 'serafini_spx_ai_report_v3_antifuture')
     if st.button('Prepara report per analisi AI',key=f'ai_build_{week}',type='primary'):
         try:
             with st.spinner('Lettura snapshot Cboe e preparazione report...'):
