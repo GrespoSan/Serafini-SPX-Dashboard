@@ -706,6 +706,14 @@ def render(store, week, snaps, logs):
                            if offset is not None and 'C1' in chosen else None)
                 asia_p1 = (chosen['P1']['strike_spx'] + offset
                            if offset is not None and 'P1' in chosen else None)
+                # Per il QUADRO delle 09:00 si possono usare soltanto livelli
+                # acquisiti entro quell'ora; altrimenti sarebbero look-ahead.
+                if download_clock is None or download_clock > '09:00':
+                    asia_c1 = None
+                    asia_p1 = None
+                    st.caption('Quadro 09:00: livelli dello snapshot selezionato '
+                               'successivi alle 09:00 o senza orario verificato. '
+                               'Non li uso per ricostruire un verdetto storico.')
                 # Espone i livelli effettivamente selezionati al report AI,
                 # identificando snapshot e riferimento: mai riusare livelli di un altro giorno.
                 st.session_state[f'asia_levels_{day.isoformat()}'] = {
