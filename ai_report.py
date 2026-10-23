@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 
 import streamlit as st
 from net_gamma import profile, read_snapshot
-from volume_audit import compare_volume_profiles
+from volume_audit import compare_volume_profiles, inspect_raw_expiry, raw_transition_diagnostic
 
 ROME = ZoneInfo('Europe/Rome')
 
@@ -101,6 +101,7 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
         'expiries': {'0DTE': day.isoformat(), 'Weekly': weekly.isoformat()},
         'snapshots': [], 'pairwise_changes': [], 'warnings': [],
     }
+    raw_probes = {}  # Analisi dei campi originali; non esporta la chain integrale.
     # Scarica soltanto gli snapshot del giorno selezionato; richieste di rete parallele limitate.
     # L'elaborazione rimane nell'ordine cronologico dei file.
     def fetch_snapshot(name):
@@ -134,7 +135,13 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
                         rec['profiles'][label] = {'expiry': expiry.isoformat(), 'contracts': result['contracts'],
                                                    'selection': result['selection'], 'strike_count': len(rows),
                                                    'main_concentrations_by_absolute_net': _brief(rows), 'strikes': rows}
-                        if not rows:
+                        if rows:
+                            probe = inspect_raw_expiry(
+                                snap['data']['options'], expiry,
+                                {float(v['strike_spx']) for v in rows})
+                            raw_probes.setdefault(name, {})[label] = probe
+                            rec.setdefault('raw_volume_field_quality', {})[label] = probe['counts']
+                        else:
                             report['warnings'].append(f'{name} {label}: nessuna opzione per la scadenza')
                     except (ValueError, KeyError, TypeError) as err:
                         rec['profiles'][label] = {'error': str(err)[:220]}
@@ -152,9 +159,27 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
         comp = {'initial_file': old['file'], 'final_file': new['file'],
                 'initial_download_rome': old.get('download_rome'), 'final_download_rome': new.get('download_rome'),
                 'profiles': {}, 'volume_audit': {}}
+        comp['raw_volume_diagnostic'] = {}
         for label in ('0DTE', 'Weekly'):
-            a = old['profiles'].get(label, {}).get('strikes', [])
-            b = new['profiles'].get(label, {}).get('strikes', [])
+            p_old = old['profiles'].get(label, {})
+            p_new = new['profiles'].get(label, {})
+            a = p_old.get('strikes', [])
+            b = p_new.get('strikes', [])
+            old_expiry, new_expiry = p_old.get('expiry'), p_new.get('expiry')
+            if old_expiry and new_expiry and old_expiry != new_expiry:
+                comp['profiles'][label] = {
+                    'status': 'SCADENZA DIVERSA', 'common_strikes': 0, 'changes': [],
+                    'old_expiry': old_expiry, 'new_expiry': new_expiry}
+                comp['volume_audit'][label] = compare_volume_profiles(
+                    a, b, old_expiry=old_expiry, new_expiry=new_expiry)
+                report['warnings'].append(
+                    f"{label}: {old_expiry} -> {new_expiry}; confronto escluso.")
+                continue
+            raw_old = raw_probes.get(old['file'].rsplit('/', 1)[-1], {}).get(label)
+            raw_new = raw_probes.get(new['file'].rsplit('/', 1)[-1], {}).get(label)
+            if raw_old and raw_new:
+                comp['raw_volume_diagnostic'][label] = raw_transition_diagnostic(
+                    raw_old, raw_new, old.get('download_utc'), new.get('download_utc'))
             oldmap = {r['strike_spx']: r for r in a}
             newmap = {r['strike_spx']: r for r in b}
             common = sorted(oldmap.keys() & newmap.keys())
@@ -169,7 +194,7 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
                                 'sign_transition': ('PUT_TO_CALL' if prior < 0 < later else
                                                     'CALL_TO_PUT' if prior > 0 > later else None)})
             comp['profiles'][label] = {'common_strikes': len(common), 'changes': changes}
-            audit = compare_volume_profiles(a, b, old.get('quality_counts'), new.get('quality_counts'))
+            audit = compare_volume_profiles(a, b, old.get('quality_counts'), new.get('quality_counts'), old_expiry, new_expiry)
             comp['volume_audit'][label] = audit
             if audit['alert']:
                 report['warnings'].append(
@@ -198,7 +223,7 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
         report['warnings'].append('Differenziale ES–SPX assente: strike_es=null; usare soltanto strike SPX.')
     report['warnings'].append('Le concentrazioni e le variazioni sono descrittive, non dimostrano acquisti/vendite reali di opzioni.')
     # Contesto indipendente: non modifica la formula NET GAMMA.
-    report['schema_version'] = 'serafini_spx_ai_report_v3'
+    report['schema_version'] = 'serafini_spx_ai_report_v4'
     report['market_context'] = {'vix_curve': {'status': 'NON DISPONIBILE'},
                                 'asia_session': {'status': 'NON DISPONIBILE'}}
     try:
@@ -488,7 +513,7 @@ def render(store, week, snaps, logs):
     # Firma del formato: impedisce il download del vecchio ZIP v2 salvato
     # nella sessione dopo l'aggiornamento di codice, a parita di parametri.
     report_key = (week, day.isoformat(), ref, offset,
-                  json.dumps(levels, sort_keys=True), 'serafini_spx_ai_report_v3_antifuture')
+                  json.dumps(levels, sort_keys=True), 'serafini_spx_ai_report_v4_rawvolume')
     if st.button('Prepara report per analisi AI',key=f'ai_build_{week}',type='primary'):
         try:
             with st.spinner('Lettura snapshot Cboe e preparazione report...'):
