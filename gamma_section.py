@@ -627,8 +627,15 @@ def render(store, week, snaps, logs):
             st.dataframe(frame, use_container_width=True, hide_index=True)
         st.download_button(f'Scarica calcolo CSV {title}', profile_csv(result, offset),
                            file_name=f'NET_GAMMA_{title}_{day.isoformat()}_{choice}.csv', mime='text/csv', key=f'csv_{title}_{choice}')
+    if offset is not None and computed_profiles.get('0DTE', {}).get('rows'):
+        from asia_gamma import render_asia_context
+        with st.expander('Confronto range Asia / concentrazioni Gamma 0DTE + Weekly', expanded=True):
+            render_asia_context(day, computed_profiles.get('0DTE'),
+                                computed_profiles.get('Weekly'), offset)
+            st.caption('Dati Gamma dello snapshot selezionato: non attribuire valori '
+                       'di rilevamenti successivi alle ore 09:00.')
     if candidate_0dte is not None:
-        with st.expander('Livelli operativi C/P — tre barre più intense (SPERIMENTALE v10)', expanded=False):
+        with st.expander('Livelli C/P proposti solo per intensita — controllo sperimentale v10', expanded=False):
             st.warning('Questi sono CANDIDATI basati sulle tre barre NET GAMMA più intense per lato, NON livelli C1–C3/P1–P3 confermati da Serafini. Non sono segnali automatici. Il calcolo NET GAMMA resta invariato.')
             st.caption('Criterio fisso di prova: tra i 25 strike sopra la chiusura SPX, le tre barre NET GAMMA positive più lunghe; tra i 25 sotto, le tre barre negative con valore assoluto maggiore. Nessun confronto con le barre vicine. C1→C3 in ordine crescente di prezzo, P1→P3 in ordine decrescente.')
             suggestions = proposed_levels(candidate_0dte)
