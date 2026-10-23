@@ -629,7 +629,7 @@ def render(store, week, snaps, logs):
                            file_name=f'NET_GAMMA_{title}_{day.isoformat()}_{choice}.csv', mime='text/csv', key=f'csv_{title}_{choice}')
     if offset is not None and computed_profiles.get('0DTE', {}).get('rows'):
         from asia_gamma import render_context_auto
-        with st.expander('Confronto range Asia / concentrazioni Gamma 0DTE + Weekly', expanded=True):
+        with st.expander('Confronto range Asia / concentrazioni Gamma 0DTE + Weekly', expanded=False):
             render_context_auto(day, computed_profiles.get('0DTE'),
                                 computed_profiles.get('Weekly'), offset)
             st.caption('Dati Gamma dello snapshot selezionato: non attribuire valori '
