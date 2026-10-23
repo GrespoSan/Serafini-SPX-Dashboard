@@ -1,4 +1,4 @@
-"""Replay temporaneo intraday: 2 snapshot ufficiali + 9 frame compatti di studio.
+"""Replay temporaneo intraday: 3 snapshot ufficiali + replay intraday compatto.
 
 Il grafico espone ORARI DI DOWNLOAD a Roma; il timestamp Cboe non viene
 interpretato come tempo UTC o come ora italiana. Nessuna scrittura in Supabase.
@@ -14,9 +14,10 @@ import streamlit as st
 from net_gamma import profile, read_snapshot
 
 ROME = ZoneInfo("Europe/Rome")
-SLOTS = ("07:30", "11:00", "13:30", "15:46", "16:01", "16:16",
-         "16:31", "16:46", "17:30", "18:00", "18:30")
-OFFICIAL = {"07:30": "30 7 * * 1-5", "15:46": "46 15 * * 1-5"}
+SLOTS = ("07:30", "11:00", "13:30", "15:50", "16:01", "16:16",
+         "16:31", "16:46", "17:30", "18:00", "18:30", "20:00", "21:30")
+OFFICIAL = {"07:30": "30 7 * * 1-5", "13:30": "30 13 * * 1-5",
+            "15:50": "50 15 * * 1-5"}
 
 def weekly_expiry(day):
     from datetime import timedelta
@@ -126,7 +127,7 @@ def _study_frames(store, week, day):
 def render(store, week, logs, view_mode=None):
     st.subheader("Replay / History — evoluzione NET GAMMA")
     st.caption("Studio intraday, separato dal metodo ufficiale. "
-               "I nove frame intermedi sono temporanei; vengono rimossi dopo circa 2 giorni "
+               "I frame intermedi sono conservati per circa 30 giorni; "
                "dal processo Cloud. Nessun file originale Cboe aggiuntivo archiviato.")
     iso_year, iso_week = map(int, week.split("-W"))
     from datetime import timedelta
@@ -367,6 +368,6 @@ def render(store, week, logs, view_mode=None):
                       "Tipo": item["origin"], "Top 3 positivo": fmt(upper),
                       "Top 3 negativo": fmt(lower)})
     st.dataframe(table, hide_index=True, use_container_width=True)
-    st.caption("I due frame ufficiali provengono dall'archivio invariato. "
-               "I nove frame intermedi NON entrano nei report ufficiali. "
+    st.caption("I tre frame ufficiali provengono dall'archivio invariato. "
+               "I frame intermedi NON entrano nei report ufficiali. "
                "L'orario di download non garantisce la freschezza della chain Cboe.")
