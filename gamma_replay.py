@@ -5,7 +5,7 @@ interpretato come tempo UTC o come ora italiana. Nessuna scrittura in Supabase.
 """
 import json
 import math
-from datetime import date, datetime
+from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
 import plotly.graph_objects as go
@@ -13,6 +13,7 @@ import streamlit as st
 
 from net_gamma import profile, read_snapshot
 from replay_scale import dynamic_gamma_bounds
+from spx_market_clock import classify_0dte_download
 
 ROME = ZoneInfo("Europe/Rome")
 SLOTS = ("07:30", "11:00", "13:30", "15:50", "16:01", "16:16",
@@ -81,6 +82,7 @@ def _official_frames(store, week, day, logs):
                     continue
                 result[slot] = {
                     "slot_rome": slot, "clock": clock.strftime("%H:%M:%S"),
+                    "download_rome": clock.isoformat(timespec="seconds"),
                     "origin": "UFFICIALE", "spot": snap["data"].get("current_price"),
                     "reference_spx": ref, "profiles": profiles,
                     "cboe_timestamp_original": snap.get("timestamp"),
@@ -114,6 +116,7 @@ def _study_frames(store, week, day):
                 continue
             data[slot] = {
                 "slot_rome": slot, "clock": dt.strftime("%H:%M:%S"),
+                "download_rome": dt.isoformat(timespec="seconds"),
                 "origin": "STUDIO NON UFFICIALE",
                 "spot": item.get("spot_spx"),
                 "reference_spx": item.get("reference_spx"),
@@ -153,11 +156,30 @@ def render(store, week, logs, view_mode=None):
     with st.spinner("Caricamento profili compatti e snapshot ufficiali..."):
         frames = _study_frames(store, week, day)
         frames.update(_official_frames(store, week, day, logs))
-    available = [(slot, frames[slot]) for slot in SLOTS if slot in frames
-                 and frames[slot].get("profiles", {}).get(kind, {}).get("rows")]
+    all_available = [(slot, frames[slot]) for slot in SLOTS if slot in frames
+                     and frames[slot].get("profiles", {}).get(kind, {}).get("rows")]
+    post_expiry = [
+        (slot, frame) for slot, frame in all_available
+        if classify_0dte_download(day, frame.get("download_rome"))["post_expiry"]
+    ]
+    # Esclusione solo dalla visualizzazione 0DTE e dalla GIF:
+    # l'archivio e il report mantengono INTEGRO il dato post-scadenza.
+    available = [(slot, frame) for slot, frame in all_available
+                 if not classify_0dte_download(
+                     day, frame.get("download_rome"))["post_expiry"]]
     missing = [slot for slot in SLOTS if slot not in frames]
-    st.caption(f"Frame disponibili: {len(available)}/{len(SLOTS)} · "
+    st.caption(f"Frame 0DTE pre-scadenza: {len(available)}/{len(SLOTS)} · "
                f"Assenti: {', '.join(missing) if missing else 'nessuno'}")
+    if post_expiry:
+        ignored = ', '.join(slot for slot, _ in post_expiry)
+        limit = classify_0dte_download(
+            day, post_expiry[0][1]["download_rome"])["expiry_close_rome"][11:16]
+        st.warning(
+            f"0DTE: il rilevamento {ignored} e' POST-SCADENZA SPXW. "
+            f"Chiusura 16:00 New York = {limit} Roma in questa data. "
+            "Escluso da Replay e GIF 0DTE, ma conservato nel report "
+            "integrale e utilizzabile nel Weekly."
+        )
     if kind == "Weekly":
         expiry_selected = weekly_expiry(day)
         st.caption(f"Weekly osservata: scadenza {expiry_selected:%d/%m/%Y}. "
