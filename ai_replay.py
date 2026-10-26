@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 from gamma_replay import OFFICIAL, SLOTS
 from volume_audit import compare_volume_profiles
+from spx_market_clock import classify_0dte_download
 
 ROME = ZoneInfo("Europe/Rome")
 FIELDS = ("call_oi", "put_oi", "call_volume", "put_volume")
@@ -128,6 +129,7 @@ def attach_replay(store, report, week, day, reference, offset):
                 "reference_spx": ref,
                 "reference_matches_report": abs(ref - float(reference)) < 0.01,
                 "quality": obj.get("quality") or {},
+                "market_timing": classify_0dte_download(day, clock),
                 "profiles": profiles,
             })
         except (ValueError, KeyError, TypeError, OverflowError,
@@ -159,6 +161,7 @@ def attach_replay(store, report, week, day, reference, offset):
             "file": rec["file"], "download_rome": dt.isoformat(timespec="seconds"),
             "cboe_timestamp_original": rec.get("cboe_timestamp_original"),
             "reference_spx": float(reference),
+            "market_timing": classify_0dte_download(day, dt),
             "profiles": {
                 label: {"expiry": expected[label],
                         "summary": _summary(profiles[label]["strikes"]),
@@ -189,7 +192,18 @@ def attach_replay(store, report, week, day, reference, offset):
             "cboe_timestamp_repeated": repeated,
             "reference_spx": item["reference_spx"],
             "reference_matches_report": abs(item["reference_spx"] - float(reference)) < 0.01,
-            "profiles": {label: item["profiles"][label]["summary"] for label in expected},
+            "market_timing": item["market_timing"],
+            "profiles": {
+                label: {
+                    **item["profiles"][label]["summary"],
+                    "valid_for_pre_expiry_analysis": (
+                        item["market_timing"]["valid_for_pre_expiry_analysis"]
+                        if label == "0DTE" else True),
+                    "status": (
+                        item["market_timing"]["status"]
+                        if label == "0DTE" else "WEEKLY_NON_IN_SCADENZA")
+                } for label in expected
+            },
         })
 
     transitions = []
@@ -205,6 +219,17 @@ def attach_replay(store, report, week, day, reference, offset):
                   "profiles": {}}
         if compatible_reference:
             for label in expected:
+                # Il valore grezzo resta nel JSON, ma le differenze 0DTE
+                # oltre la chiusura di negoziazione NY non sono operative.
+                if label == "0DTE" and (
+                        not start["market_timing"]["valid_for_pre_expiry_analysis"]
+                        or not end["market_timing"]["valid_for_pre_expiry_analysis"]):
+                    change["profiles"][label] = {
+                        "status": "NON_CONFRONTABILE_POST_SCADENZA_0DTE",
+                        "excluded_from_pre_expiry_analysis": True,
+                        "reason": "Almeno un frame dopo le 16:00 New York",
+                    }
+                    continue
                 older = old["profiles"][label]["strikes"]
                 newer = new["profiles"][label]["strikes"]
                 om = {r["strike_spx"]: r for r in older}
@@ -237,6 +262,9 @@ def attach_replay(store, report, week, day, reference, offset):
         "study_count_in_timeline": sum(x["source"] != "UFFICIALE" for x in timeline),
         "study_files_total": len(frames), "rejected_files": rejected,
         "frames": frames, "timeline": timeline, "transitions": transitions,
+        "post_expiry_0dte_slots": [
+            item["slot_rome"] for item in timeline
+            if item["market_timing"]["post_expiry"]],
         "note": ("Snapshot ufficiali in snapshots e Replay di studio in frames. "
                  "La timeline privilegia l'ufficiale negli slot sovrapposti. "
                  "Non si ricalcola il NET GAMMA; il timestamp Cboe non ha fuso dichiarato. "
