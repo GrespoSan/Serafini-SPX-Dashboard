@@ -472,6 +472,56 @@ def pdf_summary(report):
                 f"diventati mancanti {check['contracts_become_missing']}. "
                 "Ipotesi coerente con l'azzeramento di inizio seduta, non confermata.",
                 styles['SPXSmall']))
+    replay = report.get('intraday_replay', {})
+    timeline = replay.get('timeline', [])
+    story.append(Paragraph('Evoluzione intraday: ufficiali + Replay', styles['SPXHeading']))
+    story.append(Paragraph(
+        f"{len(timeline)} rilevamenti nella cronologia; "
+        f"{replay.get('official_count_in_timeline', 0)} ufficiali e "
+        f"{replay.get('study_count_in_timeline', 0)} di studio. "
+        "I Replay sono separati dagli snapshot ufficiali; "
+        "50 strike per profilo nel JSON.", styles['SPXSmall']))
+    if timeline:
+        rows = []
+        for item in timeline:
+            one = item.get('profiles', {}).get('0DTE', {})
+            two = item.get('profiles', {}).get('Weekly', {})
+            source = ('Ufficiale' if item.get('source') == 'UFFICIALE'
+                      else 'Replay')
+            state = ('Cboe ripetuto' if item.get('cboe_timestamp_repeated')
+                     else ('Ref diverso' if not item.get('reference_matches_report')
+                           else '-'))
+            rows.append([item['slot_rome'], source,
+                         f"{one['net_total']:+.2f}" if 'net_total' in one else 'n.d.',
+                         f"{two['net_total']:+.2f}" if 'net_total' in two else 'n.d.',
+                         state])
+        story.append(table(['Roma', 'Fonte', 'NET 0DTE', 'NET Weekly', 'Nota'],
+                           rows, [20*mm, 35*mm, 34*mm, 34*mm, 51*mm]))
+        missing = replay.get('missing_slots', [])
+        if missing:
+            story.append(Paragraph(
+                'Slot senza dati: ' + ', '.join(missing) + '.', styles['SPXSmall']))
+        unavailable_vol = any(
+            not p.get('volume_oi_available', False)
+            for item in timeline for p in item.get('profiles', {}).values())
+        if unavailable_vol:
+            story.append(Paragraph(
+                'Alcuni file Replay storici non contengono OI/Volume: '
+                'campi null, mai sostituiti con zero.', styles['SPXSmall']))
+        repeated = [r['slot_rome'] for r in timeline
+                    if r.get('cboe_timestamp_repeated')]
+        if repeated:
+            story.append(Paragraph(
+                'Timestamp Cboe invariato negli slot: ' + ', '.join(repeated)
+                + '.', styles['SPXSmall']))
+        story.append(Paragraph(
+            'I saldi sono descrittivi sui 50 strike; non rappresentano il '
+            'dealer GEX. Nessuna attribuzione causale delle variazioni Volume. '
+            'Gli slot sovrapposti usano il rilevamento ufficiale.',
+            styles['SPXSmall']))
+    else:
+        story.append(Paragraph('Replay non disponibile per la data selezionata.',
+                               styles['SPXSmall']))
     story.append(Paragraph('Concentrazioni principali per snapshot (magnitudine NET)', styles['SPXHeading']))
     for rec in report['snapshots']:
         if rec['status'] != 'VALIDO':
@@ -511,8 +561,9 @@ def export_zip(report):
         z.writestr(f'SPX_AI_{day}.json',json_data)
         z.writestr(f'SPX_Report_{day}.pdf',pdf_data)
         z.writestr('LEGGIMI.txt', 'Report derivato dagli snapshot Cboe archiviati in Supabase.\n'
-                   'Il JSON contiene 50 strike per ogni profilo disponibile di ogni snapshot valido.\n'
-                   'Il PDF e sintetico. I file originali Cboe non sono inclusi; scarica separatamente lo ZIP settimanale.\n'
+                   'Il JSON contiene 50 strike per profilo ufficiale e Replay disponibili.\n'
+                   'Ufficiali e Replay di studio restano separati; cronologia senza slot doppi.\n'
+                   'Le chain Cboe originali complete non sono incluse; scarica lo ZIP settimanale.\n'
                    'Valori senza interpretazione dei flussi: NET GAMMA non prova acquisti o vendite reali.\n')
     return out.getvalue()
 
