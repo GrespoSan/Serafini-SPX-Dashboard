@@ -264,6 +264,11 @@ with st.expander('NET GAMMA 0DTE / Weekly', expanded=False):
     from gamma_section import render
     render(store, week, snaps, logs)
 
+# Edge is a read-only, self-contained comparison panel.
+# Never import its calculation engine or feed its values into Serafini.
+from edge_context import show as show_edge_context
+show_edge_context(week)
+
 # Confronto e Replay condividono la stessa sezione, con calcoli invariati.
 with st.expander('REPLAY e confronto NET GAMMA', expanded=False):
     mode = st.radio(
