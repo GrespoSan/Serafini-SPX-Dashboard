@@ -108,8 +108,10 @@ def generate_gif(available, day, kind, offset):
             draw.line((candle_left, y, candle_right, y), fill=GRID, width=1)
             draw.text((25, y - 6), f"{value:,.0f}", fill=MUTED, font=font_caption)
         draw.line((candle_left, chart_bottom, candle_right, chart_bottom), fill=GRID, width=2)
-        for hour in (0, 3, 6, 9, 12, 15, 18):
+        for hour in (0, 3, 6, 9, 12, 15, 18, 21):
             stamp = tick_start + timedelta(hours=hour)
+            if stamp > tick_end:
+                continue
             px = round(xtime(stamp))
             draw.text((px - 13, chart_bottom + 8), f"{hour:02d}:00",
                       font=font_small, fill=MUTED)
