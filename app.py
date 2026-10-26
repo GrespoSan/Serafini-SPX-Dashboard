@@ -203,6 +203,11 @@ except Exception:
     st.stop()
 
 col_snapshots.metric('Snapshot distinti', len(snaps))
+if st.button('Aggiorna analisi · ultima fotografia', key='spx_refresh_both', help='Rilegge l’archivio e seleziona l’ultimo file CBOE per Serafini e GEX. Non acquisisce nuove opzioni né modifica i due motori.'):
+    st.session_state[f'spx_refresh_latest_{week}'] = True
+    st.session_state.pop('edge_archive_analysis', None)
+    st.session_state.pop('edge_compare_yzoom', None)
+    st.rerun()
 col_logs.metric('Registri', len(logs))
 
 if logs:
