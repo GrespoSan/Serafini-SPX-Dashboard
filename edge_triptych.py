@@ -69,15 +69,33 @@ def _plot(e, serafini_rows, candles, shift, bounds):
 def show(week, store):
     with st.expander("CONFRONTO — Prezzo | Serafini | Edge GEX",expanded=False):
         st.caption("Tre pannelli affiancati con scala ES condivisa; i motori restano indipendenti.")
-        file=st.file_uploader("Report Edge GEX (JSON)",type=["json"],key="edge_compare_json_3col")
-        if file is None:
-            st.info("Esporta «Confronto Edge per SPX (JSON)» dall'app Edge e caricalo qui.")
-            return
-        try:
-            e=read_report(file.getvalue())
-        except (ValueError,KeyError,TypeError) as err:
-            st.error(str(err));return
         ctx=st.session_state.get(f"gamma_compare_context_{week}")
+        source=st.radio("Origine GEX",("Automatico · stessa fotografia Serafini","Carica JSON Edge (alternativa)"),horizontal=True,key="edge_compare_source")
+        if source.startswith("Automatico"):
+            if not ctx or not ctx.get("snapshot"):
+                st.info("Apri NET GAMMA 0DTE / Weekly e seleziona la fotografia da confrontare.")
+                return
+            if ctx.get("offset") is None:
+                st.warning("Differenziale ES−SPX non disponibile per la fotografia selezionata.")
+                return
+            try:
+                from edge_auto import result_from_snapshot
+                raw=store.download(f"{week}/snapshots/{ctx['snapshot']}")
+                e=result_from_snapshot(raw,float(ctx["offset"]))
+                st.caption("GEX calcolato automaticamente con motore Edge indipendente, dalla stessa fotografia originale CBOE.")
+            except Exception as err:
+                st.error("Calcolo Edge automatico non disponibile: "+str(err))
+                st.info("È ancora possibile caricare il report JSON Edge selezionando la modalità alternativa.")
+                return
+        else:
+            file=st.file_uploader("Report Edge GEX (JSON)",type=["json"],key="edge_compare_json_3col")
+            if file is None:
+                st.info("Esporta «Confronto Edge per SPX (JSON)» dall'app Edge e caricalo qui.")
+                return
+            try:
+                e=read_report(file.getvalue())
+            except (ValueError,KeyError,TypeError) as err:
+                st.error(str(err));return
         if not ctx:
             st.warning("Apri prima NET GAMMA 0DTE/Weekly e scegli la fotografia e il riferimento Serafini.")
             return
