@@ -14,7 +14,7 @@ ROME = ZoneInfo("Europe/Rome")
 UTC = timezone.utc
 
 
-@st.cache_data(ttl=900, show_spinner=False, max_entries=12)
+@st.cache_data(ttl=300, show_spinner=False, max_entries=12)
 def load_es_candles(day):
     """Restituisce OHLC 5m con timestamp di chiusura timezone-aware Europe/Rome."""
     local_start = datetime.combine(day, time.min, tzinfo=ROME)
