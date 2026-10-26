@@ -12,6 +12,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from net_gamma import profile, read_snapshot
+from replay_scale import dynamic_gamma_bounds
 
 ROME = ZoneInfo("Europe/Rome")
 SLOTS = ("07:30", "11:00", "13:30", "15:50", "16:01", "16:16",
@@ -139,8 +140,9 @@ def render(store, week, logs, view_mode=None):
                        index=weekdays.index(default_day),
                        format_func=lambda d: d.strftime("%d/%m/%Y"),
                        key=f"replay_day_{week}")
-    kind = st.radio("Scadenza", ("0DTE", "Weekly"), horizontal=True,
-                    key=f"replay_expiry_{week}")
+    # Il Replay rimane dedicato al solo 0DTE.
+    # Weekly resta disponibile nella sezione NET GAMMA 0DTE / Weekly.
+    kind = "0DTE"
     if view_mode is None:
         view_mode = st.radio("Visualizzazione", ("Solo NET GAMMA", "Candele ES + NET GAMMA"),
                              horizontal=True, key=f"replay_visual_{week}")
@@ -209,10 +211,13 @@ def render(store, week, logs, view_mode=None):
 
     all_rows = [r for _, f in available for r in f["profiles"][kind]["rows"]]
     strikes = sorted({float(r["strike_spx"]) for r in all_rows})
-    xmin = min(float(r["net_gamma"]) for r in all_rows)
-    xmax = max(float(r["net_gamma"]) for r in all_rows)
-    spread = max(xmax - xmin, 1.0)
-    bounds = [min(0, xmin) - spread * 0.08, max(0, xmax) + spread * 0.08]
+    # La scala non deve essere dominata dal massimo finale della giornata.
+    # Ciascuno snapshot ha i propri limiti orizzontali; i valori restano gli stessi.
+    def frame_bounds(item):
+        return dynamic_gamma_bounds(
+            [r["net_gamma"] for r in item["profiles"][kind]["rows"]])
+
+    bounds = frame_bounds(available[0][1])
 
     # Axes remain numeric: a price line must represent its exact value even
     # when the price falls between two available option strikes.
@@ -239,7 +244,8 @@ def render(store, week, logs, view_mode=None):
         # rimane disponibile passando il mouse sulla barra.
         selected = [(strike, vals[strike]) for strike in strikes
                     if strike in vals and vals[strike] != 0]
-        label_gap = (bounds[1] - bounds[0]) * 0.012
+        current_bounds = frame_bounds(item)
+        label_gap = (current_bounds[1] - current_bounds[0]) * 0.012
         labels = go.Scatter(
             x=[-label_gap if gamma > 0 else label_gap
                for strike, gamma in selected],
@@ -270,7 +276,8 @@ def render(store, week, logs, view_mode=None):
     graph = go.Figure(data=frame_data(first_slot, first))
     graph.frames = [
         go.Frame(name=slot, data=frame_data(slot, item), traces=[0, 1],
-                 layout=go.Layout(title={"text": frame_title(slot, item)}))
+                 layout=go.Layout(title={"text": frame_title(slot, item)},
+                                  xaxis=dict(range=frame_bounds(item))))
         for slot, item in available
     ]
     steps = [
@@ -324,7 +331,7 @@ def render(store, week, logs, view_mode=None):
     # GIF solo su richiesta: nessuna generazione nei normali rerun del replay.
     # Conserviamo una sola GIF in memoria per sessione e invalidiamo la cache
     # se cambiano giorno, scadenza, differenziale o gli snapshot disponibili.
-    gif_signature = (day.isoformat(), kind, offset,
+    gif_signature = ("dynamic_gamma_scale_v2", day.isoformat(), kind, offset,
                      tuple((slot, item.get("clock"),
                             tuple((float(x["strike_spx"]), float(x["net_gamma"]))
                                   for x in item["profiles"][kind]["rows"]))
@@ -352,14 +359,16 @@ def render(store, week, logs, view_mode=None):
             file_name=f"NET_GAMMA_{kind}_{day:%Y-%m-%d}.gif",
             mime="image/gif", key=f"gif_download_{week}_{day}_{kind}",
         )
-    st.caption("GIF manuale: usa solo i rilevamenti disponibili nel replay, "
-               "senza interpolarli. Sono inclusi soltanto i prezzi ES a 5 minuti "
-               "già chiusi al momento di ciascun download.")
+    st.caption("GIF manuale 0DTE: scala NET GAMMA dinamica per rilevamento, "
+               "nessuna interpolazione dei profili. Le candele ES includono "
+               "solo barre chiuse al momento del download.")
     st.caption("Il prezzo SPX Cboe e l'eventuale ES stimato rimangono nel titolo "
                "e nella tabella dei rilevamenti; non sono tracciati come linea "
                "sull'istogramma. Il timestamp Cboe non dichiara il fuso orario.")
 
-    st.caption("Scala NET GAMMA fissa per tutti i frame. Barre verdi: NET positivo; "
+    st.caption("Scala NET GAMMA dinamica per rilevamento: le lunghezze delle barre "
+               "fra frame NON sono direttamente confrontabili; usare i valori "
+               "numerici e l'asse corrente. Barre verdi: NET positivo; "
                "rosse: NET negativo. Le etichette accanto all'asse zero mostrano "
                "lo strike SPX di ogni barra (non il valore NET GAMMA): quelle delle "
                "barre verdi sono a sinistra, quelle delle rosse a destra. "
