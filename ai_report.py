@@ -610,12 +610,14 @@ def render(store, week, snaps, logs):
         st.warning('C1/P1 selezionati nel quadro NET GAMMA non coerenti con riferimento/basis del report: confronto non disponibile.')
     elif not levels:
         st.info('Per includere C1/P1, apri NET GAMMA 0DTE / Weekly e seleziona i livelli per questa data.')
-    st.caption('Include tutti gli snapshot della giornata; quelli senza Gamma sono segnalati e non elaborati. '
-               'I 50 strike 0DTE e Weekly sono nel JSON. Il PDF e una sintesi, non contiene analisi AI.')
+    st.caption('Include gli snapshot ufficiali e tutti i rilevamenti Replay '
+               'disponibili per questa data. JSON: 50 strike 0DTE e Weekly '
+               'per ciascun frame; PDF: sintesi cronologica. '
+               'I Replay di studio restano separati dagli originali Cboe.')
     # Firma del formato: impedisce il download del vecchio ZIP v2 salvato
     # nella sessione dopo l'aggiornamento di codice, a parita di parametri.
     report_key = (week, day.isoformat(), ref, offset,
-                  json.dumps(levels, sort_keys=True), 'serafini_spx_ai_report_v4_rawvolume')
+                  json.dumps(levels, sort_keys=True), 'serafini_spx_ai_report_v5_replay')
     if st.button('Prepara report per analisi AI',key=f'ai_build_{week}',type='primary'):
         try:
             with st.spinner('Lettura snapshot Cboe e preparazione report...'):
@@ -623,12 +625,16 @@ def render(store, week, snaps, logs):
                 binary=export_zip(report)
             st.session_state['ai_report_ready']={'key':report_key,
                                                   'data':binary,'valid':sum(x['status']=='VALIDO' for x in report['snapshots']),
-                                                  'total':len(report['snapshots'])}
+                                                  'total':len(report['snapshots']),
+                                                  'timeline':len(report.get('intraday_replay', {}).get('timeline', [])),
+                                                  'study':report.get('intraday_replay', {}).get('study_files_total', 0)}
         except Exception as exc:
             st.error(f'Impossibile preparare il report: {type(exc).__name__}: {str(exc)[:180]}')
     ready=st.session_state.get('ai_report_ready')
     if ready and ready['key']==report_key:
-        st.success(f"Report pronto: {ready['valid']} snapshot validi su {ready['total']} acquisiti.")
+        st.success(f"Report pronto: {ready['valid']} snapshot ufficiali validi "
+                   f"su {ready['total']} · {ready['timeline']} rilevamenti "
+                   f"nella cronologia · {ready['study']} Replay di studio.")
         st.download_button('Scarica report JSON + PDF (ZIP)',data=ready['data'],
                            file_name=f'Serafini_SPX_AI_{day.isoformat()}.zip',mime='application/zip',
                            key=f'ai_download_{day}')
