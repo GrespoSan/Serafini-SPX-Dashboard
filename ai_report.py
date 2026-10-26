@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 
 import streamlit as st
 from net_gamma import profile, read_snapshot
+from ai_replay import attach_replay
 from volume_audit import compare_volume_profiles, inspect_raw_expiry, raw_transition_diagnostic
 
 ROME = ZoneInfo('Europe/Rome')
@@ -234,7 +235,7 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
         report['warnings'].append('Differenziale ES–SPX assente: strike_es=null; usare soltanto strike SPX.')
     report['warnings'].append('Le concentrazioni e le variazioni sono descrittive, non dimostrano acquisti/vendite reali di opzioni.')
     # Contesto indipendente: non modifica la formula NET GAMMA.
-    report['schema_version'] = 'serafini_spx_ai_report_v4'
+    report['schema_version'] = 'serafini_spx_ai_report_v5'
     report['market_context'] = {'vix_curve': {'status': 'NON DISPONIBILE'},
                                 'asia_session': {'status': 'NON DISPONIBILE'}}
     try:
@@ -330,6 +331,31 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
         'note': 'La zona asiatica è contesto, non segnale LONG/SHORT. NET GAMMA e VX non bastano per un ingresso.'}
     report['sources']['vix_curve'] = 'Cboe VX mensili: settlement seduta precedente, se disponibile'
     report['sources']['asia_session'] = 'Yahoo ES=F 5m: OHLC 00:00–09:00, se disponibile'
+    report['sources']['replay'] = (
+        'Profili compatti Cboe di studio intraday; archivio Replay separato '
+        'dagli snapshot originali ufficiali')
+    try:
+        report['intraday_replay'] = attach_replay(
+            store, report, week, day, float(reference), offset)
+        rejected = report['intraday_replay'].get('rejected_files', [])
+        if rejected:
+            report['warnings'].append(
+                f"Replay: {len(rejected)} file scartati per qualita o formato. "
+                "Dettagli in intraday_replay.rejected_files.")
+        if not report['intraday_replay']['timeline']:
+            report['warnings'].append(
+                'Nessun rilevamento Replay/ufficiale associato a uno slot '
+                'cronologico disponibile per la giornata selezionata.')
+    except (ValueError, TypeError, KeyError, OSError, RuntimeError) as exc:
+        # Un archivio Replay assente o temporaneamente inaccessibile non
+        # interrompe l'analisi degli snapshot originali.
+        report['intraday_replay'] = {
+            'status': 'NON DISPONIBILE', 'reason': type(exc).__name__,
+            'frames': [], 'timeline': [], 'transitions': [],
+            'missing_slots': [], 'study_files_total': 0
+        }
+        report['warnings'].append(
+            'Replay non accessibile; gli snapshot ufficiali restano nel report.')
     return report
 
 
