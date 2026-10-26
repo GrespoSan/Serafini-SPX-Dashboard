@@ -37,6 +37,18 @@ def _plot(e, serafini_rows, candles, shift, bounds):
         fig.add_trace(go.Bar(x=n,y=y,orientation="h",marker_color=[
             "#22b573" if x>=0 else "#e64b4b" for x in n],
             width=3.6,name="NET Serafini",showlegend=False),row=1,col=2)
+        # Strike labels next to the central zero axis, matching Serafini Replay.
+        # Use the existing original Serafini strike values, no new levels inferred.
+        for strike in sorted(set(y)):
+            if bounds[0] <= strike <= bounds[1]:
+                fig.add_annotation(
+                    x=0, y=strike, xref="x2", yref="y2",
+                    text=f"{strike:,.0f}", showarrow=False,
+                    xanchor="left", xshift=7,
+                    font=dict(size=10, color="#d6dce5"),
+                    bgcolor="rgba(12,17,26,0.50)",
+                    borderpad=1,
+                )
     rows=e["rows"]
     if rows:
         y=[_number(r["strike_spx"])+shift for r in rows]
