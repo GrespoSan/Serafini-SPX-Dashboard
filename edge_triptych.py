@@ -122,6 +122,12 @@ def show(week, store):
         bounds=(price-100,price+100) if view.startswith("Zoom") else all_bounds
         fig=_plot(e,sr,candles,shift,bounds)
         st.plotly_chart(fig,use_container_width=True,key="edge_compare_three_charts")
+        st.markdown(
+            "**Legenda GEX:** 🟢 **Call GEX** (barre verdi) · 🔴 **Put GEX** (barre rosse) · "
+            "**NET GEX** (linea rosa) · "
+            "**Call Wall** (tratteggio verde) · **Put Wall** (tratteggio rosso) · "
+            "**Gamma Flip** (tratteggio giallo)."
+        )
         st.caption("ES=F Yahoo può differire dal future specifico e dal prezzo ES equivalente. Le linee GEX sono riferimenti Edge, non segnali Serafini.")
         with st.expander("Curva teorica GEX",expanded=False):
             curve=e.get("curve",[])
