@@ -4,3 +4,7 @@ plotly>=5.20,<7
 yfinance>=0.2.50,<2
 reportlab>=4.2,<5
 Pillow>=10,<13
+numpy>=2.0,<3
+scipy>=1.15,<2
+httpx>=0.28,<1
+exchange_calendars>=4.6,<5
