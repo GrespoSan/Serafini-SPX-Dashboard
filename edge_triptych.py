@@ -37,18 +37,23 @@ def _plot(e, serafini_rows, candles, shift, bounds):
         fig.add_trace(go.Bar(x=n,y=y,orientation="h",marker_color=[
             "#22b573" if x>=0 else "#e64b4b" for x in n],
             width=3.6,name="NET Serafini",showlegend=False),row=1,col=2)
-        # One lightweight text trace, instead of dozens of Plotly annotations.
-        # Values are the original strike + existing Serafini ES basis.
-        visible=sorted({level for level in y if bounds[0] <= level <= bounds[1]})
-        if visible:
-            fig.add_trace(go.Scatter(
-                x=[0.3]*len(visible), y=visible,
-                mode="text", text=[f"{level:,.0f}" for level in visible],
-                textposition="middle right",
-                textfont=dict(size=10, color="#dbe0e8"),
-                hoverinfo="skip", showlegend=False,
-                cliponaxis=False,
-            ),row=1,col=2)
+        # Identical strike-label rule used by gamma_replay.py.
+        # Strike SPX is printed, vertically aligned to its ES-converted price.
+        xmin=min(n)
+        xmax=max(n)
+        spread=max(xmax-xmin,1.0)
+        xbounds=[min(0,xmin)-spread*0.08,max(0,xmax)+spread*0.08]
+        label_gap=(xbounds[1]-xbounds[0])*0.012
+        selected=[(float(row["strike_spx"]),float(row["net_gamma"]))
+                  for row in serafini_rows if float(row["net_gamma"])!=0]
+        fig.add_trace(go.Scatter(
+            x=[-label_gap if gamma>0 else label_gap for strike,gamma in selected],
+            y=[strike+shift for strike,gamma in selected],
+            text=[f"{strike:,.2f}".rstrip("0").rstrip(".") for strike,gamma in selected],
+            textposition=["middle left" if gamma>0 else "middle right" for strike,gamma in selected],
+            mode="text",textfont=dict(color="#e2e8f0",size=10),
+            hoverinfo="skip",showlegend=False,cliponaxis=False,
+        ),row=1,col=2)
     rows=e["rows"]
     if rows:
         y=[_number(r["strike_spx"])+shift for r in rows]
