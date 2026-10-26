@@ -66,7 +66,7 @@ def _plot(e, serafini_rows, candles, shift, bounds):
     fig.update_xaxes(title_text="GEX mld USD/1%",row=1,col=3)
     return fig
 
-def show(week, store):
+def show(week, store, logs=None):
     with st.expander("CONFRONTO — Prezzo | Serafini | Edge GEX",expanded=False):
         st.caption("Tre pannelli affiancati con scala ES condivisa; i motori restano indipendenti.")
         if st.button(
@@ -78,6 +78,7 @@ def show(week, store):
             st.session_state.pop("edge_compare_yzoom", None)
             st.rerun()
         ctx=st.session_state.get(f"gamma_compare_context_{week}")
+        reading=st.radio("Rilevamento da confrontare",("Ultimo rilevamento","Mattina 07:30"),horizontal=True,key=f"edge_compare_reading_{week}")
         source=st.radio("Origine GEX",("Automatico · stessa fotografia Serafini","Carica JSON Edge (alternativa)"),horizontal=True,key="edge_compare_source")
         if source.startswith("Automatico"):
             if not ctx or not ctx.get("snapshot"):
@@ -88,9 +89,47 @@ def show(week, store):
                 return
             try:
                 from edge_auto import result_from_snapshot
-                raw=store.download(f"{week}/snapshots/{ctx['snapshot']}")
+                day_for_choice=ctx["day"]
+                if isinstance(day_for_choice,str):
+                    day_for_choice=date.fromisoformat(day_for_choice)
+                candidates=sorted(
+                    item["name"] for item in store.list(f"{week}/snapshots/")
+                    if item.get("name","").startswith("SPX_CBOE_"+day_for_choice.strftime("%Y%m%d")+"_")
+                )
+                if not candidates:
+                    st.warning("Nessuna fotografia della giornata selezionata disponibile.");return
+                if reading=="Mattina 07:30":
+                    from gamma_section import _acquisition_label
+                    morning=[name for name in candidates if _acquisition_label(store,week,logs or [],name)=="Mattina 07:30"]
+                    if not morning:
+                        st.warning("Non è presente una fotografia identificata dal registro come Mattina 07:30.");return
+                    selected_name=morning[-1]
+                else:
+                    # Names contain the original CBOE timestamp, not the download time.
+                    # Prefer the latest logged download to avoid misleading ordering.
+                    from datetime import timezone
+                    from zoneinfo import ZoneInfo
+                    import json
+                    registered=[]
+                    for log in logs or []:
+                        try:
+                            info=json.loads(store.download(f"{week}/logs/{log['name']}"))
+                            source_file=str(info.get("file","")).rsplit("/",1)[-1]
+                            raw_time=info.get("download_rome") or info.get("download_utc")
+                            if source_file not in candidates or not raw_time:
+                                continue
+                            timestamp=datetime.fromisoformat(str(raw_time).replace("Z","+00:00"))
+                            if timestamp.tzinfo is None:
+                                continue
+                            registered.append((timestamp.astimezone(timezone.utc),source_file))
+                        except (TypeError,ValueError,KeyError):
+                            continue
+                    if not registered:
+                        st.warning("I registri di acquisizione non indicano l'ultimo download: impossibile identificarlo con certezza.");return
+                    selected_name=max(registered)[1]
+                raw=store.download(f"{week}/snapshots/{selected_name}")
                 e=result_from_snapshot(raw,float(ctx["offset"]))
-                st.caption("GEX calcolato automaticamente con motore Edge indipendente, dalla stessa fotografia originale CBOE.")
+                st.caption(f"Rilevamento: {reading} · fotografia CBOE {selected_name} · stesso file per Serafini ed Edge.")
             except Exception as err:
                 st.error("Calcolo Edge automatico non disponibile: "+str(err))
                 st.info("È ancora possibile caricare il report JSON Edge selezionando la modalità alternativa.")
