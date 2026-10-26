@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 from PIL import Image, ImageDraw, ImageFont
 
 from replay_prices import candles_up_to, load_es_candles
+from replay_scale import dynamic_gamma_bounds
 
 ROME = ZoneInfo("Europe/Rome")
 SIZE = (1440, 810)
@@ -55,10 +56,8 @@ def generate_gif(available, day, kind, offset):
     high = max(max(levels), float(prices_last["high"].max())) + 8.0
     if high <= low:
         raise ValueError("Intervallo prezzi non valido.")
-    gmin, gmax = min(0., min(gammas)), max(0., max(gammas))
-    spread = max(gmax - gmin, 1.)
-    gmin -= spread * .08
-    gmax += spread * .08
+    # Scala orizzontale ricalcolata per ogni singolo fotogramma.
+    # Non normalizza i NET GAMMA e non cambia i valori sottostanti.
 
     chart_top, chart_bottom = 100, 695
     candle_left, candle_right = 90, 845
@@ -67,7 +66,6 @@ def generate_gif(available, day, kind, offset):
     tick_end = max(max(download_times) + timedelta(minutes=5),
                    datetime.combine(day, time(18, 35), tzinfo=ROME))
     total_seconds = max((tick_end - tick_start).total_seconds(), 1.)
-    gamma_zero = gamma_left + (0 - gmin) / (gmax - gmin) * (gamma_right - gamma_left)
 
     def yprice(value):
         return chart_bottom - (float(value) - low) / (high - low) * (chart_bottom - chart_top)
@@ -75,8 +73,6 @@ def generate_gif(available, day, kind, offset):
     def xtime(value):
         return candle_left + (value - tick_start).total_seconds() / total_seconds * (candle_right - candle_left)
 
-    def xgamma(value):
-        return gamma_left + (float(value) - gmin) / (gmax - gmin) * (gamma_right - gamma_left)
 
     font_title = _font(22, True)
     font_sub = _font(14)
@@ -97,7 +93,14 @@ def generate_gif(available, day, kind, offset):
         # Entrambi i pannelli condividono la scala verticale dei prezzi ES.
         draw.text((candle_left, 79), "ES=F - candele 5 minuti (chiuse allo snapshot)",
                   font=font_caption, fill=WHITE)
-        draw.text((gamma_left, 79), f"NET GAMMA {kind} - strike SPX",
+        current = {float(row["strike_spx"]): float(row["net_gamma"])
+                   for row in item["profiles"][kind]["rows"]}
+        gmin, gmax = dynamic_gamma_bounds(list(current.values()))
+        def xgamma(value):
+            return gamma_left + (float(value) - gmin) / (gmax - gmin) * (gamma_right - gamma_left)
+        gamma_zero = xgamma(0)
+        draw.text((gamma_left, 79),
+                  f"NET GAMMA {kind} | scala {gmin:+.0f} / {gmax:+.0f}",
                   font=font_caption, fill=WHITE)
         for n in range(7):
             value = low + n * (high - low) / 6.0
@@ -128,11 +131,16 @@ def generate_gif(available, day, kind, offset):
             draw.rectangle((px - bar_width // 2, top, px + bar_width // 2,
                             max(top + 1, bottom)), fill=color)
 
-        # La scala gamma e' fissa attraverso tutti gli snapshot.
+        # Zero e limiti gamma adattivi al frame: non sono grandezze
+        # confrontabili a colpo d'occhio fra orari differenti.
         draw.line((round(gamma_zero), chart_top, round(gamma_zero), chart_bottom),
                   fill="#607080", width=2)
-        current = {float(row["strike_spx"]): float(row["net_gamma"])
-                   for row in item["profiles"][kind]["rows"]}
+        draw.text((gamma_left, chart_bottom + 8), f"{gmin:+.0f}",
+                  font=font_small, fill=MUTED)
+        draw.text((round(gamma_zero) - 5, chart_bottom + 8), "0",
+                  font=font_small, fill=MUTED)
+        draw.text((gamma_right - 30, chart_bottom + 8), f"{gmax:+.0f}",
+                  font=font_small, fill=MUTED)
         for strike in strikes:
             if strike not in current:
                 continue
@@ -161,7 +169,7 @@ def generate_gif(available, day, kind, offset):
         draw.text((90, 731), "Snapshot disponibili, senza interpolazione dei profili gamma",
                   font=font_caption, fill=MUTED)
         draw.text((950, 731), "Fonte prezzi: Yahoo ES=F 5m", font=font_caption, fill=MUTED)
-        draw.text((30, 787), "Studio storico. 0DTE e Weekly separati; i frame intermedi non sono rilevamenti ufficiali.",
+        draw.text((30, 787), "Studio storico 0DTE. Scala Gamma dinamica per frame: confronta i valori, non le lunghezze delle barre.",
                   font=font_small, fill=MUTED)
         images.append(im.convert("P", palette=Image.Palette.ADAPTIVE, colors=80))
 
