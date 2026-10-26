@@ -82,11 +82,15 @@ def combined_graph(gamma_graph, available, day, kind, offset, gamma_bounds, gamm
         sliders=gamma_graph.layout.sliders,
         showlegend=False,
     )
+    # Con i nuovi rilevamenti delle 20:00 e 21:30, la finestra temporale
+    # non deve piu' tagliare le candele successive alle 18:35.
+    right_edge = max(datetime.combine(day, time(18, 35), tzinfo=ROME),
+                     end_of_last_slot + timedelta(minutes=5))
     fig.update_xaxes(
         title_text="ES=F · 5 minuti (ora Roma)",
         range=[
             datetime.combine(day, time(0, 0), tzinfo=ROME),
-            datetime.combine(day, time(18, 35), tzinfo=ROME),
+            right_edge,
         ],
         rangeslider_visible=False, row=1, col=1,
     )
