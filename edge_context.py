@@ -23,7 +23,7 @@ def read_report(raw):
         raise ValueError("Caricare soltanto un report SPX esportato dall'app Edge.")
     if not isinstance(doc.get("expiries"), list) or not isinstance(doc.get("rows"), list):
         raise ValueError("Struttura report Edge incompleta.")
-    if len(doc["rows"]) > 2000 or len(doc.get("curve", [])) > 2000:
+    if len(doc["rows"]) > 5000 or len(doc.get("curve", [])) > 10000:
         raise ValueError("Troppe righe nel report.")
     datetime.fromisoformat(doc["timestamp"].replace("Z", "+00:00"))
     for field in ("spot_spx", "net_gex", "gross_gex"):
@@ -31,6 +31,9 @@ def read_report(raw):
     for row in doc["rows"]:
         for field in ("strike_spx", "call_gex", "put_gex", "net_gex"):
             _number(row[field])
+    for point in doc.get("curve", []):
+        for field in ("spot_spx", "net_gex"):
+            _number(point[field])
     return doc
 
 def show(week):
