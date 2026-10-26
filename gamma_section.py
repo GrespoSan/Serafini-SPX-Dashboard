@@ -623,62 +623,67 @@ def render(store, week, snaps, logs):
     candidate_0dte = None
     if day.weekday() == 4:
         st.info('Venerdì: il profilo 0DTE è quello di oggi, mentre il Weekly usa il venerdì SUCCESSIVO (conferma diretta di Serafini).')
-    for title, expiry in [('0DTE', day), ('Weekly', weekly_exp)]:
-        try:
-            result = profile(snap, expiry, ref)
-        except ValueError as exc:
-            st.error(f'Impossibile costruire il profilo {title}: {exc}')
-            continue
-        computed_profiles[title] = result
-        if title == '0DTE' and result['rows']:
-            candidate_0dte = find_candidates(result['rows'], ref)
-        capture_info = (f'{acquisition_label} · download ore {download_clock} Roma'
-                        if download_clock else f'{acquisition_label} · ora download non disponibile')
-        st.subheader(f'{title} — RILEVAMENTO {day:%d/%m/%Y} · {capture_info}')
-        st.caption(f'Scadenza opzioni: {expiry:%d/%m/%Y} · Timestamp originale Cboe: {timestamp} (fuso non dichiarato)')
-        if not result['rows']:
-            st.warning('Nessun contratto trovato per questa scadenza nello snapshot: nessun risultato inventato.')
-            continue
-        st.caption(f"{result['contracts']} contratti · {result['available_strikes']} strike disponibili · {len(result['rows'])} strike selezionati")
-        records = [{**r, 'strike_es': r['strike_spx'] + offset if offset is not None else None} for r in result['rows']]
-        import pandas as pd
-        frame = pd.DataFrame(records)
-        # Slide 144: profilo NET GAMMA, non componenti separate.
-        # Il lato della barra deriva esclusivamente dal segno del NET GAMMA calcolato.
-        # Nessun Gamma Flip imposto o stimato arbitrariamente.
-        import plotly.graph_objects as go
-        y = frame['strike_es' if offset is not None else 'strike_spx'].tolist()
-        net = frame['net_gamma'].astype(float).tolist()
-        colors = ['#2dbb72' if v >= 0 else '#e45757' for v in net]
-        fig = go.Figure()
-        fig.add_bar(
-            x=net, y=y, orientation='h', name='NET GAMMA',
-            marker_color=colors,
-            customdata=frame[['call_gamma_component', 'put_gamma_component']].to_numpy(),
-            hovertemplate=(
-                'Strike %{y:,.2f}<br>NET GAMMA: %{x:,.3f}'
-                '<br>Call: %{customdata[0]:,.3f}'
-                '<br>Put: %{customdata[1]:,.3f}<extra></extra>'
-            ),
-        )
-        fig.update_layout(
-            height=max(520, len(y) * 15),
-            margin=dict(l=15, r=20, t=40, b=30),
-            title=f'{title} | {day:%d/%m/%Y} | {capture_info}<br><sup>NET GAMMA per strike — positivo a destra / negativo a sinistra</sup>',
-            xaxis=dict(title='NET GAMMA (unità della formula Serafini)', zeroline=True,
-                       zerolinewidth=1, zerolinecolor='#b7bec8'),
-            yaxis=dict(title='Strike ES' if offset is not None else 'Strike SPX',
-                       tickmode='array', tickvals=y,
-                       ticktext=[f'{v:g}' for v in y], type='linear'),
-            showlegend=False,
-            template='plotly_dark',
-        )
-        fig.add_vline(x=0, line_width=1, line_color='#b7bec8')
-        st.plotly_chart(fig, use_container_width=True, key=f'gamma_net_{title}_{choice}')
-        with st.expander(f'Dettaglio numerico {title} (50 strike)', expanded=False):
-            st.dataframe(frame, use_container_width=True, hide_index=True)
-        st.download_button(f'Scarica calcolo CSV {title}', profile_csv(result, offset),
-                           file_name=f'NET_GAMMA_{title}_{day.isoformat()}_{choice}.csv', mime='text/csv', key=f'csv_{title}_{choice}')
+    # Vista comparativa: 0DTE a sinistra, Weekly a destra.
+    # Calcoli, CSV, dettagli e controllo su C1/P1 rimangono invariati.
+    profile_cols = st.columns(2, gap='small')
+    for (title, expiry), profile_col in zip(
+            [('0DTE', day), ('Weekly', weekly_exp)], profile_cols):
+        with profile_col:
+            try:
+                result = profile(snap, expiry, ref)
+            except ValueError as exc:
+                st.error(f'Impossibile costruire il profilo {title}: {exc}')
+                continue
+            computed_profiles[title] = result
+            if title == '0DTE' and result['rows']:
+                candidate_0dte = find_candidates(result['rows'], ref)
+            capture_info = (f'{acquisition_label} · download ore {download_clock} Roma'
+                            if download_clock else f'{acquisition_label} · ora download non disponibile')
+            st.subheader(f'{title} — RILEVAMENTO {day:%d/%m/%Y} · {capture_info}')
+            st.caption(f'Scadenza opzioni: {expiry:%d/%m/%Y} · Timestamp originale Cboe: {timestamp} (fuso non dichiarato)')
+            if not result['rows']:
+                st.warning('Nessun contratto trovato per questa scadenza nello snapshot: nessun risultato inventato.')
+                continue
+            st.caption(f"{result['contracts']} contratti · {result['available_strikes']} strike disponibili · {len(result['rows'])} strike selezionati")
+            records = [{**r, 'strike_es': r['strike_spx'] + offset if offset is not None else None} for r in result['rows']]
+            import pandas as pd
+            frame = pd.DataFrame(records)
+            # Slide 144: profilo NET GAMMA, non componenti separate.
+            # Il lato della barra deriva esclusivamente dal segno del NET GAMMA calcolato.
+            # Nessun Gamma Flip imposto o stimato arbitrariamente.
+            import plotly.graph_objects as go
+            y = frame['strike_es' if offset is not None else 'strike_spx'].tolist()
+            net = frame['net_gamma'].astype(float).tolist()
+            colors = ['#2dbb72' if v >= 0 else '#e45757' for v in net]
+            fig = go.Figure()
+            fig.add_bar(
+                x=net, y=y, orientation='h', name='NET GAMMA',
+                marker_color=colors,
+                customdata=frame[['call_gamma_component', 'put_gamma_component']].to_numpy(),
+                hovertemplate=(
+                    'Strike %{y:,.2f}<br>NET GAMMA: %{x:,.3f}'
+                    '<br>Call: %{customdata[0]:,.3f}'
+                    '<br>Put: %{customdata[1]:,.3f}<extra></extra>'
+                ),
+            )
+            fig.update_layout(
+                height=max(520, len(y) * 15),
+                margin=dict(l=15, r=20, t=40, b=30),
+                title=f'{title} | {day:%d/%m/%Y} | {capture_info}<br><sup>NET GAMMA per strike — positivo a destra / negativo a sinistra</sup>',
+                xaxis=dict(title='NET GAMMA (unità della formula Serafini)', zeroline=True,
+                           zerolinewidth=1, zerolinecolor='#b7bec8'),
+                yaxis=dict(title='Strike ES' if offset is not None else 'Strike SPX',
+                           tickmode='array', tickvals=y,
+                           ticktext=[f'{v:g}' for v in y], type='linear'),
+                showlegend=False,
+                template='plotly_dark',
+            )
+            fig.add_vline(x=0, line_width=1, line_color='#b7bec8')
+            st.plotly_chart(fig, use_container_width=True, key=f'gamma_net_{title}_{choice}')
+            with st.expander(f'Dettaglio numerico {title} (50 strike)', expanded=False):
+                st.dataframe(frame, use_container_width=True, hide_index=True)
+            st.download_button(f'Scarica calcolo CSV {title}', profile_csv(result, offset),
+                               file_name=f'NET_GAMMA_{title}_{day.isoformat()}_{choice}.csv', mime='text/csv', key=f'csv_{title}_{choice}')
     if offset is not None and computed_profiles.get('0DTE', {}).get('rows'):
         from asia_gamma import render_context_auto
         with st.expander('Confronto range Asia / concentrazioni Gamma 0DTE + Weekly', expanded=False):
