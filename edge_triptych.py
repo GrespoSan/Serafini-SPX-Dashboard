@@ -66,9 +66,11 @@ def _plot(e, serafini_rows, candles, shift, bounds):
     fig.update_xaxes(title_text="GEX mld USD/1%",row=1,col=3)
     return fig
 
+@st.fragment(run_every="5m")
 def show(week, store, logs=None):
     with st.expander("CONFRONTO — Prezzo | Serafini | Edge GEX",expanded=False):
         st.caption("Tre pannelli affiancati con scala ES condivisa; i motori restano indipendenti.")
+        st.caption("Candele ES=F: controllo automatico ogni 5 minuti mentre la pagina resta aperta. GEX e Serafini restano riferiti alla fotografia indicata.")
         if st.button(
             "Aggiorna analisi · ultima fotografia",
             key="spx_refresh_both",
