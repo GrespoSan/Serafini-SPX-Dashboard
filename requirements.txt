@@ -8,3 +8,4 @@ numpy>=2.0,<3
 scipy>=1.15,<2
 httpx>=0.28,<1
 exchange_calendars>=4.6,<5
+python-dotenv>=1.0,<2
