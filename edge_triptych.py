@@ -69,6 +69,14 @@ def _plot(e, serafini_rows, candles, shift, bounds):
 def show(week, store):
     with st.expander("CONFRONTO — Prezzo | Serafini | Edge GEX",expanded=False):
         st.caption("Tre pannelli affiancati con scala ES condivisa; i motori restano indipendenti.")
+        if st.button(
+            "Aggiorna analisi · ultima fotografia",
+            key="spx_refresh_both",
+            help="Seleziona la fotografia CBOE più recente per i calcoli separati Serafini ed Edge. Non acquisisce nuovi dati CBOE.",
+        ):
+            st.session_state[f"spx_refresh_latest_{week}"] = True
+            st.session_state.pop("edge_compare_yzoom", None)
+            st.rerun()
         ctx=st.session_state.get(f"gamma_compare_context_{week}")
         source=st.radio("Origine GEX",("Automatico · stessa fotografia Serafini","Carica JSON Edge (alternativa)"),horizontal=True,key="edge_compare_source")
         if source.startswith("Automatico"):
