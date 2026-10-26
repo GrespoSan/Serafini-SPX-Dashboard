@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 import streamlit as st
 from net_gamma import profile, read_snapshot
 from ai_replay import attach_replay
+from spx_market_clock import cash_open_rome, spxw_expiry_close_rome
 from volume_audit import compare_volume_profiles, inspect_raw_expiry, raw_transition_diagnostic
 
 ROME = ZoneInfo('Europe/Rome')
@@ -235,7 +236,7 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
         report['warnings'].append('Differenziale ES–SPX assente: strike_es=null; usare soltanto strike SPX.')
     report['warnings'].append('Le concentrazioni e le variazioni sono descrittive, non dimostrano acquisti/vendite reali di opzioni.')
     # Contesto indipendente: non modifica la formula NET GAMMA.
-    report['schema_version'] = 'serafini_spx_ai_report_v5'
+    report['schema_version'] = 'serafini_spx_ai_report_v6'
     report['market_context'] = {'vix_curve': {'status': 'NON DISPONIBILE'},
                                 'asia_session': {'status': 'NON DISPONIBILE'}}
     try:
@@ -334,6 +335,17 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
     report['sources']['replay'] = (
         'Profili compatti Cboe di studio intraday; archivio Replay separato '
         'dagli snapshot originali ufficiali')
+    # Conversione reale dei fusi: l'ora legale USA ed europea cambia in
+    # domeniche diverse. NON assumere 15:30 e 22:00 Roma per tutto l'anno.
+    report['us_session_clock'] = {
+        'timezone': 'America/New_York',
+        'rome_timezone': 'Europe/Rome',
+        'us_cash_open_rome': cash_open_rome(day).isoformat(),
+        'spxw_0dte_expiry_close_rome': spxw_expiry_close_rome(day).isoformat(),
+        'spxw_regular_expiry_close_new_york': '16:00',
+        'note': ('Regola per seduta ordinaria SPXW. '
+                 'Giornate con chiusura anticipata richiedono calendario Cboe.')
+    }
     try:
         report['intraday_replay'] = attach_replay(
             store, report, week, day, float(reference), offset)
@@ -475,6 +487,15 @@ def pdf_summary(report):
     replay = report.get('intraday_replay', {})
     timeline = replay.get('timeline', [])
     story.append(Paragraph('Evoluzione intraday: ufficiali + Replay', styles['SPXHeading']))
+    hours = report.get('us_session_clock') or {}
+    if hours:
+        story.append(Paragraph(
+            'Apertura USA (09:30 NY): '
+            + hours['us_cash_open_rome'][11:16] + ' Roma | '
+            'Scadenza negoziazione SPXW 0DTE (16:00 NY): '
+            + hours['spxw_0dte_expiry_close_rome'][11:16]
+            + ' Roma. Orari con cambio DST automatico.',
+            styles['SPXSmall']))
     story.append(Paragraph(
         f"{len(timeline)} rilevamenti nella cronologia; "
         f"{replay.get('official_count_in_timeline', 0)} ufficiali e "
@@ -491,12 +512,23 @@ def pdf_summary(report):
             state = ('Cboe ripetuto' if item.get('cboe_timestamp_repeated')
                      else ('Ref diverso' if not item.get('reference_matches_report')
                            else '-'))
+            is_expired = item.get('market_timing', {}).get('post_expiry', False)
+            if is_expired:
+                state = '0DTE POST-SCAD.'
             rows.append([item['slot_rome'], source,
-                         f"{one['net_total']:+.2f}" if 'net_total' in one else 'n.d.',
+                         ('POST' if is_expired else
+                          (f"{one['net_total']:+.2f}" if 'net_total' in one else 'n.d.')),
                          f"{two['net_total']:+.2f}" if 'net_total' in two else 'n.d.',
                          state])
         story.append(table(['Roma', 'Fonte', 'NET 0DTE', 'NET Weekly', 'Nota'],
                            rows, [20*mm, 35*mm, 34*mm, 34*mm, 51*mm]))
+        post_slots = replay.get('post_expiry_0dte_slots', [])
+        if post_slots:
+            story.append(Paragraph(
+                '0DTE dopo scadenza: ' + ', '.join(post_slots) + '. '
+                'Non utilizzato per confronto operativo o scala Replay/GIF. '
+                'Valori originali conservati nel JSON; Weekly mantenuto.',
+                styles['SPXSmall']))
         missing = replay.get('missing_slots', [])
         if missing:
             story.append(Paragraph(
@@ -617,7 +649,7 @@ def render(store, week, snaps, logs):
     # Firma del formato: impedisce il download del vecchio ZIP v2 salvato
     # nella sessione dopo l'aggiornamento di codice, a parita di parametri.
     report_key = (week, day.isoformat(), ref, offset,
-                  json.dumps(levels, sort_keys=True), 'serafini_spx_ai_report_v5_replay')
+                  json.dumps(levels, sort_keys=True), 'serafini_spx_ai_report_v6_dst_expiry')
     if st.button('Prepara report per analisi AI',key=f'ai_build_{week}',type='primary'):
         try:
             with st.spinner('Lettura snapshot Cboe e preparazione report...'):
