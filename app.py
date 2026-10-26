@@ -266,8 +266,8 @@ with st.expander('NET GAMMA 0DTE / Weekly', expanded=False):
 
 # Edge is a read-only, self-contained comparison panel.
 # Never import its calculation engine or feed its values into Serafini.
-from edge_context import show as show_edge_context
-show_edge_context(week)
+from edge_triptych import show as show_edge_triptych
+show_edge_triptych(week, store)
 
 # Confronto e Replay condividono la stessa sezione, con calcoli invariati.
 with st.expander('REPLAY e confronto NET GAMMA', expanded=False):
