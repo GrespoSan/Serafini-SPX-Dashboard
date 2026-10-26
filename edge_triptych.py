@@ -37,6 +37,18 @@ def _plot(e, serafini_rows, candles, shift, bounds):
         fig.add_trace(go.Bar(x=n,y=y,orientation="h",marker_color=[
             "#22b573" if x>=0 else "#e64b4b" for x in n],
             width=3.6,name="NET Serafini",showlegend=False),row=1,col=2)
+        # One lightweight text trace, instead of dozens of Plotly annotations.
+        # Values are the original strike + existing Serafini ES basis.
+        visible=sorted({level for level in y if bounds[0] <= level <= bounds[1]})
+        if visible:
+            fig.add_trace(go.Scatter(
+                x=[0.3]*len(visible), y=visible,
+                mode="text", text=[f"{level:,.0f}" for level in visible],
+                textposition="middle right",
+                textfont=dict(size=10, color="#dbe0e8"),
+                hoverinfo="skip", showlegend=False,
+                cliponaxis=False,
+            ),row=1,col=2)
     rows=e["rows"]
     if rows:
         y=[_number(r["strike_spx"])+shift for r in rows]
