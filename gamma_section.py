@@ -508,7 +508,12 @@ def render(store, week, snaps, logs):
         st.info('Nessuno snapshot disponibile nella settimana selezionata.')
         return
     names = sorted((o['name'] for o in snaps), reverse=True)
-    choice = st.selectbox('Snapshot originale Cboe', names)
+    selection_key = f'serafini_selected_snapshot_{week}'
+    if st.session_state.pop(f'spx_refresh_latest_{week}', False):
+        st.session_state[selection_key] = names[0]
+    elif st.session_state.get(selection_key) not in names:
+        st.session_state[selection_key] = names[0]
+    choice = st.selectbox('Snapshot originale Cboe', names, key=selection_key)
     path = f'{week}/snapshots/{choice}'
     try:
         snap = read_snapshot(store.download(path))
