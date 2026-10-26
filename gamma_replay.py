@@ -13,7 +13,7 @@ import streamlit as st
 
 from net_gamma import profile, read_snapshot
 from replay_scale import dynamic_gamma_bounds
-from spx_market_clock import classify_0dte_download
+from spx_market_clock import classify_0dte_download, cash_open_rome, spxw_expiry_close_rome
 
 ROME = ZoneInfo("Europe/Rome")
 SLOTS = ("07:30", "11:00", "13:30", "15:50", "16:01", "16:16",
@@ -146,6 +146,11 @@ def render(store, week, logs, view_mode=None):
     # Il Replay rimane dedicato al solo 0DTE.
     # Weekly resta disponibile nella sezione NET GAMMA 0DTE / Weekly.
     kind = "0DTE"
+    st.caption(f"Orario USA per {day:%d/%m/%Y}: apertura 09:30 NY = "
+               f"{cash_open_rome(day):%H:%M} Roma; "
+               f"stop SPXW 0DTE 16:00 NY = "
+               f"{spxw_expiry_close_rome(day):%H:%M} Roma. "
+               "Cambio ora legale gestito automaticamente.")
     if view_mode is None:
         view_mode = st.radio("Visualizzazione", ("Solo NET GAMMA", "Candele ES + NET GAMMA"),
                              horizontal=True, key=f"replay_visual_{week}")
