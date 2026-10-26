@@ -129,7 +129,10 @@ def show(week, store, logs=None):
                     selected_name=max(registered)[1]
                 raw=store.download(f"{week}/snapshots/{selected_name}")
                 e=result_from_snapshot(raw,float(ctx["offset"]))
-                st.caption(f"Rilevamento: {reading} · fotografia CBOE {selected_name} · stesso file per Serafini ed Edge.")
+                from gamma_section import _snapshot_download_clock
+                download_clock=_snapshot_download_clock(store,week,logs or [],selected_name)
+                acquisition=f"download Roma {download_clock}" if download_clock else "orario download non verificato"
+                st.caption(f"Rilevamento: {reading} · {day_for_choice:%d/%m/%Y} · {acquisition} · file {selected_name} · Serafini ed Edge sulla stessa fotografia.")
             except Exception as err:
                 st.error("Calcolo Edge automatico non disponibile: "+str(err))
                 st.info("È ancora possibile caricare il report JSON Edge selezionando la modalità alternativa.")
