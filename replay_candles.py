@@ -61,7 +61,13 @@ def combined_graph(gamma_graph, available, day, kind, offset, gamma_bounds, gamm
             data=[candle_trace(slot_to_item[frame.name]),
                   frame.data[0], frame.data[1]],
             traces=[0, 1, 2],
-            layout=frame.layout,
+            # gamma_graph anima l'asse NET GAMMA come xaxis; qui quel
+            # pannello e' il secondo subplot (xaxis2). Le candele conservano
+            # invece il loro asse temporale e i prezzi originali.
+            layout=go.Layout(
+                title=frame.layout.title,
+                xaxis2=dict(range=list(frame.layout.xaxis.range)),
+            ),
         )
         for frame in gamma_graph.frames
     ]
