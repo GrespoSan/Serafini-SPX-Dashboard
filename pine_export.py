@@ -48,11 +48,11 @@ indicator("Serafini SPX NET GAMMA | {date_text}{tag}", overlay=true, max_lines_c
 {warning}// Scala NET GAMMA fissa: le barre sono confrontabili tra snapshot con lo stesso gammaPerCandle.
 // Non calcola gamma flip e non usa dati opzioni live in TradingView.
 
-gammaPerCandle = input.float(5.0, "Scala fissa: punti NET GAMMA per candela", minval=0.1, step=0.5, tooltip="Mantieni lo STESSO valore per tutti gli snapshot: con scala 5, +50 Gamma sono 10 candele e +150 Gamma sono 30 candele.")
-offsetOdte = input.int(48, "Distanza 0DTE da ultima candela", minval=45, maxval=170)
-offsetWeekly = input.int(100, "Distanza Weekly da ultima candela", minval=55, maxval=300)
-positiveColor = input.color(color.lime, "NET GAMMA positivo")
-negativeColor = input.color(color.red, "NET GAMMA negativo")
+gammaPerCandle = input.float(1.0, "Scala fissa: punti NET GAMMA per candela", minval=0.1, step=0.5, tooltip="Mantieni lo STESSO valore per tutti gli snapshot: con scala 1, +50 Gamma sono 50 candele e +150 Gamma sono 150 candele.")
+offsetOdte = input.int(60, "Distanza 0DTE da ultima candela", minval=45, maxval=170)
+offsetWeekly = input.int(160, "Distanza Weekly da ultima candela", minval=55, maxval=300)
+positiveColor = input.color(color.rgb(0, 230, 117), "NET GAMMA positivo")
+negativeColor = input.color(color.rgb(242, 54, 69), "NET GAMMA negativo")
 showTitles = input.bool(true, "Mostra intestazioni")
 
 var array<line> drawnLines = array.new_line()
