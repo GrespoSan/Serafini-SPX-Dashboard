@@ -687,7 +687,7 @@ def render(store, week, snaps, logs):
             st.caption('Dati Gamma dello snapshot selezionato: non attribuire valori '
                        'di rilevamenti successivi alle ore 09:00.')
     if candidate_0dte is not None:
-        with st.expander('Livelli C/P proposti solo per intensita — controllo sperimentale v10', expanded=False):
+        with st.expander('LIVELLI CALL/PUT PROPOSTI - STRUTTURA OPZIONI', expanded=False):
             st.warning('Questi sono CANDIDATI basati sulle tre barre NET GAMMA più intense per lato, NON livelli C1–C3/P1–P3 confermati da Serafini. Non sono segnali automatici. Il calcolo NET GAMMA resta invariato.')
             st.caption('Criterio fisso di prova: tra i 25 strike sopra la chiusura SPX, le tre barre NET GAMMA positive più lunghe; tra i 25 sotto, le tre barre negative con valore assoluto maggiore. Nessun confronto con le barre vicine. C1→C3 in ordine crescente di prezzo, P1→P3 in ordine decrescente.')
             suggestions = proposed_levels(candidate_0dte)
@@ -763,7 +763,16 @@ def render(store, week, snaps, logs):
                 }
                 # Sezione separata: interpretazione della struttura, mai inferenza
                 # automatica sul verso delle singole transazioni.
-                with st.expander('Struttura opzionale — 2 Vertical + Strangle (SPERIMENTALE v13)', expanded=True):
+                with st.expander('STRUTTURA OPZIONI — 2 Vertical + Strangle', expanded=True):
+                    # Identifica esattamente lo snapshot su cui sono basati
+                    # livelli, struttura e payoff. Non inferire l'ora dal nome file.
+                    selection_description = ('Ultimo rilevamento'
+                                             if choice == names[0] else acquisition_label)
+                    clock_label = download_clock or 'non disponibile'
+                    st.caption(
+                        f'Rilevamento: {selection_description} · {day:%d/%m/%Y} · '
+                        f'download Roma {clock_label} · file {choice}'
+                    )
                     st.warning('Schema di lettura dalle slide: NON è una prova di opzioni comprate o vendute. '
                                'Il NET GAMMA aggregato non identifica il lato effettivo delle operazioni.')
                     st.caption('Prima seleziona/correggi C1–C3 e P1–P3 sopra. '
