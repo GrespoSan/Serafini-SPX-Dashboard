@@ -610,6 +610,7 @@ def render(store, week, snaps, logs):
     st.caption(f'0DTE: {day.isoformat()} · Weekly: {weekly_exp.isoformat()} (lun–gio venerdì corrente; venerdì successivo). In caso di festività controllare la scadenza effettiva.')
     st.session_state[f'gamma_compare_context_{week}'] = {
         'day': day, 'ref': ref, 'offset': offset, 'weekly_exp': weekly_exp,
+        'snapshot': choice,
     }
     asia_c1 = None
     asia_p1 = None
