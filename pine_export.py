@@ -36,7 +36,7 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
     warning = ('// NOTA: 0DTE e Weekly hanno LA STESSA SCADENZA in questa data: i due profili sono identici per definizione.\n' if same_exp else '')
     return f'''//@version=6
 indicator("Serafini SPX NET GAMMA | {date_text}{tag}", overlay=true, max_lines_count=250, max_labels_count=20)
-// EXPORT REVISION: V48-TV-500-FUTURE-SAFE
+// EXPORT REVISION: V49-TV-COMMON-SCALE-LABEL
 // Rilevamento selezionato: {clean_label or "Non identificato"}
 // Esportazione STATICA da uno snapshot Cboe; aggiornare ricopiando il Pine generato dalla dashboard.
 // Fonte: {origin}
@@ -100,7 +100,7 @@ renderProfile(array<float> levels, array<float> gamma, int center, string headin
                 array.push(drawnLines, segment)
         if showTitles
             float spacing = count > 1 ? math.max(5.0, (top - bottom) / 20.0) : 10.0
-            string scaleText = adjusted ? " | scala effettiva " + str.tostring(actualScale, "#.###") + " Gamma/bar" : ""
+            string scaleText = " | scala comune " + str.tostring(actualScale, "#.######") + " Gamma/bar" + (adjusted ? " (adattata)" : "")
             label t = label.new(center, top + spacing, heading + scaleText, xloc=xloc.bar_index, yloc=yloc.price, color=color.new(color.black, 50), textcolor=color.white, style=label.style_label_down, size=size.small)
             array.push(drawnLabels, t)
 

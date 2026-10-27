@@ -12,6 +12,7 @@ from gamma_compare import compare_profiles
 from volume_audit import compare_volume_profiles, inspect_raw_expiry, raw_transition_diagnostic
 from gamma_brief import select_key_levels, operational_summary, transition_zones
 from pine_export import make_pine
+from gamma_scale import profile_gamma_bounds, gamma_components
 from operational_levels import find_candidates, proposed_levels, candidate_csv
 from option_structure import build_structure
 from payoff_charts import render_payoff_charts
@@ -685,18 +686,33 @@ def render(store, week, snaps, logs):
     candidate_0dte = None
     if day.weekday() == 4:
         st.info('Venerdì: il profilo 0DTE è quello di oggi, mentre il Weekly usa il venerdì SUCCESSIVO (conferma diretta di Serafini).')
-    # Vista comparativa: 0DTE a sinistra, Weekly a destra.
-    # Calcoli, CSV, dettagli e controllo su C1/P1 rimangono invariati.
+    # Build both profiles before drawing so the same numeric range is available.
+    profile_errors = {}
+    for title, expiry in [('0DTE', day), ('Weekly', weekly_exp)]:
+        try:
+            computed_profiles[title] = profile(snap, expiry, ref)
+        except ValueError as exc:
+            profile_errors[title] = str(exc)
+    independent_scale = st.checkbox(
+        'Ingrandisci ogni profilo con scala indipendente', value=False,
+        key='gamma_independent_scale_v1',
+        help='Disattivato: stessa scala per confrontare 0DTE e Weekly. '
+             'Attivato: le lunghezze NON sono confrontabili tra i due profili.')
+    shared_bounds = profile_gamma_bounds(computed_profiles.values())
+    st.caption('Scale indipendenti: confrontare le intensità tramite i valori numerici.'
+               if independent_scale else
+               'Scala comune 0DTE / Weekly sul rilevamento selezionato: stesso valore = stessa lunghezza. '
+               'La scala può cambiare tra rilevamenti.')
+    st.caption('Tooltip: componente Call positiva, componente Put negativa e saldo netto '
+               'della formula Serafini (OI + Volume) × Gamma; non valori monetari delle posizioni.')
     profile_cols = st.columns(2, gap='small')
     for (title, expiry), profile_col in zip(
             [('0DTE', day), ('Weekly', weekly_exp)], profile_cols):
         with profile_col:
-            try:
-                result = profile(snap, expiry, ref)
-            except ValueError as exc:
-                st.error(f'Impossibile costruire il profilo {title}: {exc}')
+            if title in profile_errors:
+                st.error(f'Impossibile costruire il profilo {title}: {profile_errors[title]}')
                 continue
-            computed_profiles[title] = result
+            result = computed_profiles[title]
             if title == '0DTE' and result['rows']:
                 candidate_0dte = find_candidates(result['rows'], ref)
             capture_info = (f'{acquisition_label} · download ore {download_clock} Roma'
@@ -721,11 +737,11 @@ def render(store, week, snaps, logs):
             fig.add_bar(
                 x=net, y=y, orientation='h', name='NET GAMMA',
                 marker_color=colors,
-                customdata=frame[['call_gamma_component', 'put_gamma_component']].to_numpy(),
+                customdata=[gamma_components(row) for row in records],
                 hovertemplate=(
                     'Strike %{y:,.2f}<br>NET GAMMA: %{x:,.3f}'
-                    '<br>Call: %{customdata[0]:,.3f}'
-                    '<br>Put: %{customdata[1]:,.3f}<extra></extra>'
+                    '<br>Componente Call (+): %{customdata[0]:,.3f}'
+                    '<br>Componente Put (−): %{customdata[1]:,.3f}<extra></extra>'
                 ),
             )
             fig.update_layout(
@@ -733,6 +749,8 @@ def render(store, week, snaps, logs):
                 margin=dict(l=15, r=20, t=40, b=30),
                 title=f'{title} | {day:%d/%m/%Y} | {capture_info}<br><sup>NET GAMMA per strike — positivo a destra / negativo a sinistra</sup>',
                 xaxis=dict(title='NET GAMMA (unità della formula Serafini)', zeroline=True,
+                           range=(profile_gamma_bounds([result]) if independent_scale else shared_bounds),
+                           fixedrange=not independent_scale,
                            zerolinewidth=1, zerolinecolor='#b7bec8'),
                 yaxis=dict(title='Strike ES' if offset is not None else 'Strike SPX',
                            tickmode='array', tickvals=y,
