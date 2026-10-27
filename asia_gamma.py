@@ -181,6 +181,27 @@ def level_events(result, level, name):
 
 def render(target: date, c1_es, p1_es):
     st.markdown("**Sessione asiatica — 00:00–09:00 (Roma)**")
+    # Test volontario, non eseguito ad ogni refresh e senza esporre API key.
+    with st.expander("Diagnostica fonte Massive (storico ES 5m)", expanded=False):
+        if st.button("Verifica collegamento Massive Futures",
+                     key=f"massive_test_{target.isoformat()}"):
+            from massive_es import check_massive_connection
+            with st.spinner("Verifica autorizzazione Massive e candela ES storica..."):
+                st.session_state[f"massive_probe_{target.isoformat()}"] = (
+                    check_massive_connection(target))
+        probe = st.session_state.get(f"massive_probe_{target.isoformat()}")
+        if probe:
+            if probe.get("status") == "OK":
+                st.success(
+                    f"{probe['message']} · {probe['contract']} · "
+                    f"{probe['tested_day']} ore {probe['bar_rome']} Roma · "
+                    f"Close {probe['close_es']:,.2f}"
+                )
+            else:
+                st.warning(probe.get("message", "Test non riuscito"))
+            st.caption("Il test non rivela la chiave e non modifica i dati Cboe. "
+                       "La verifica di una singola candela storica NON dimostra "
+                       "che una sessione Asia completa e confrontabile con Yahoo.")
     try:
         result = asian_session(target)
     except Exception as exc:
