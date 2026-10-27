@@ -79,6 +79,47 @@ def asian_session(target: date):
     }
 
 
+def asia_range_reading(result):
+    """Lettura descrittiva della chiusura 09:00 rispetto al RANGE Asia.
+
+    Indipendente da NET GAMMA/C1/P1: non e' un Gamma Flip e non
+    produce segnali trading. Gli estremi restano provvisori se mancano barre.
+    """
+    hi, lo, price = (float(result[k]) for k in ("high", "low", "close"))
+    if not all(math.isfinite(v) for v in (hi, lo, price)):
+        raise ValueError("Estremi o chiusura Asia non finiti")
+    if not (lo <= price <= hi) or hi <= lo:
+        raise ValueError("Range Asia incoerente o di ampiezza nulla")
+    ratio = (price - lo) / (hi - lo)
+    if ratio < 1.0 / 3.0:
+        zone = "FASCIA BASSA"
+        reading = "Chiusura vicina alla parte bassa del range: elemento di debolezza relativa."
+        color = "#f59e0b"
+    elif ratio > 2.0 / 3.0:
+        zone = "FASCIA ALTA"
+        reading = "Chiusura vicina alla parte alta del range: elemento di forza relativa."
+        color = "#22c55e"
+    else:
+        zone = "FASCIA CENTRALE"
+        reading = "Chiusura nella parte centrale del range: nessuna prevalenza dal solo range."
+        color = "#f59e0b"
+    provisional = bool(result.get("missing_times"))
+    return {
+        "status": "PROVVISORIO" if provisional else "VALIDO",
+        "zone": zone,
+        "verdict": "CHIUSURA 09:00 IN " + zone + " DEL RANGE ASIA",
+        "reading": reading,
+        "close_position_pct": round(100.0 * ratio, 2),
+        "range_points": round(hi - lo, 2),
+        "distance_from_low": round(price - lo, 2),
+        "distance_from_high": round(hi - price, 2),
+        "extremes_provisional": provisional,
+        "color": color,
+        "scope": ("Lettura descrittiva della sessione asiatica. "
+                  "NON calcola C1/P1, Gamma Flip o segnali LONG/SHORT."),
+    }
+
+
 def close_at_nine(target: date):
     """Compatibilita' con la versione precedente."""
     result = asian_session(target)
@@ -136,9 +177,30 @@ def render(target: date, c1_es, p1_es):
     else:
         st.caption(f"{result['source']} · {result['bars']}/{result['expected']} barre verificate.")
 
+    # La lettura della sessione Asia e' disponibile anche senza livelli
+    # C1/P1: questi servono SOLTANTO alla seconda classificazione Gamma.
+    reading = asia_range_reading(result)
+    st.markdown(
+        f'### Responso Asia ore 09:00: '
+        f'<span style="color:{reading["color"]}">{reading["zone"]}</span>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f'**{reading["verdict"]}** · '
+        f'chiusura al {reading["close_position_pct"]:.1f}% del range, '
+        f'{reading["distance_from_low"]:.2f} punti sopra il minimo e '
+        f'{reading["distance_from_high"]:.2f} sotto il massimo.'
+    )
+    st.caption(
+        reading["reading"] + " " + reading["scope"] +
+        (" Estremi provvisori per barre mancanti."
+         if reading["extremes_provisional"] else "")
+    )
     if c1_es is None or p1_es is None or not p1_es < c1_es:
-        st.info("Per classificare la posizione, seleziona C1 e P1 validi "
-                "e indica il differenziale ES − SPX.")
+        st.info("Confronto con C1/P1 non determinabile: servono livelli "
+                "selezionati e disponibili entro le 09:00 Roma e "
+                "un differenziale ES-SPX verificato. Il responso del range "
+                "Asia sopra rimane comunque leggibile.")
         return
 
     st.markdown(f"**Riferimenti NET GAMMA (ES): C1 {c1_es:,.2f} · P1 {p1_es:,.2f}**")
