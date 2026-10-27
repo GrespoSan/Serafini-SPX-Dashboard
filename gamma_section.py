@@ -707,8 +707,7 @@ def render(store, week, snaps, logs):
                'della formula Serafini (OI + Volume) × Gamma; non valori monetari delle posizioni.')
     st.markdown('**Priorità operativa alle 0DTE:** Serafini richiama un peso numerico del '
                 '**60% per le 0DTE** e del **23% per le Weekly** e, in caso di dubbio, '
-                'privilegia i livelli 0DTE più marcati. '
-                'Fonte: intervento del docente del 21/10/2026; percentuali citate, non calcolate sul rilevamento mostrato.')
+                'privilegia i livelli 0DTE più marcati.')
     profile_cols = st.columns(2, gap='small')
     for (title, expiry), profile_col in zip(
             [('0DTE', day), ('Weekly', weekly_exp)], profile_cols):
