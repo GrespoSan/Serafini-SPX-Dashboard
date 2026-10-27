@@ -240,13 +240,13 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
     report['market_context'] = {'vix_curve': {'status': 'NON DISPONIBILE'},
                                 'asia_session': {'status': 'NON DISPONIBILE'}}
     try:
-        from vix_regime import previous_vix_curve
+        from vix_regime import previous_vix_curve, breakout_buffer_points
         vx = previous_vix_curve(day)
         pct = float(vx['contango_pct'])
         report['market_context']['vix_curve'] = {
             **vx, 'status': 'VALIDO',
             'regime': 'BACKWARDATION' if pct < 0 else 'CONTANGO',
-            'breakout_buffer_es_points': 15 if pct < 1.5 else 10,
+            'breakout_buffer_es_points': breakout_buffer_points(pct),
             'note': 'Settlement futures VX mensili della seduta precedente; non VIX spot intraday'}
     except Exception as exc:
         report['market_context']['vix_curve']['reason'] = type(exc).__name__
@@ -649,7 +649,7 @@ def render(store, week, snaps, logs):
     # Firma del formato: impedisce il download del vecchio ZIP v2 salvato
     # nella sessione dopo l'aggiornamento di codice, a parita di parametri.
     report_key = (week, day.isoformat(), ref, offset,
-                  json.dumps(levels, sort_keys=True), 'serafini_spx_ai_report_v6_dst_expiry')
+                  json.dumps(levels, sort_keys=True), 'serafini_spx_ai_report_v6_dst_expiry_contango10')
     if st.button('Prepara report per analisi AI',key=f'ai_build_{week}',type='primary'):
         try:
             with st.spinner('Lettura snapshot Cboe e preparazione report...'):
