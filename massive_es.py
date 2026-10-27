@@ -169,7 +169,7 @@ def complete_historical_asia(target, yahoo_bars, expected):
 def check_massive_connection(target):
     """Test esplicito della chiave Streamlit sul prodotto FUTURES + candle 5m.
 
-    Effettua massimo 2 richieste nel piano Free. Nessun dettaglio
+    Effettua fino a 3 richieste nel piano Free (contratti + due tentativi barre). Nessun dettaglio
     dell'API key viene restituito o salvato nei dati di output.
     """
     key = _secret()
