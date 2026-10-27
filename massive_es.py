@@ -164,3 +164,56 @@ def complete_historical_asia(target, yahoo_bars, expected):
         # Non esporre errori raw del provider o dettagli d'autenticazione.
         return None, {"status": "API_NON_DISPONIBILE",
                       "reason": "Impossibile verificare la sessione Massive con il piano/API configurati"}
+
+
+def check_massive_connection(target):
+    """Test esplicito della chiave Streamlit sul prodotto FUTURES + candle 5m.
+
+    Effettua massimo 2 richieste nel piano Free. Nessun dettaglio
+    dell'API key viene restituito o salvato nei dati di output.
+    """
+    key = _secret()
+    if not key:
+        return {"status": "CHIAVE_MANCANTE",
+                "message": "MASSIVE_API_KEY non rilevata nei Secrets dell'app"}
+    # La verifica usa un giorno gia' storico (non dipende dall'ora del test).
+    test_day = target - timedelta(days=1)
+    while test_day.weekday() >= 5:
+        test_day -= timedelta(days=1)
+    try:
+        tickers = _candidate_contracts(test_day, key)
+        if not tickers:
+            return {"status": "NESSUN_CONTRATTO",
+                    "message": "Autenticazione ricevuta; nessun ES disponibile per il test"}
+        moment = pd.Timestamp(
+            datetime.combine(test_day, time(5), tzinfo=ROME))
+        for ticker in tickers:
+            bars = _download_session(test_day, ticker, key,
+                                     pd.DatetimeIndex([moment]))
+            if bars is not None and len(bars) == 1:
+                return {
+                    "status": "OK",
+                    "message": "Futures Massive: chiave, contratti ES e candele 5m accessibili",
+                    "tested_day": test_day.isoformat(),
+                    "contract": ticker,
+                    "bar_rome": moment.strftime("%H:%M"),
+                    "close_es": float(bars.iloc[0]["Close"]),
+                    "time_delay": "Storico; non certifica disponibilita live alle 09:00",
+                }
+        return {"status": "SENZA_CANDELE",
+                "message": "Chiave accettata, ma nessuna candela storica ES 5m restituita"}
+    except httpx.HTTPStatusError as exc:
+        # Non mostra URL, header o risposta raw potenzialmente sensibili.
+        code = exc.response.status_code
+        if code == 401:
+            msg = "Autenticazione rifiutata: verifica la chiave Massive"
+        elif code == 403:
+            msg = "Accesso Futures negato: verifica il piano Futures Basic"
+        elif code == 429:
+            msg = "Limite richieste Massive raggiunto: riprova piu tardi"
+        else:
+            msg = "Errore HTTP Massive: " + str(code)
+        return {"status": "HTTP_" + str(code), "message": msg}
+    except (httpx.HTTPError, ValueError, TypeError, KeyError, OverflowError):
+        return {"status": "NON_DISPONIBILE",
+                "message": "Test Massive fallito; controlla la connettivita o i log Cloud"}
