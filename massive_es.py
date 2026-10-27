@@ -32,10 +32,11 @@ def _secret():
 
 
 def _get(path, params, key):
-    # API key inviata solamente su HTTPS a Massive. Non viene inserita
-    # nei log, nei messaggi d'errore, nel JSON/PDF o nel repository.
+    # Chiave solo nell'header HTTPS Authorization, mai nell'URL.
+    # Non esposta nei log applicativi, nel JSON/PDF o nel repository.
     response = httpx.get(
-        API_BASE + path, params={**params, "apiKey": key},
+        API_BASE + path, params=params,
+        headers={"Authorization": "Bearer " + key},
         timeout=15, follow_redirects=False,
     )
     response.raise_for_status()
@@ -160,6 +161,6 @@ def complete_historical_asia(target, yahoo_bars, expected):
         return None, {"status": "VERIFICA_NON_SUPERATA",
                       "reason": "Contratto ES diverso da Yahoo oppure copertura Massive incompleta"}
     except (httpx.HTTPError, ValueError, TypeError, KeyError, OverflowError):
-        # Non esporre URL che contengono apiKey o messaggi raw del provider.
+        # Non esporre errori raw del provider o dettagli d'autenticazione.
         return None, {"status": "API_NON_DISPONIBILE",
                       "reason": "Impossibile verificare la sessione Massive con il piano/API configurati"}
