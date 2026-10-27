@@ -236,7 +236,7 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
         report['warnings'].append('Differenziale ES–SPX assente: strike_es=null; usare soltanto strike SPX.')
     report['warnings'].append('Le concentrazioni e le variazioni sono descrittive, non dimostrano acquisti/vendite reali di opzioni.')
     # Contesto indipendente: non modifica la formula NET GAMMA.
-    report['schema_version'] = 'serafini_spx_ai_report_v6'
+    report['schema_version'] = 'serafini_spx_ai_report_v7'
     report['market_context'] = {'vix_curve': {'status': 'NON DISPONIBILE'},
                                 'asia_session': {'status': 'NON DISPONIBILE'}}
     try:
@@ -253,11 +253,12 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
         report['warnings'].append('Regime VX precedente non disponibile: non stimare il buffer.')
     # Riutilizza il modulo 5m già usato dal quadro operativo, non il vecchio range 15m.
     try:
-        from asia_gamma import asian_session, level_events
+        from asia_gamma import asian_session, level_events, asia_range_reading
         asia = asian_session(day)
         result = {**asia, 'status': 'VALIDO', 'date': day.isoformat(),
                   'session': '00:00–09:00 Europe/Rome',
                   'close_0900_es': asia['close'],
+                  'range_reading_0900': asia_range_reading(asia),
                   'relative_to_c1_p1': 'NON DETERMINABILE'}
         levels = selected_levels or {}
         # Anti-look-ahead: un livello definito dopo le 09:00 non puo'
@@ -437,7 +438,21 @@ def pdf_summary(report):
             f"Sessione asiatica ES 00:00-09:00 Roma: minimo {asia['low']:.2f}, "
             f"massimo {asia['high']:.2f}; chiusura 09:00 {asia['close_0900_es']:.2f}; "
             f"barre {asia['bars']}/{asia['expected']}.", styles['SPXSmall']))
-        story.append(Paragraph(asia.get('verdict_0900', 'Posizione rispetto a C1/P1: NON DETERMINABILE.'), styles['SPXSmall']))
+        base = asia.get('range_reading_0900') or {}
+        if base.get('verdict'):
+            story.append(Paragraph(
+                '<b>Responso Asia 09:00:</b> '
+                + base['verdict'] + '. '
+                + f"Chiusura al {base['close_position_pct']:.1f}% del range; "
+                + f"{base['distance_from_low']:.2f} punti sopra il minimo. "
+                + ('Estremi PROVVISORI per barre mancanti. '
+                   if base.get('extremes_provisional') else '')
+                + 'Lettura descrittiva, non segnale operativo.',
+                styles['SPXSmall']))
+        story.append(Paragraph(
+            'Confronto C1/P1: ' +
+            asia.get('verdict_0900', 'NON DETERMINABILE (livelli e basis verificati non disponibili).'),
+            styles['SPXSmall']))
         if asia.get('context_reading_0900'):
             story.append(Paragraph(asia['context_reading_0900'], styles['SPXSmall']))
         if asia.get('missing_times'):
@@ -649,7 +664,7 @@ def render(store, week, snaps, logs):
     # Firma del formato: impedisce il download del vecchio ZIP v2 salvato
     # nella sessione dopo l'aggiornamento di codice, a parita di parametri.
     report_key = (week, day.isoformat(), ref, offset,
-                  json.dumps(levels, sort_keys=True), 'serafini_spx_ai_report_v6_dst_expiry_contango10')
+                  json.dumps(levels, sort_keys=True), 'serafini_spx_ai_report_v7_asia_reading')
     if st.button('Prepara report per analisi AI',key=f'ai_build_{week}',type='primary'):
         try:
             with st.spinner('Lettura snapshot Cboe e preparazione report...'):
