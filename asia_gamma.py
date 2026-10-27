@@ -144,33 +144,10 @@ def asian_session(target: date):
             target, bars, missing)
         missing = expected.difference(bars.index)
         extra = bars.index.difference(expected)
+    # Una candela assente rimane assente se Yahoo 1m non la conferma.
+    # Nessun secondo feed non ufficiale o con dati ritardati.
+    source = "Yahoo Finance ES=F · 5 minuti (integrazione 1m validata se disponibile)"
     recovered_times = list(yahoo_1m_recovered)
-    fallback_status = None
-    fallback_note = None
-    source = "Yahoo Finance ES=F · barre 5 minuti, 00:00–09:00 Roma"
-    # Recupero storico Massive Free FACOLTATIVO: solo per ulteriori lacune,
-    # quando la sessione intera e' disponibile (>8h dopo le 09:00).
-    # Non mescolare mai barre di contratti non confrontabili.
-    if len(missing) and not len(extra):
-        from massive_es import complete_historical_asia
-        yahoo_ohlc = pd.DataFrame({
-            field: pd.to_numeric(_column(bars, field), errors="coerce")
-            for field in ("Open", "High", "Low", "Close")
-        }, index=bars.index).dropna()
-        replacement, diagnostic = complete_historical_asia(
-            target, yahoo_ohlc, expected)
-        fallback_status = diagnostic.get("status")
-        fallback_note = diagnostic.get("reason")
-        if replacement is not None:
-            bars = replacement
-            recovered_times = sorted(set(yahoo_1m_recovered +
-                                         diagnostic["recovered_times"]))
-            source = diagnostic["source"] + (
-                f" · {diagnostic['compared_bars']} candele coincidenti Yahoo confrontate"
-            )
-            fallback_note = None
-            missing = expected.difference(bars.index)
-            extra = bars.index.difference(expected)
     # Fino a 3 lacune: rendi gli estremi PROVVISORI, non bloccare anche la chiusura.
     if len(extra) or len(missing) > 3 or len(bars) < len(expected) - 3:
         raise ValueError(
@@ -198,8 +175,6 @@ def asian_session(target: date):
         "original_missing_times_yahoo": original_missing,
         "yahoo_1m_recovered_times": yahoo_1m_recovered,
         "recovered_times": recovered_times,
-        "massive_fallback_status": fallback_status,
-        "massive_fallback_note": fallback_note,
         "timeline": [{"time": t.strftime("%H:%M"), "high": float(high.loc[t]),
                       "low": float(low.loc[t]), "close": float(close.loc[t])}
                      for t in bars.index],
@@ -310,12 +285,6 @@ def render(target: date, c1_es, p1_es, level_context=None):
             "reali a 1 minuto ciascuna ("
             + ", ".join(result["yahoo_1m_recovered_times"])
             + "), dopo verifica OHLC su altre barre comuni."
-        )
-    if result.get("recovered_times") and "Massive" in result.get("source", ""):
-        st.caption(
-            "Storico ES completato con Massive in ritardo: "
-            + ", ".join(result["recovered_times"])
-            + ". Non e' un dato operativo disponibile alle 09:00."
         )
 
     # La lettura della sessione Asia e' disponibile anche senza livelli
