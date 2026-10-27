@@ -258,10 +258,12 @@ def render(target: date, c1_es, p1_es, level_context=None):
          if reading["extremes_provisional"] else "")
     )
     if c1_es is None or p1_es is None or not p1_es < c1_es:
-        st.info("Confronto con C1/P1 non determinabile: servono livelli "
-                "selezionati e disponibili entro le 09:00 Roma e "
-                "un differenziale ES-SPX verificato. Il responso del range "
-                "Asia sopra rimane comunque leggibile.")
+        st.info("Confronto con C1/P1 non determinabile: non e' disponibile "
+                "una coppia valida di livelli dal rilevamento ufficiale "
+                "delle 07:30 (oppure manca il differenziale ES-SPX). "
+                "Non uso automaticamente i livelli di rilevamenti "
+                "successivi alle 09:00. Il responso del range Asia "
+                "resta indipendente e leggibile.")
         return
 
     st.markdown("### Confronto ASIA con i livelli C1/P1 proposti")
