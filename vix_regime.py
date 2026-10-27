@@ -5,6 +5,7 @@ La percentuale e' (M2/M1 - 1)*100; le opzioni Cboe SPX restano intatte.
 """
 import csv
 import io
+import math
 import re
 from datetime import date, timedelta
 from urllib.parse import urlencode
@@ -100,6 +101,18 @@ def previous_vix_curve(target_day):
                      + ", ".join(errors))
 
 
+def breakout_buffer_points(contango_pct):
+    """Regola configurata: Backwardation 15, Contango 10 punti.
+
+    La percentuale deriva dalla curva futures VX mensili (M2/M1 - 1)*100.
+    A zero esatto si segue la classificazione non-negativa della dashboard.
+    """
+    pct = float(contango_pct)
+    if not math.isfinite(pct):
+        raise ValueError("Contango VX non valido")
+    return 15 if pct < 0 else 10
+
+
 def render(target_day):
     """Mostra regime e buffer affiancati, senza modificare NET GAMMA."""
     try:
@@ -111,11 +124,9 @@ def render(target_day):
     if pct is None:
         regime, buffer = "Non disponibile", "Non determinato"
     elif pct < 0:
-        regime, buffer = f"Backwardation {pct:+.2f}%", "15 punti"
-    elif pct < 1.5:
-        regime, buffer = f"Contango {pct:+.2f}%", "15 punti"
+        regime, buffer = f"Backwardation {pct:+.2f}%", f"{breakout_buffer_points(pct)} punti"
     else:
-        regime, buffer = f"Contango {pct:+.2f}%", "10 punti"
+        regime, buffer = f"Contango {pct:+.2f}%", f"{breakout_buffer_points(pct)} punti"
 
     col_regime, col_buffer = st.columns(2, gap="medium")
     with col_regime:
