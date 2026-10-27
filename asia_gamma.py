@@ -179,7 +179,7 @@ def level_events(result, level, name):
     return events, touched, recovered
 
 
-def render(target: date, c1_es, p1_es):
+def render(target: date, c1_es, p1_es, level_context=None):
     st.markdown("**Sessione asiatica — 00:00–09:00 (Roma)**")
     # Test volontario, non eseguito ad ogni refresh e senza esporre API key.
     with st.expander("Diagnostica fonte Massive (storico ES 5m)", expanded=False):
@@ -264,7 +264,13 @@ def render(target: date, c1_es, p1_es):
                 "Asia sopra rimane comunque leggibile.")
         return
 
-    st.markdown(f"**Riferimenti NET GAMMA (ES): C1 {c1_es:,.2f} · P1 {p1_es:,.2f}**")
+    st.markdown("### Confronto ASIA con i livelli C1/P1 proposti")
+    if level_context:
+        st.warning(level_context)
+    else:
+        st.warning("C1/P1 candidati sperimentali: non sono livelli confermati "
+                   "da Serafini. Confronto descrittivo, non segnale operativo.")
+    st.markdown(f"**Riferimenti proposti NET GAMMA (ES): C1 {c1_es:,.2f} · P1 {p1_es:,.2f}**")
     if price > c1_es:
         zone = "Sopra C1 — zona superiore"
     elif price < p1_es:
@@ -293,30 +299,30 @@ def render(target: date, c1_es, p1_es):
     p1_events, _, _ = level_events(result, p1_es, "P1")
     c1_events, _, _ = level_events(result, c1_es, "C1")
     if price < p1_es:
-        verdict = "CHIUSURA ASIATICA SOTTO P1 — ZONA INFERIORE"
+        verdict = "CHIUSURA ASIATICA SOTTO P1 PROPOSTO — ZONA INFERIORE"
         distance = f"{p1_es - price:,.2f} punti sotto P1"
         relevant = p1_events
     elif price > c1_es:
-        verdict = "CHIUSURA ASIATICA SOPRA C1 — ZONA SUPERIORE"
+        verdict = "CHIUSURA ASIATICA SOPRA C1 PROPOSTO — ZONA SUPERIORE"
         distance = f"{price - c1_es:,.2f} punti sopra C1"
         relevant = c1_events
     else:
-        verdict = "CHIUSURA ASIATICA FRA P1 E C1 — FASCIA INTERMEDIA / FLIP NON VERIFICATO"
+        verdict = "CHIUSURA ASIATICA FRA P1/C1 PROPOSTI — FASCIA INTERMEDIA / FLIP NON VERIFICATO"
         distance = f"{price - p1_es:,.2f} punti sopra P1; {c1_es - price:,.2f} punti sotto C1"
         relevant = p1_events + c1_events
     if price < p1_es:
         st.markdown(
-            f'### Verdetto ore 09:00: <span style="color:#ef4444">{verdict}</span>',
+            f'### Riscontro indicativo ore 09:00: <span style="color:#ef4444">{verdict}</span>',
             unsafe_allow_html=True,
         )
     elif price > c1_es:
         st.markdown(
-            f'### Verdetto ore 09:00: <span style="color:#22c55e">{verdict}</span>',
+            f'### Riscontro indicativo ore 09:00: <span style="color:#22c55e">{verdict}</span>',
             unsafe_allow_html=True,
         )
     else:
         st.markdown(
-            f'### Verdetto ore 09:00: <span style="color:#f59e0b">{verdict}</span>',
+            f'### Riscontro indicativo ore 09:00: <span style="color:#f59e0b">{verdict}</span>',
             unsafe_allow_html=True,
         )
     st.write(distance + ".")
@@ -423,13 +429,13 @@ def render_context_auto(target: date, profile_0dte, profile_weekly, offset):
     _live_context()
 
 
-def render_auto(target: date, c1_es, p1_es):
+def render_auto(target: date, c1_es, p1_es, level_context=None):
     """Aggiorna soltanto il riquadro Asia, senza F5 o ricalcolo NET GAMMA."""
     now = datetime.now(ROME)
     # Solo la giornata odierna, dalla prima apertura della pagina fino alle 09:45.
     live = target == now.date() and now.time() < time(9, 45)
     if not live:
-        render(target, c1_es, p1_es)
+        render(target, c1_es, p1_es, level_context=level_context)
         return
 
     @st.fragment(run_every="2min")
@@ -437,7 +443,7 @@ def render_auto(target: date, c1_es, p1_es):
         current = datetime.now(ROME)
         if current.time() >= time(9, 45):
             st.rerun()  # una sola esecuzione completa per interrompere il timer
-        render(target, c1_es, p1_es)
+        render(target, c1_es, p1_es, level_context=level_context)
         st.caption("Sessione asiatica: aggiornamento automatico ogni 2 minuti "
                    "fino alle 09:45, senza ricaricare l'app.")
     _asian_live_fragment()
