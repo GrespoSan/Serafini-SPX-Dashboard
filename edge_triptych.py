@@ -25,7 +25,7 @@ def _matching_serafini(store, week, digest, day, reference):
 def _plot(e, serafini_rows, candles, shift, bounds):
     fig = make_subplots(rows=1, cols=3, shared_yaxes=True,
         column_widths=[0.5,0.25,0.25], horizontal_spacing=0.038,
-        subplot_titles=("PREZZO ES · 5 minuti", "SERAFINI · NET Gamma 0DTE", "EDGE · GEX 0DTE"))
+        subplot_titles=("PREZZO ES · 5 minuti", "SERAFINI · NET Gamma 0DTE · livelli ES", "EDGE · GEX 0DTE"))
     if candles is not None and not candles.empty:
         fig.add_trace(go.Candlestick(x=candles["bar_close"], open=candles["open"],
             high=candles["high"], low=candles["low"], close=candles["close"],
@@ -37,8 +37,9 @@ def _plot(e, serafini_rows, candles, shift, bounds):
         fig.add_trace(go.Bar(x=n,y=y,orientation="h",marker_color=[
             "#22b573" if x>=0 else "#e64b4b" for x in n],
             width=3.6,name="NET Serafini",showlegend=False),row=1,col=2)
-        # Identical strike-label rule used by gamma_replay.py.
-        # Strike SPX is printed, vertically aligned to its ES-converted price.
+        # All three panels share ES coordinates. Display ES price labels,
+        # not raw SPX strike labels, to avoid a visible basis displacement.
+        # Original SPX strike is preserved unchanged in serafini_rows.
         xmin=min(n)
         xmax=max(n)
         spread=max(xmax-xmin,1.0)
@@ -49,7 +50,8 @@ def _plot(e, serafini_rows, candles, shift, bounds):
         fig.add_trace(go.Scatter(
             x=[-label_gap if gamma>0 else label_gap for strike,gamma in selected],
             y=[strike+shift for strike,gamma in selected],
-            text=[f"{strike:,.2f}".rstrip("0").rstrip(".") for strike,gamma in selected],
+            text=[f"{strike+shift:,.2f}".rstrip("0").rstrip(".")
+                  for strike,gamma in selected],
             textposition=["middle left" if gamma>0 else "middle right" for strike,gamma in selected],
             mode="text",textfont=dict(color="#e2e8f0",size=10),
             hoverinfo="skip",showlegend=False,cliponaxis=False,
