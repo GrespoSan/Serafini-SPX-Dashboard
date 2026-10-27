@@ -20,6 +20,95 @@ def _column(frame, field):
     return frame[field]
 
 
+
+def _recover_yahoo_5m_from_1m(target, bars, missing):
+    """Ricostruisce solo barre 5m mancanti con cinque barre Yahoo 1m REALI.
+
+    Controlli anti-invenzione: 5 timestamp consecutivi esatti; OHLC coerenti;
+    almeno 3 periodi 5m condivisi con Yahoo verificati con scarto <=0.25 ES.
+    Nessun riempimento/interpolazione. Il feed 1m Yahoo ha storico limitato.
+    """
+    if not 0 < len(missing) <= 3:
+        return bars, []
+    today = datetime.now(ROME).date()
+    if not target <= today or (today - target).days > 6:
+        return bars, []
+    try:
+        import yfinance as yf
+        one = yf.download(
+            "ES=F", start=(target - timedelta(days=1)).isoformat(),
+            end=(target + timedelta(days=1)).isoformat(),
+            interval="1m", auto_adjust=False, progress=False,
+            threads=False, prepost=True,
+        )
+        if one is None or one.empty or one.index.tz is None:
+            return bars, []
+        one = one.copy()
+        one.index = one.index.tz_convert(ROME)
+        if one.index.has_duplicates:
+            return bars, []
+        fields = ("Open", "High", "Low", "Close")
+        minute = pd.DataFrame({
+            name: pd.to_numeric(_column(one, name), errors="coerce")
+            for name in fields
+        }, index=one.index)
+        five = pd.DataFrame({
+            name: pd.to_numeric(_column(bars, name), errors="coerce")
+            for name in fields
+        }, index=bars.index)
+
+        def aggregate(stamp):
+            times = pd.date_range(stamp, periods=5, freq="min")
+            if not all(t in minute.index for t in times):
+                return None
+            block = minute.loc[times, list(fields)]
+            if block.isna().any().any() or not all(
+                    math.isfinite(float(v)) and float(v) > 0
+                    for v in block.to_numpy().flat):
+                return None
+            if (block["High"] < block["Low"]).any():
+                return None
+            if ((block["Open"] > block["High"]) |
+                    (block["Open"] < block["Low"]) |
+                    (block["Close"] > block["High"]) |
+                    (block["Close"] < block["Low"])).any():
+                return None
+            return {
+                "Open": float(block["Open"].iloc[0]),
+                "High": float(block["High"].max()),
+                "Low": float(block["Low"].min()),
+                "Close": float(block["Close"].iloc[-1]),
+            }
+
+        # Prima verifica che siano lo stesso contratto/feed effettivo.
+        comparable = []
+        for stamp in five.index:
+            merged = aggregate(stamp)
+            if merged is None:
+                continue
+            dif = max(abs(merged[f] - float(five.at[stamp, f]))
+                      for f in fields)
+            if not math.isfinite(dif):
+                continue
+            comparable.append(dif)
+        if len(comparable) < 3 or max(comparable) > 0.25:
+            return bars, []
+
+        recovered = {stamp: aggregate(stamp) for stamp in missing}
+        recovered = {stamp: row for stamp, row in recovered.items()
+                     if row is not None}
+        if not recovered:
+            return bars, []
+        additions = pd.DataFrame.from_dict(recovered, orient="index")
+        completed = pd.concat([five, additions]).sort_index()
+        if completed.index.has_duplicates:
+            return bars, []
+        return completed, [stamp.strftime("%H:%M") for stamp in sorted(recovered)]
+    except Exception:
+        # Niente correzioni se Yahoo 1m e' indisponibile o non verificabile.
+        return bars, []
+
+
 @st.cache_data(ttl=120, max_entries=90, show_spinner=False)
 def asian_session(target: date):
     """Barre 5m [00:00,09:00) Roma; verifica integrita' e OHLC."""
@@ -49,12 +138,18 @@ def asian_session(target: date):
     missing = expected.difference(bars.index)
     extra = bars.index.difference(expected)
     original_missing = [t.strftime("%H:%M") for t in missing]
-    recovered_times = []
+    yahoo_1m_recovered = []
+    if len(missing) and not len(extra):
+        bars, yahoo_1m_recovered = _recover_yahoo_5m_from_1m(
+            target, bars, missing)
+        missing = expected.difference(bars.index)
+        extra = bars.index.difference(expected)
+    recovered_times = list(yahoo_1m_recovered)
     fallback_status = None
     fallback_note = None
     source = "Yahoo Finance ES=F · barre 5 minuti, 00:00–09:00 Roma"
-    # Recupero storico Massive Free FACOLTATIVO: solo se Yahoo presenta
-    # lacune e Massive ha l'intera sessione disponibile (>8h di ritardo).
+    # Recupero storico Massive Free FACOLTATIVO: solo per ulteriori lacune,
+    # quando la sessione intera e' disponibile (>8h dopo le 09:00).
     # Non mescolare mai barre di contratti non confrontabili.
     if len(missing) and not len(extra):
         from massive_es import complete_historical_asia
@@ -68,7 +163,8 @@ def asian_session(target: date):
         fallback_note = diagnostic.get("reason")
         if replacement is not None:
             bars = replacement
-            recovered_times = diagnostic["recovered_times"]
+            recovered_times = sorted(set(yahoo_1m_recovered +
+                                         diagnostic["recovered_times"]))
             source = diagnostic["source"] + (
                 f" · {diagnostic['compared_bars']} candele coincidenti Yahoo confrontate"
             )
@@ -100,6 +196,7 @@ def asian_session(target: date):
         "bars": len(bars), "expected": len(expected),
         "missing_times": [t.strftime("%H:%M") for t in missing],
         "original_missing_times_yahoo": original_missing,
+        "yahoo_1m_recovered_times": yahoo_1m_recovered,
         "recovered_times": recovered_times,
         "massive_fallback_status": fallback_status,
         "massive_fallback_note": fallback_note,
@@ -207,15 +304,19 @@ def render(target: date, c1_es, p1_es, level_context=None):
         )
     else:
         st.caption(f"{result['source']} · {result['bars']}/{result['expected']} barre verificate.")
-    if result.get("recovered_times"):
+    if result.get("yahoo_1m_recovered_times"):
         st.caption(
-            "Completa con Massive storico: recuperate "
-            + ", ".join(result["recovered_times"])
-            + ". Confronto effettuato sulle altre candele del future ES. "
-            "Non sono dati disponibili in tempo reale con Massive Free."
+            "Yahoo ES=F: candele 5m mancanti recuperate da cinque barre "
+            "reali a 1 minuto ciascuna ("
+            + ", ".join(result["yahoo_1m_recovered_times"])
+            + "), dopo verifica OHLC su altre barre comuni."
         )
-    elif result.get("missing_times") and result.get("massive_fallback_note"):
-        st.caption("Verifica alternativa Massive: " + result["massive_fallback_note"] + ".")
+    if result.get("recovered_times") and "Massive" in result.get("source", ""):
+        st.caption(
+            "Storico ES completato con Massive in ritardo: "
+            + ", ".join(result["recovered_times"])
+            + ". Non e' un dato operativo disponibile alle 09:00."
+        )
 
     # La lettura della sessione Asia e' disponibile anche senza livelli
     # C1/P1: questi servono SOLTANTO alla seconda classificazione Gamma.
