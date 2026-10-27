@@ -1,6 +1,7 @@
 """Modulo di sola lettura per l'app Serafini SPX Dashboard v2."""
 import gzip
 import json
+import math
 from datetime import date, timedelta, time
 from zoneinfo import ZoneInfo
 from datetime import datetime
@@ -150,6 +151,67 @@ def _snapshot_download_clock(store, week, logs, file_name):
         except (ValueError, TypeError, KeyError, OverflowError, OSError, RuntimeError):
             continue
     return min(clock_times).strftime('%H:%M') if clock_times else None
+
+
+@st.cache_data(ttl=300, show_spinner=False, max_entries=32)
+def _morning_asia_candidates(week, target, log_names, _store):
+    """Individua C1/P1 *sperimentali* esclusivamente dal Cboe delle 07:30.
+
+    Si basa sul log del download ufficiale, con verifica della data/ora
+    di acquisizione: un download dopo le 09:00 non è valido.
+    Non utilizza lo snapshot selezionato né dati successivi.
+    """
+    from net_gamma import profile, read_snapshot
+
+    rome = ZoneInfo("Europe/Rome")
+    eligible = []
+    for log_name in log_names:
+        try:
+            entry = json.loads(_store.download(f"{week}/logs/{log_name}"))
+            if (entry.get("scheduled_slot") != "30 7 * * 1-5"
+                    or entry.get("rome_date") != target.isoformat()
+                    or entry.get("status") not in ("NUOVO", "INVARIATO")):
+                continue
+            name = str(entry.get("file") or "")
+            if not name.startswith(f"{week}/snapshots/SPX_CBOE_{target:%Y%m%d}_"):
+                continue
+            raw = entry.get("download_rome") or entry.get("download_utc")
+            dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                continue
+            dt = dt.astimezone(rome)
+            if dt.date() == target and dt.time() <= time(9, 0):
+                eligible.append((dt, name))
+        except (KeyError, ValueError, TypeError, RuntimeError, OSError, OverflowError):
+            continue
+
+    for dt, source in sorted(eligible):
+        try:
+            snap = read_snapshot(_store.download(source))
+            reference = float(snap["data"].get("prev_day_close"))
+            if not math.isfinite(reference) or reference <= 0:
+                continue
+            rows = profile(snap, target, reference).get("rows") or []
+            if len(rows) != 50:
+                continue
+            proposed = proposed_levels(find_candidates(rows, reference))
+            if not all(k in proposed for k in ("C1", "C2", "C3", "P1", "P2", "P3")):
+                continue
+            c1 = float(proposed["C1"]["strike_spx"])
+            p1 = float(proposed["P1"]["strike_spx"])
+            if not (p1 < reference < c1):
+                continue
+            return {
+                "source": source.rsplit("/", 1)[-1],
+                "download_rome": dt.isoformat(timespec="seconds"),
+                "reference_spx": reference,
+                "c1_spx": c1, "p1_spx": p1,
+                "method": "3 massime intensità per lato — NON LIVELLI CONFERMATI",
+            }
+        except (KeyError, ValueError, TypeError, RuntimeError, OSError, OverflowError):
+            continue
+    return None
+
 
 def render_comparison(store, week, snaps, logs):
     """Confronto autonomo; usa il contesto del profilo singolo selezionato."""
@@ -807,6 +869,32 @@ def render(store, week, snaps, logs):
                                candidate_csv(candidate_0dte, offset),
                                file_name=f'Candidati_Top3_Gamma_{day.isoformat()}_{choice}.csv',
                                mime='text/csv', key=f'v9_candidates_{choice}')
+    # Quadro storico delle 09:00 indipendente dallo snapshot selezionato.
+    # Se il selezionato è successivo alle 09:00, recupera SOLTANTO il 07:30
+    # ufficiale, verificandone il log con data/ora completa e scadenza 0DTE.
+    asia_level_context = None
+    if offset is not None and math.isfinite(offset):
+        if asia_c1 is None or asia_p1 is None:
+            log_names = tuple(sorted(str(item['name']) for item in logs))
+            morning = _morning_asia_candidates(week, day, log_names, store)
+            if morning:
+                asia_c1 = morning['c1_spx'] + offset
+                asia_p1 = morning['p1_spx'] + offset
+                asia_level_context = (
+                    'Riferimenti indicativi C1/P1 ricavati dallo snapshot UFFICIALE '
+                    '07:30 Roma (' + morning['download_rome'][11:16] + ') · '
+                    + morning['source']
+                    + f" · SPX prev. {morning['reference_spx']:,.2f} "
+                    + f"· basis ES-SPX {offset:+.0f} punti. "
+                    'Metodo sperimentale top 3 per intensità: '
+                    'NON sono C1/P1 confermati da Serafini.'
+                )
+        else:
+            asia_level_context = (
+                'C1/P1 selezionati manualmente nello snapshot corrente '
+                'acquisito entro le 09:00 Roma. Metodo sperimentale; '
+                'non costituisce conferma dei veri livelli Serafini.'
+            )
     # Quadro dopo i profili e i selettori, sempre visibile fuori dall'expander.
     with st.container():
         st.subheader('QUADRO OPERATIVO — ORE 09:00')
@@ -814,7 +902,7 @@ def render(store, week, snaps, logs):
         from asia_gamma import render_auto as render_asia_gamma
         render_vix_regime(day)
         st.divider()
-        render_asia_gamma(day, asia_c1, asia_p1)
+        render_asia_gamma(day, asia_c1, asia_p1, level_context=asia_level_context)
     st.subheader('Esporta i due profili su TradingView')
     if offset is None:
         st.warning('Per esportare sul grafico del future ES inserisci prima un differenziale ES − SPX verificato. Non assumiamo zero automaticamente.')
