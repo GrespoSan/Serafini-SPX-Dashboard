@@ -332,7 +332,9 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
         'asia_verdict_0900': report['market_context']['asia_session'].get('verdict_0900'),
         'note': 'La zona asiatica è contesto, non segnale LONG/SHORT. NET GAMMA e VX non bastano per un ingresso.'}
     report['sources']['vix_curve'] = 'Cboe VX mensili: settlement seduta precedente, se disponibile'
-    report['sources']['asia_session'] = 'Yahoo ES=F 5m: OHLC 00:00–09:00, se disponibile'
+    report['sources']['asia_session'] = (
+        report['market_context']['asia_session'].get('source')
+        or 'Yahoo ES=F 5m; Massive ES opzionale solo a sessione storica verificata')
     report['sources']['replay'] = (
         'Profili compatti Cboe di studio intraday; archivio Replay separato '
         'dagli snapshot originali ufficiali')
@@ -458,6 +460,14 @@ def pdf_summary(report):
         if asia.get('missing_times'):
             story.append(Paragraph('Massimo/minimo Asia provvisori: barre mancanti ' +
                                    ', '.join(asia['missing_times']) + '.', styles['SPXSmall']))
+        if asia.get('recovered_times'):
+            story.append(Paragraph(
+                'Verifica storica Massive Futures: candele Yahoo mancanti alle '
+                + ', '.join(asia['recovered_times'])
+                + ' recuperate tramite sessione ES completa dopo confronto '
+                'prezzi con Yahoo. Fonte finale: '
+                + asia.get('source', 'Massive Futures') + '.',
+                styles['SPXSmall']))
     else:
         story.append(Paragraph('Sessione asiatica ES: NON DISPONIBILE.', styles['SPXSmall']))
     story.append(Paragraph('Verdetto direzionale: NON DETERMINATO. '
