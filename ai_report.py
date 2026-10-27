@@ -334,7 +334,7 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
     report['sources']['vix_curve'] = 'Cboe VX mensili: settlement seduta precedente, se disponibile'
     report['sources']['asia_session'] = (
         report['market_context']['asia_session'].get('source')
-        or 'Yahoo ES=F 5m; Massive ES opzionale solo a sessione storica verificata')
+        or 'Yahoo ES=F 5m; recupero da Yahoo 1m soltanto se verificabile')
     report['sources']['replay'] = (
         'Profili compatti Cboe di studio intraday; archivio Replay separato '
         'dagli snapshot originali ufficiali')
@@ -460,13 +460,12 @@ def pdf_summary(report):
         if asia.get('missing_times'):
             story.append(Paragraph('Massimo/minimo Asia provvisori: barre mancanti ' +
                                    ', '.join(asia['missing_times']) + '.', styles['SPXSmall']))
-        if asia.get('recovered_times'):
+        if asia.get('yahoo_1m_recovered_times'):
             story.append(Paragraph(
-                'Verifica storica Massive Futures: candele Yahoo mancanti alle '
-                + ', '.join(asia['recovered_times'])
-                + ' recuperate tramite sessione ES completa dopo confronto '
-                'prezzi con Yahoo. Fonte finale: '
-                + asia.get('source', 'Massive Futures') + '.',
+                'Barre ES=F 5m recuperate da Yahoo 1m agli orari '
+                + ', '.join(asia['yahoo_1m_recovered_times'])
+                + ', solo dopo conferma delle cinque barre da 1 minuto '
+                'e confronto con candele 5m comuni.',
                 styles['SPXSmall']))
     else:
         story.append(Paragraph('Sessione asiatica ES: NON DISPONIBILE.', styles['SPXSmall']))
