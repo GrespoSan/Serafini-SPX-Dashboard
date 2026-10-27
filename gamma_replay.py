@@ -264,9 +264,8 @@ def render(store, week, logs, view_mode=None):
             hovertemplate="Livello %{y:,.2f}<br>NET Gamma %{x:+.3f}<extra></extra>",
             name=f"NET Gamma {slot}",
         )
-        # Ogni barra NET GAMMA visualizza il proprio STRIKE SPX accanto
-        # all'asse zero, sul lato opposto rispetto alla barra stessa.
-        # La posizione verticale resta sul prezzo ES convertito, se disponibile.
+        # Le etichette visualizzano la STESSA coordinata verticale delle barre:
+        # prezzo ES (strike SPX + basis), oppure strike SPX se manca il basis.
         # Non si mostra il valore numerico NET GAMMA come etichetta:
         # rimane disponibile passando il mouse sulla barra.
         selected = [(strike, vals[strike]) for strike in strikes
@@ -277,14 +276,14 @@ def render(store, week, logs, view_mode=None):
             x=[-label_gap if gamma > 0 else label_gap
                for strike, gamma in selected],
             y=[strike + (offset or 0) for strike, gamma in selected],
-            text=[f"{strike:,.2f}".rstrip("0").rstrip(".")
+            text=[f"{strike + (offset or 0):,.2f}".rstrip("0").rstrip(".")
                   for strike, gamma in selected],
             textposition=["middle left" if gamma > 0 else "middle right"
                           for strike, gamma in selected],
             mode="text", textfont=dict(color="#e2e8f0", size=10),
             hoverinfo="skip", showlegend=False, cliponaxis=False,
         )
-        # Esattamente due tracce per frame: barre + etichette degli strike.
+        # Esattamente due tracce per frame: barre + etichette dei prezzi.
         # Compatibile con l'animazione e con le candele ES.
         return [bars, labels]
 
@@ -358,7 +357,7 @@ def render(store, week, logs, view_mode=None):
     # GIF solo su richiesta: nessuna generazione nei normali rerun del replay.
     # Conserviamo una sola GIF in memoria per sessione e invalidiamo la cache
     # se cambiano giorno, scadenza, differenziale o gli snapshot disponibili.
-    gif_signature = ("dynamic_gamma_scale_v2", day.isoformat(), kind, offset,
+    gif_signature = ("dynamic_gamma_scale_v3_es_labels", day.isoformat(), kind, offset,
                      tuple((slot, item.get("clock"),
                             tuple((float(x["strike_spx"]), float(x["net_gamma"]))
                                   for x in item["profiles"][kind]["rows"]))
@@ -397,11 +396,10 @@ def render(store, week, logs, view_mode=None):
                "fra frame NON sono direttamente confrontabili; usare i valori "
                "numerici e l'asse corrente. Barre verdi: NET positivo; "
                "rosse: NET negativo. Le etichette accanto all'asse zero mostrano "
-               "lo strike SPX di ogni barra (non il valore NET GAMMA): quelle delle "
-               "barre verdi sono a sinistra, quelle delle rosse a destra. "
-               "Se è applicato il differenziale ES−SPX, le barre restano allineate "
-               "ai prezzi ES; gli strike nelle etichette restano SPX. "
-               "Il valore NET GAMMA è disponibile al passaggio del mouse.")
+               "il PREZZO ES se il differenziale ES−SPX è disponibile; "
+               "altrimenti indicano lo strike SPX. Etichette delle barre verdi "
+               "a sinistra e delle rosse a destra. Il NET GAMMA è disponibile "
+               "al passaggio del mouse.")
     table = []
     for slot, item in available:
         rows = item["profiles"][kind]["rows"]
