@@ -154,7 +154,8 @@ def generate_gif(available, day, kind, offset):
             z = round(gamma_zero)
             color = GREEN if net > 0 else RED
             draw.rectangle((min(px, z), py - 3, max(px, z) + 1, py + 3), fill=color)
-            label = f"{strike:,.0f}"
+            # Stessa coordinata ES della barra. Strike SPX solo nei dati sorgente.
+            label = f"{strike + offset:,.0f}"
             if net > 0:
                 box = draw.textbbox((0, 0), label, font=font_small)
                 draw.text((z - 7 - (box[2] - box[0]), py - 6),
