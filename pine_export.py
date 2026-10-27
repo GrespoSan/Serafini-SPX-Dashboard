@@ -36,7 +36,7 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
     warning = ('// NOTA: 0DTE e Weekly hanno LA STESSA SCADENZA in questa data: i due profili sono identici per definizione.\n' if same_exp else '')
     return f'''//@version=6
 indicator("Serafini SPX NET GAMMA | {date_text}{tag}", overlay=true, max_lines_count=250, max_labels_count=20)
-// EXPORT REVISION: V47-FIXED-ABSOLUTE-GAMMA-SCALE
+// EXPORT REVISION: V48-TV-500-FUTURE-SAFE
 // Rilevamento selezionato: {clean_label or "Non identificato"}
 // Esportazione STATICA da uno snapshot Cboe; aggiornare ricopiando il Pine generato dalla dashboard.
 // Fonte: {origin}
@@ -45,10 +45,15 @@ indicator("Serafini SPX NET GAMMA | {date_text}{tag}", overlay=true, max_lines_c
 // Formula originale: (OI_CALL+VOL_CALL)*GAMMA_CALL - (OI_PUT+VOL_PUT)*GAMMA_PUT.
 // 25 strike SOPRA e 25 SOTTO la chiusura SPX: regola confermata direttamente da Serafini.
 // Profili graficamente separati come slide 139: 0DTE vicino alle candele, Weekly piu' a destra.
-{warning}// Scala NET GAMMA fissa: le barre sono confrontabili tra snapshot con lo stesso gammaPerCandle.
+{warning}// Scala richiesta configurabile: se necessaria, la scala effettiva viene
+// elevata automaticamente per rispettare il limite TradingView di 500 barre future.
+// 0DTE e Weekly usano SEMPRE la stessa scala effettiva nel medesimo snapshot.
+// Quando scatta l'adattamento, confrontare numericamente snapshot differenti:
+// la lunghezza visiva non garantisce piu' una scala fissa fra esportazioni.
+// I valori NET GAMMA non vengono mai modificati o troncati.
 // Non calcola gamma flip e non usa dati opzioni live in TradingView.
 
-gammaPerCandle = input.float(1.0, "Scala fissa: punti NET GAMMA per candela", minval=0.1, step=0.5, tooltip="Mantieni lo STESSO valore per tutti gli snapshot: con scala 1, +50 Gamma sono 50 candele e +150 Gamma sono 150 candele.")
+gammaPerCandle = input.float(1.0, "Scala richiesta: punti NET GAMMA per candela", minval=0.1, step=0.5, tooltip="Default 1. TradingView limita i disegni a 500 barre future: se il valore è troppo piccolo, la scala effettiva aumenta automaticamente in entrambi i profili ed è indicata nell'intestazione. Il NET GAMMA originale resta invariato.")
 offsetOdte = input.int(60, "Distanza 0DTE da ultima candela", minval=45, maxval=170)
 offsetWeekly = input.int(160, "Distanza Weekly da ultima candela", minval=55, maxval=300)
 positiveColor = input.color(color.rgb(0, 230, 117), "NET GAMMA positivo")
@@ -65,7 +70,20 @@ var array<float> odteValues = {_pine_array(odte['rows'], 'net_gamma')}
 var array<float> weeklyLevels = {_pine_array(weekly['rows'], 'strike_spx', offset)}
 var array<float> weeklyValues = {_pine_array(weekly['rows'], 'net_gamma')}
 
-renderProfile(array<float> levels, array<float> gamma, int center, string heading) =>
+// Resta un margine di 20 barre rispetto al limite xloc.bar_index +500.
+// Evita anche di spingersi oltre le 10.000 barre storiche a sinistra.
+// La scala e' COMUNE ai due profili e non altera i gamma Cboe calcolati.
+requiredScale(array<float> gamma, int offsetBars) =>
+    float maxPos = 0.0
+    float maxNeg = 0.0
+    for g in gamma
+        maxPos := math.max(maxPos, g)
+        maxNeg := math.max(maxNeg, -g)
+    float rightCapacity = float(480 - offsetBars)
+    float leftCapacity = float(9500 + offsetBars)
+    math.max(maxPos / rightCapacity, maxNeg / leftCapacity)
+
+renderProfile(array<float> levels, array<float> gamma, int center, string heading, float actualScale, bool adjusted) =>
     int count = array.size(levels)
     if count > 0
         float bottom = array.get(levels, 0)
@@ -75,14 +93,15 @@ renderProfile(array<float> levels, array<float> gamma, int center, string headin
         for j = 0 to count - 1
             float level = array.get(levels, j)
             float g = array.get(gamma, j)
-            int length = g != 0 ? math.max(1, int(math.round(math.abs(g) / gammaPerCandle))) : 0
+            int length = g != 0 ? math.max(1, int(math.round(math.abs(g) / actualScale))) : 0
             if length > 0
                 int farX = center + (g > 0 ? length : -length)
                 line segment = line.new(center, level, farX, level, xloc=xloc.bar_index, extend=extend.none, color=g >= 0 ? positiveColor : negativeColor, width=5)
                 array.push(drawnLines, segment)
         if showTitles
             float spacing = count > 1 ? math.max(5.0, (top - bottom) / 20.0) : 10.0
-            label t = label.new(center, top + spacing, heading, xloc=xloc.bar_index, yloc=yloc.price, color=color.new(color.black, 50), textcolor=color.white, style=label.style_label_down, size=size.small)
+            string scaleText = adjusted ? " | scala effettiva " + str.tostring(actualScale, "#.###") + " Gamma/bar" : ""
+            label t = label.new(center, top + spacing, heading + scaleText, xloc=xloc.bar_index, yloc=yloc.price, color=color.new(color.black, 50), textcolor=color.white, style=label.style_label_down, size=size.small)
             array.push(drawnLabels, t)
 
 if barstate.islast
@@ -92,6 +111,8 @@ if barstate.islast
     for t in drawnLabels
         label.delete(t)
     array.clear(drawnLabels)
-    renderProfile(odteLevels, odteValues, bar_index + offsetOdte, "0DTE {odte['expiry']}{tag}")
-    renderProfile(weeklyLevels, weeklyValues, bar_index + offsetWeekly, "WEEKLY {weekly['expiry']}{tag}")
+    float actualScale = math.max(gammaPerCandle, math.max(requiredScale(odteValues, offsetOdte), requiredScale(weeklyValues, offsetWeekly)))
+    bool adjusted = actualScale > gammaPerCandle + 0.000001
+    renderProfile(odteLevels, odteValues, bar_index + offsetOdte, "0DTE {odte['expiry']}{tag}", actualScale, adjusted)
+    renderProfile(weeklyLevels, weeklyValues, bar_index + offsetWeekly, "WEEKLY {weekly['expiry']}{tag}", actualScale, adjusted)
 '''
