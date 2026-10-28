@@ -655,7 +655,9 @@ def render(store, week, snaps, logs):
         st.session_state[selection_key] = names[0]
     elif st.session_state.get(selection_key) not in names:
         st.session_state[selection_key] = names[0]
-    choice = st.selectbox('Snapshot originale Cboe', names, key=selection_key)
+    col_snapshot, col_snapshot_info = st.columns([1.25, 2.75], gap='small', vertical_alignment='bottom')
+    with col_snapshot:
+        choice = st.selectbox('Snapshot originale Cboe', names, key=selection_key)
     path = f'{week}/snapshots/{choice}'
     try:
         snap = read_snapshot(store.download(path))
@@ -685,9 +687,10 @@ def render(store, week, snaps, logs):
         "RIPETUTO": "timestamp ripetuto",
         "NON VERIFICABILE": "non verificabile",
     }[quality]
-    st.caption(f'Rilevamento selezionato: {acquisition_label} · '
-               f'Timestamp Cboe: {timestamp or "n.d."} · '
-               f'Cboe: {quality_label} · file {choice}')
+    with col_snapshot_info:
+        st.caption(f'Rilevamento selezionato: {acquisition_label} · '
+                   f'Timestamp Cboe: {timestamp or "n.d."} · '
+                   f'Cboe: {quality_label} · file {choice}')
     # Si usa la data dello snapshot per gli esempi e per impedire look-ahead.
     try:
         day = date.fromisoformat(choice.split('SPX_CBOE_')[1][:8][:4] + '-' + choice.split('SPX_CBOE_')[1][4:6] + '-' + choice.split('SPX_CBOE_')[1][6:8])
@@ -695,7 +698,7 @@ def render(store, week, snaps, logs):
         st.error('Data dello snapshot non riconosciuta nel nome del file.')
         return
     previous = snap['data'].get('prev_day_close')
-    st.caption(f'Chiusura SPX precedente dichiarata nel payload Cboe: {previous} (da confrontare con chiusura cash ufficiale)')
+    st.caption(f'Chiusura SPX precedente dichiarata nel payload Cboe: {previous}')
     @st.cache_data(ttl=3600, show_spinner=False)
     def _auto_basis(target_day):
         result = download_and_calculate(target_day)
@@ -947,17 +950,26 @@ def render(store, week, snaps, logs):
                                + (' Fuori dai 50 strike: ' + ', '.join(clipped_sigma) + '.'
                                   if clipped_sigma else '')
                                + ' Feed Yahoo: confrontare con Pine ES1! su TradingView.')
-            with st.expander(f'Dettaglio numerico {title} (50 strike)', expanded=False):
-                st.dataframe(frame, use_container_width=True, hide_index=True)
-            st.download_button(f'Scarica calcolo CSV {title}', profile_csv(result, offset),
-                               file_name=f'NET_GAMMA_{title}_{day.isoformat()}_{choice}.csv', mime='text/csv', key=f'csv_{title}_{choice}')
-    if offset is not None and computed_profiles.get('0DTE', {}).get('rows'):
-        from asia_gamma import render_context_auto
-        with st.expander('Confronto range Asia / concentrazioni Gamma 0DTE + Weekly', expanded=False):
-            render_context_auto(day, computed_profiles.get('0DTE'),
-                                computed_profiles.get('Weekly'), offset)
-            st.caption('Dati Gamma dello snapshot selezionato: non attribuire valori '
-                       'di rilevamenti successivi alle ore 09:00.')
+
+    # Dettagli numerici allineati sotto entrambi i grafici.
+    detail_cols = st.columns(2, gap='small')
+    for detail_title, detail_col in zip(('0DTE', 'Weekly'), detail_cols):
+        with detail_col:
+            detail_result = computed_profiles.get(detail_title)
+            if detail_result and detail_result.get('rows'):
+                detail_records = [
+                    {**row, 'strike_es': row['strike_spx'] + offset if offset is not None else None}
+                    for row in detail_result['rows']
+                ]
+                with st.expander(f'Dettaglio numerico {detail_title} (50 strike)', expanded=False):
+                    import pandas as pd
+                    st.dataframe(pd.DataFrame(detail_records), use_container_width=True, hide_index=True)
+                st.download_button(
+                    f'Scarica calcolo CSV {detail_title}',
+                    profile_csv(detail_result, offset),
+                    file_name=f'NET_GAMMA_{detail_title}_{day.isoformat()}_{choice}.csv',
+                    mime='text/csv', key=f'csv_{detail_title}_{choice}',
+                )
     if candidate_0dte is not None:
         with st.expander('LIVELLI CALL/PUT PROPOSTI - STRUTTURA OPZIONI', expanded=False):
             st.warning('Questi sono CANDIDATI basati sulle tre barre NET GAMMA più intense per lato, NON livelli C1–C3/P1–P3 confermati da Serafini. Non sono segnali automatici. Il calcolo NET GAMMA resta invariato.')
@@ -1101,7 +1113,7 @@ def render(store, week, snaps, logs):
                 'non costituisce conferma dei veri livelli Serafini.'
             )
     # Quadro dopo i profili e i selettori, sempre visibile fuori dall'expander.
-    with st.container():
+    with st.container(border=True):
         st.subheader('QUADRO OPERATIVO — ORE 09:00')
         # Il modulo originale di volatilita' e' visualizzato nel contesto iniziale.
         # Nessuna modifica a calcoli Gamma, C1/P1 o analisi asiatica.
