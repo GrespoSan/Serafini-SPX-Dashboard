@@ -20,20 +20,31 @@ def append_news(script, events):
         return script
     lines = [
         "",
-        "// News dal calendario macro USA della dashboard, orario Europe/Rome.",
-        "// Linee informative: indipendenti da gamma, profili e livelli.",
+        "// News del calendario macro della dashboard: orari Europe/Rome.",
+        "// Le linee vengono create anche PRIMA dell'evento sul grafico.",
         'showMacroNews = input.bool(true, "News macro · linee verticali")',
+        'var array<line> macroNewsLines = array.new_line()',
+        'var array<label> macroNewsLabels = array.new_label()',
+        'if barstate.islast',
+        '    for ln in macroNewsLines',
+        '        line.delete(ln)',
+        '    array.clear(macroNewsLines)',
+        '    for lb in macroNewsLabels',
+        '        label.delete(lb)',
+        '    array.clear(macroNewsLabels)',
+        '    if showMacroNews and timeframe.isintraday',
     ]
     for index, (key, rows) in enumerate(sorted(unique.items())[:12]):
         y, mo, d, hh, mm = key
         names = " / ".join(sorted(set(str(row["kind"]) for row in rows)))
-        names = names.replace("\\", "/").replace('"', "'")[:95]
+        names = names.replace("\\\\", "/").replace('"', "'")[:95]
         major = any(row.get("priority") == "ALTA" for row in rows)
-        color = "color.red" if major else "color.orange"
+        news_color = "color.red" if major else "color.orange"
         lines.extend([
-            f'newsTime{index} = timestamp("Europe/Rome", {y}, {mo}, {d}, {hh}, {mm})',
-            f'if showMacroNews and timeframe.isintraday and barstate.isconfirmed and time <= newsTime{index} and time_close > newsTime{index}',
-            f'    line.new(newsTime{index}, low, newsTime{index}, high, xloc=xloc.bar_time, extend=extend.both, color={color}, style=line.style_dashed, width=1)',
-            f'    label.new(newsTime{index}, high, "{hh:02d}:{mm:02d} Roma · {names}", xloc=xloc.bar_time, yloc=yloc.abovebar, style=label.style_label_down, color={color}, textcolor=color.white, size=size.tiny)',
+            f'        int newsTime{index} = timestamp("Europe/Rome", {y}, {mo}, {d}, {hh}, {mm})',
+            f'        line newsLine{index} = line.new(newsTime{index}, low, newsTime{index}, high, xloc=xloc.bar_time, extend=extend.both, color={news_color}, style=line.style_dashed, width=1)',
+            f'        array.push(macroNewsLines, newsLine{index})',
+            f'        label newsLabel{index} = label.new(newsTime{index}, high, "{hh:02d}:{mm:02d} Roma · {names}", xloc=xloc.bar_time, yloc=yloc.price, style=label.style_label_down, color={news_color}, textcolor=color.white, size=size.tiny)',
+            f'        array.push(macroNewsLabels, newsLabel{index})',
         ])
     return script + "\n" + "\n".join(lines) + "\n"
