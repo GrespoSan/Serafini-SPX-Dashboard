@@ -146,6 +146,37 @@ def render(reference_day=None):
         )
     else:
         impulse_text = 'Candela di impulso precedente: nessuna individuata nelle ultime 20 sedute con i criteri sperimentali.'
+    # Spiegazione descrittiva: nessuna modifica al rilevamento degli impulsi.
+    if impulse is None:
+        meaning = "Nessuna candela di impulso individuata con i criteri sperimentali."
+    else:
+        bearish = impulse["side"] == "RIBASSISTA"
+        state = impulse["status"]
+        if state == "TENUTA":
+            meaning = ("Nelle sedute successive il prezzo è rimasto interamente sotto "
+                       "il baricentro dell'impulso ribassista." if bearish else
+                       "Nelle sedute successive il prezzo è rimasto interamente sopra "
+                       "il baricentro dell'impulso rialzista.")
+        elif bearish and state == "PERSO":
+            meaning = ("Il prezzo ha superato il baricentro dell'impulso ribassista "
+                       "e l'ultima Daily ha chiuso sopra quel livello. Può indicare "
+                       "un indebolimento della pressione ribassista. Non significa "
+                       "che tutte le sedute successive abbiano chiuso sopra.")
+        elif bearish:
+            meaning = ("Il prezzo è tornato sotto il baricentro dell'impulso ribassista "
+                       "e l'ultima Daily ha chiuso sotto. Il recupero del livello "
+                       "non è stato mantenuto; non implica che tutte le sedute "
+                       "precedenti siano rimaste sotto.")
+        elif state == "PERSO":
+            meaning = ("Il prezzo è sceso sotto il baricentro dell'impulso rialzista "
+                       "e l'ultima Daily ha chiuso sotto. Può segnalare un "
+                       "indebolimento della spinta rialzista, ma non dimostra "
+                       "un'inversione del trend.")
+        else:
+            meaning = ("Il prezzo ha attraversato il baricentro dell'impulso rialzista "
+                       "ma l'ultima Daily ha chiuso sopra. Il livello è stato "
+                       "recuperato; non significa che sia stato rispettato "
+                       "in tutte le sedute successive.")
     # Solo visualizzazione: la logica evaluate e i valori restano invariati.
     st.markdown(f"""
 <style>
@@ -174,7 +205,7 @@ def render(reference_day=None):
     <div class="spx-trend-kpi"><div class="spx-trend-label">Variazione del range</div><div class="spx-trend-value">{escape(result["range_shape"])}</div></div>
     <div class="spx-trend-kpi"><div class="spx-trend-label">Barre stesso colore</div><div class="spx-trend-value" style="color:{count_color}">{result["same_color"]}</div></div>
   </div>
-  <div class="spx-trend-foot">{escape(baricentro_text)}</div>\n  <div class="spx-trend-foot">{escape(impulse_text)}</div>
+  <div class="spx-trend-foot">{escape(baricentro_text)}</div>\n  <div class="spx-trend-foot">{escape(impulse_text)}</div>\n  <div class="spx-trend-foot">{escape(meaning)}</div>
 </div>
 """, unsafe_allow_html=True)
     st.caption("Candela di impulso: criterio sperimentale (range ≥1,3% della chiusura precedente, "
