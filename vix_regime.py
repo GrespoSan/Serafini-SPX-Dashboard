@@ -221,61 +221,45 @@ def render(target_day):
     card = f"""
 <style>
 .spx-vol-card {{
-    border:1px solid #34363c; border-radius:18px; padding:24px 26px;
-    background:#090a0c; color:#f4f5f6; margin:12px 0 8px;
-    font-family:inherit;
+  border:1px solid #34363c; border-radius:13px; padding:14px 18px;
+  background:#090a0c; color:#f4f5f6; font-family:inherit;
 }}
-.spx-vol-card .spx-vol-title {{
-    font-size:1.15rem; font-weight:750; letter-spacing:.015em;
-    margin:0 0 18px;
+.spx-vol-grid {{
+  display:grid; grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:0; align-items:center;
 }}
-.spx-vol-card .spx-vol-row {{
-    display:flex; justify-content:space-between; align-items:baseline;
-    gap:15px; border-top:1px solid #292b30; padding:15px 0;
+.spx-vol-kpi {{padding:5px 18px; min-width:0; border-left:1px solid #292b30;}}
+.spx-vol-kpi:first-child {{padding-left:0; border-left:0;}}
+.spx-vol-kpi .label {{font-size:.82rem; color:#b6bcc5; margin-bottom:5px;}}
+.spx-vol-kpi .number {{font-size:1.15rem; font-weight:740; overflow-wrap:anywhere;}}
+.spx-vol-kpi .buffer {{color:{highlight}; font-size:1.3rem;}}
+.spx-vol-foot {{
+  border-top:1px solid #292b30; padding-top:9px; margin-top:12px;
+  color:#949ba6; font-size:.74rem; line-height:1.4;
 }}
-.spx-vol-card .spx-vol-label {{font-size:.96rem; color:#c3c6cc;}}
-.spx-vol-card .spx-vol-value {{font-size:1.02rem; font-weight:620; text-align:right;}}
-.spx-vol-card .spx-vol-bottom {{
-    display:flex; justify-content:space-between; gap:20px; align-items:end;
-    border-top:1px solid #292b30; padding-top:18px;
-}}
-.spx-vol-card .spx-vol-big {{
-    font-size:2rem; font-weight:750; color:{highlight}; line-height:1.15;
-    margin-top:7px;
-}}
-.spx-vol-card .spx-vol-reason {{
-    color:#c3c6cc; max-width:58%; font-size:.94rem; text-align:right;
-}}
-.spx-vol-card .spx-vol-foot {{
-    color:#8c929d; font-size:.76rem; margin-top:16px; line-height:1.5;
-}}
-@media(max-width:640px) {{
-    .spx-vol-card {{padding:17px;}}
-    .spx-vol-card .spx-vol-row,.spx-vol-card .spx-vol-bottom {{
-        gap:8px; flex-wrap:wrap;
-    }}
-    .spx-vol-card .spx-vol-reason {{max-width:100%; text-align:left;}}
+@media(max-width:700px) {{
+  .spx-vol-grid {{grid-template-columns:1fr;}}
+  .spx-vol-kpi {{padding:10px 0; border-left:0; border-top:1px solid #292b30;}}
+  .spx-vol-kpi:first-child {{border-top:0;}}
 }}
 </style>
 <div class="spx-vol-card">
-  <div class="spx-vol-title">VOLATILITÀ E BUFFER OPERATIVO</div>
-  <div class="spx-vol-row">
-    <span class="spx-vol-label">Range Daily precedente</span>
-    <span class="spx-vol-value">{escape(daily_value)}</span>
-  </div>
-  <div class="spx-vol-row">
-    <span class="spx-vol-label">Regime VX precedente</span>
-    <span class="spx-vol-value">{escape(vx_value)}</span>
-  </div>
-  <div class="spx-vol-bottom">
-    <div>
-      <div class="spx-vol-label">Buffer standard</div>
-      <div class="spx-vol-big">{escape(value)}</div>
+  <div class="spx-vol-grid">
+    <div class="spx-vol-kpi">
+      <div class="label">Range Daily precedente</div>
+      <div class="number">{escape(daily_value)}</div>
     </div>
-    <div class="spx-vol-reason">{detail}</div>
+    <div class="spx-vol-kpi">
+      <div class="label">Regime VX precedente</div>
+      <div class="number">{escape(vx_value)}</div>
+    </div>
+    <div class="spx-vol-kpi">
+      <div class="label">Buffer standard</div>
+      <div class="number buffer">{escape(value)}</div>
+    </div>
   </div>
   <div class="spx-vol-foot">
-    Daily ES=F Yahoo: {escape(daily_date)} · VX Cboe: {escape(vx_date)}.
+    {detail} · Daily ES=F Yahoo: {escape(daily_date)} · VX Cboe: {escape(vx_date)}.
     High−Low / Close della seduta precedente; soglia 1%.
     Fonti indipendenti, nessun dato della seduta analizzata.
     Il Daily Yahoo può differire dal grafico ES1! su TradingView.
