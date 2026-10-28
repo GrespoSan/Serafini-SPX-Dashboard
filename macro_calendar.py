@@ -270,9 +270,11 @@ def render():
         released = " · pubblicato (secondo il calendario)" if item["status"] == "released" else ""
         tentative = " · data/orario da verificare" if item["status"] == "estimated" else ""
         date_text = f"{item['day']:%d/%m/%Y} · " if show_day else ""
+        label = f"**{date_text}{item['clock']} Roma** — **{item['kind']}**{scheduled}"
+        if item["kind"] in ("FOMC", "Conferenza stampa Fed"):
+            label = f":red[{label}]"
         st.markdown(
-            f"**{date_text}{item['clock']} Roma** — **{item['kind']}**"
-            f"{scheduled}{released}{tentative} · [Fonte]({item['source']})"
+            f"{label}{released}{tentative} · [Fonte]({item['source']})"
         )
 
     if urgent:
