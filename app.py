@@ -261,6 +261,11 @@ st.markdown("""
 with st.container(key="manual_cboe_centered"):
     render_manual_acquisition(role, week, store)
 
+# Analisi del contesto: modulo Daily indipendente dai motori NET GAMMA/GEX.
+with st.expander('TREND DAILY — struttura, range e baricentro', expanded=True):
+    from trend_daily_section import render as render_trend_daily
+    render_trend_daily()
+
 # Calcolo di sola lettura, anche per il ruolo amici. Nessuna cancellazione qui.
 with st.expander('NET GAMMA 0DTE / Weekly', expanded=False):
     from gamma_section import render
