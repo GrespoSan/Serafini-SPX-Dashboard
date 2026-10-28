@@ -12,6 +12,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from net_gamma import profile, read_snapshot
+from feed_quality import summarize_timeline
 from replay_scale import dynamic_gamma_bounds
 from spx_market_clock import classify_0dte_download, cash_open_rome, spxw_expiry_close_rome
 
@@ -190,15 +191,16 @@ def render(store, week, logs, view_mode=None):
         st.caption(f"Weekly osservata: scadenza {expiry_selected:%d/%m/%Y}. "
                    "Il venerdi si passa alla settimana successiva; non confrontare "
                    "direttamente giornate con scadenze Weekly differenti.")
-    timestamps = [(slot, str(frame.get("cboe_timestamp_original") or "").strip())
-                  for slot, frame in available]
-    repeated = [(prev_slot, slot) for (prev_slot, prev), (slot, stamp)
-                in zip(timestamps, timestamps[1:]) if stamp and stamp == prev]
-    if repeated:
-        st.warning("Timestamp Cboe identico in rilevamenti consecutivi: " +
-                   ", ".join(f"{start} → {end}" for start, end in repeated) +
-                   ". Possibile chain ripetuta: non attribuire automaticamente "
-                   "a questi frame un nuovo aggiornamento informativo.")
+    # Indicazione sobria: ripetizione del timestamp NON implica che l'intera
+    # chain sia identica e timestamp diverso NON certifica la freschezza.
+    feed_stats = summarize_timeline(available)
+    st.caption(
+        f"Timestamp Cboe rispetto al frame precedente: "
+        f"{feed_stats['DIVERSO']} diversi · "
+        f"{feed_stats['RIPETUTO']} ripetuti · "
+        f"{feed_stats['NON VERIFICABILE']} non verificabili. "
+        "Il primo rilevamento non ha un confronto; nessun fuso Cboe presunto."
+    )
     if not available:
         st.info("Nessun frame replay disponibile per questa data. I frame futuri "
                 "non possono essere ricostruiti retroattivamente.")
