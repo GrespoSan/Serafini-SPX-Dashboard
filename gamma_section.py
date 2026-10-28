@@ -446,7 +446,7 @@ def render_comparison(store, week, snaps, logs):
                         name=f'DOPO {second_label}',
                         y=row_y, x=new_values, orientation='h',
                         width=bar_height, marker=dict(color=actual_colors),
-                        customdata=[[levels[i], old_values[i]] for i in row_y],
+                        customdata=[[levels[i], old_values[i]] for i in range(len(row_y))],
                         hovertemplate=(
                             '%{customdata[0]}<br>DOPO: %{x:+.2f}'
                             '<br>PRIMA: %{customdata[1]:+.2f}<extra></extra>'
