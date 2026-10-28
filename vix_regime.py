@@ -196,8 +196,11 @@ def render(target_day):
     daily_ok = daily.get("status") == "VALIDO"
     pct = vx.get("contango_pct") if vx_ok else None
     if daily_ok:
-        range_value = (f"{daily['range_points']:,.2f}".replace(",", "X")
-                       .replace(".", ",").replace("X", "."))
+        raw_range = float(daily["range_points"])
+        range_value = (
+            f"{int(round(raw_range))}" if abs(raw_range - round(raw_range)) < 0.005
+            else f"{raw_range:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        )
         range_pct = f"{daily['range_pct']:.2f}".replace(".", ",")
         daily_value = f"{range_value} pt · {range_pct}%"
         daily_date = daily["day"]
