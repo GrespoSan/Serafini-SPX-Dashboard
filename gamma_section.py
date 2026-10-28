@@ -655,9 +655,9 @@ def render(store, week, snaps, logs):
         st.session_state[selection_key] = names[0]
     elif st.session_state.get(selection_key) not in names:
         st.session_state[selection_key] = names[0]
-    col_snapshot, col_snapshot_info = st.columns([1.25, 2.75], gap='small', vertical_alignment='bottom')
-    with col_snapshot:
-        choice = st.selectbox('Snapshot originale Cboe', names, key=selection_key)
+    # La selezione resta nello stato della sessione; il controllo viene mostrato
+    # immediatamente prima delle opzioni di scala dei profili.
+    choice = st.session_state[selection_key]
     path = f'{week}/snapshots/{choice}'
     try:
         snap = read_snapshot(store.download(path))
@@ -687,10 +687,6 @@ def render(store, week, snaps, logs):
         "RIPETUTO": "timestamp ripetuto",
         "NON VERIFICABILE": "non verificabile",
     }[quality]
-    with col_snapshot_info:
-        st.caption(f'Rilevamento selezionato: {acquisition_label} · '
-                   f'Timestamp Cboe: {timestamp or "n.d."} · '
-                   f'Cboe: {quality_label} · file {choice}')
     # Si usa la data dello snapshot per gli esempi e per impedire look-ahead.
     try:
         day = date.fromisoformat(choice.split('SPX_CBOE_')[1][:8][:4] + '-' + choice.split('SPX_CBOE_')[1][4:6] + '-' + choice.split('SPX_CBOE_')[1][6:8])
@@ -808,6 +804,13 @@ def render(store, week, snaps, logs):
             computed_profiles[title] = profile(snap, expiry, ref)
         except ValueError as exc:
             profile_errors[title] = str(exc)
+    col_snapshot, col_snapshot_info = st.columns([1.25, 2.75], gap='small', vertical_alignment='bottom')
+    with col_snapshot:
+        st.selectbox('Snapshot originale Cboe', names, key=selection_key)
+    with col_snapshot_info:
+        st.caption(f'Rilevamento selezionato: {acquisition_label} · '
+                   f'Timestamp Cboe: {timestamp or "n.d."} · '
+                   f'Cboe: {quality_label} · file {choice}')
     independent_scale = st.checkbox(
         'Ingrandisci ogni profilo con scala indipendente', value=False,
         key='gamma_independent_scale_v1',
