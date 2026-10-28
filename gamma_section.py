@@ -792,6 +792,22 @@ def render(store, week, snaps, logs):
                 template='plotly_dark',
             )
             fig.add_vline(x=0, line_width=1, line_color='#b7bec8')
+            # Riferimento ES comune ai due istogrammi: Close SPX precedente
+            # (stesso ref usato per selezionare gli strike) + basis ES-SPX.
+            # Non alterare l'ordinamento, le barre o il NET GAMMA.
+            if offset is not None and math.isfinite(offset):
+                previous_close_es = float(ref) + offset
+                fig.add_hline(
+                    y=previous_close_es, line_dash='dash',
+                    line_width=1.5, line_color='#f0cc65',
+                )
+                fig.add_annotation(
+                    x=0.995, xref='paper', y=previous_close_es, yref='y',
+                    text='Close prec.', showarrow=False,
+                    xanchor='right', yanchor='bottom',
+                    font=dict(color='#f0cc65', size=11),
+                    bgcolor='rgba(13,17,23,0.85)', borderpad=2,
+                )
             st.plotly_chart(fig, use_container_width=True, key=f'gamma_net_{title}_{choice}')
             with st.expander(f'Dettaglio numerico {title} (50 strike)', expanded=False):
                 st.dataframe(frame, use_container_width=True, hide_index=True)
