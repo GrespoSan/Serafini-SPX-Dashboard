@@ -291,7 +291,7 @@ def render():
 .macro-priority-card a {color:#66b5ff;}
 </style>
 """, unsafe_allow_html=True)
-    with st.container(key="macro_calendar_panel"):
+    with st.container(border=True, key="macro_calendar_panel"):
         if urgent:
             from html import escape as html_escape
             headline = (f"ATTENZIONE — {len(urgent)} "
@@ -339,6 +339,6 @@ def render():
                         f"{' · orario Fed previsto' if item.get('inferred_schedule') else ''}"
                         f" · [Fonte]({item['source']})"
                     )
-    st.caption("Orari Europe/Rome con ora legale automatica · "
-               "FOMC: conferenza 30 minuti dopo la decisione ordinaria, "
-               "da confermare sul calendario Fed.")
+        st.caption("Orari Europe/Rome con ora legale automatica · "
+                   "FOMC: conferenza 30 minuti dopo la decisione ordinaria, "
+                   "da confermare sul calendario Fed.")
