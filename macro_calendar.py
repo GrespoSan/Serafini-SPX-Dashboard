@@ -281,9 +281,10 @@ def render():
     # I dati e la costruzione dei collegamenti restano invariati.
     st.markdown("""
 <style>
+.st-key-macro_calendar_panel { background:#090a0c !important; }
 .macro-priority-card {
-    background:#090a0c; border:1px solid #34363c;
-    border-radius:13px; padding:14px 18px; color:#f4f5f6;
+    background:transparent; border:none;
+    border-radius:0; padding:0; color:#f4f5f6;
 }
 .macro-priority-card .macro-alert {color:#ff4b4b;font-weight:750;margin-bottom:10px;}
 .macro-priority-card .macro-event {padding:7px 0;line-height:1.5;}
