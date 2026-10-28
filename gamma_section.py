@@ -1045,10 +1045,9 @@ def render(store, week, snaps, logs):
     # Quadro dopo i profili e i selettori, sempre visibile fuori dall'expander.
     with st.container():
         st.subheader('QUADRO OPERATIVO — ORE 09:00')
-        from vix_regime import render as render_vix_regime
+        # Il modulo originale di volatilita' e' visualizzato nel contesto iniziale.
+        # Nessuna modifica a calcoli Gamma, C1/P1 o analisi asiatica.
         from asia_gamma import render_auto as render_asia_gamma
-        render_vix_regime(day)
-        st.divider()
         render_asia_gamma(day, asia_c1, asia_p1, level_context=asia_level_context)
     st.subheader('Esporta i profili su TradingView — 4 situazioni')
     st.caption('Tutti e quattro i Pine usano una **scala NET GAMMA manuale**, '
