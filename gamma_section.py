@@ -13,6 +13,8 @@ from gamma_compare import compare_profiles
 from volume_audit import compare_volume_profiles, inspect_raw_expiry, raw_transition_diagnostic
 from gamma_brief import select_key_levels, operational_summary, transition_zones
 from pine_export import make_pine
+from pine_compare import make_pine_comparison
+from pine_sources import load_export_profiles
 from gamma_scale import profile_gamma_bounds, gamma_components
 from operational_levels import find_candidates, proposed_levels, candidate_csv
 from option_structure import build_structure
@@ -28,6 +30,12 @@ def _snapshot_cboe_stamp(week, file_name, _store):
     """Un solo timestamp storico aggiuntivo, cache 5 minuti, solo lettura."""
     item = read_snapshot(_store.download(f"{week}/snapshots/{file_name}"))
     return item.get("timestamp")
+
+
+@st.cache_data(ttl=180, max_entries=50, show_spinner=False)
+def _pine_export_data(week, day, logs_count, _store, _logs):
+    """Cache breve per non riscaricare i 3 snapshot raw a ogni rerun."""
+    return load_export_profiles(_store, week, day, _logs)
 
 
 def _has_usable_gamma(snapshot):
@@ -986,15 +994,81 @@ def render(store, week, snaps, logs):
         render_vix_regime(day)
         st.divider()
         render_asia_gamma(day, asia_c1, asia_p1, level_context=asia_level_context)
-    st.subheader('Esporta i due profili su TradingView')
-    if offset is None:
-        st.warning('Per esportare sul grafico del future ES inserisci prima un differenziale ES − SPX verificato. Non assumiamo zero automaticamente.')
-    elif not (computed_profiles.get('0DTE', {}).get('rows') and computed_profiles.get('Weekly', {}).get('rows')):
-        st.warning('Esportazione non disponibile: almeno uno dei due profili non ha dati.')
+    st.subheader('Esporta i profili su TradingView — 4 situazioni')
+    st.caption('07:30: 0DTE + Weekly originali. Gli altri export mostrano '
+               '0DTE precedente a sinistra, 0DTE attuale al centro e Weekly attuale '
+               'a destra. Nei Pine 2–4 puoi disattivare "Mostra 0DTE precedente".')
+    scripts = {}
+    export_issues = {}
+    if offset is None or not math.isfinite(offset):
+        st.warning('Per esportare sul future ES inserisci un differenziale ES − SPX verificato.')
     else:
-        pine = make_pine(computed_profiles['0DTE'], computed_profiles['Weekly'], offset, day.isoformat(), timestamp, acquisition_label)
-        st.download_button('Scarica Pine Script TradingView — 0DTE + Weekly', data=pine.encode('utf-8'), file_name=f'Serafini_NET_GAMMA_ES_{day.isoformat()}.pine', mime='text/plain', key=f'pine_both_{choice}')
+        try:
+            sources = _pine_export_data(week, day, len(logs), store, logs)
+            plans = (
+                ('07:30', None),
+                ('13:30', '07:30'),
+                ('15:50', '07:30'),
+                ('20:30', '15:50'),
+            )
+            for slot, preceding_slot in plans:
+                current = sources.get(slot)
+                preceding_frame = sources.get(preceding_slot) if preceding_slot else None
+                if current is None:
+                    export_issues[slot] = f'Rilevamento {slot} non disponibile o incompleto'
+                    continue
+                if preceding_slot and preceding_frame is None:
+                    export_issues[slot] = f'Manca 0DTE {preceding_slot}, confronto non esportabile'
+                    continue
+                try:
+                    current_p = current['profiles']
+                    if preceding_slot:
+                        scripts[slot] = make_pine_comparison(
+                            preceding_frame['profiles']['0DTE'],
+                            current_p['0DTE'], current_p['Weekly'], offset,
+                            day.isoformat(), preceding_slot, slot,
+                            current.get('cboe_timestamp') or '')
+                    else:
+                        # Esportatore 07:30 INVARIATO (V49), dati ufficiali 07:30.
+                        scripts[slot] = make_pine(
+                            current_p['0DTE'], current_p['Weekly'], offset,
+                            day.isoformat(), current.get('cboe_timestamp') or '',
+                            'Mattina 07:30')
+                except (ValueError, TypeError, KeyError, RuntimeError) as exc:
+                    export_issues[slot] = str(exc)[:130]
+        except Exception as exc:
+            st.caption(f'Rilevamenti esportabili non leggibili: {type(exc).__name__}.')
+            sources = {}
+    columns = st.columns(4, gap='small')
+    descriptions = (
+        ('07:30', '07:30 · 0DTE + Weekly'),
+        ('13:30', '07:30 0DTE → 13:30 0DTE + Weekly'),
+        ('15:50', '07:30 0DTE → 15:50 0DTE + Weekly'),
+        ('20:30', '15:50 0DTE → 20:30 0DTE + Weekly'),
+    )
+    for index, (slot, description) in enumerate(descriptions, 1):
+        with columns[index - 1]:
+            script = scripts.get(slot)
+            st.download_button(
+                f'{index} · Pine {slot}',
+                data=script.encode('utf-8') if script else b'',
+                file_name=f'Serafini_NET_GAMMA_{day:%Y-%m-%d}_{slot.replace(":", "")}.pine',
+                mime='text/plain',
+                key=f'pine_export_{week}_{day}_{slot}',
+                use_container_width=True,
+                disabled=script is None,
+                help=description if script else export_issues.get(
+                    slot, 'Necessario il differenziale ES-SPX'),
+            )
+            st.caption(description)
+    if scripts:
         with st.expander('Mostra codice Pine da copiare e incollare'):
-            st.code(pine, language='pine')
-        st.caption('TradingView → Pine Editor → Nuovo indicatore → incolla il codice → Salva → Aggiungi al grafico ES. Per vedere i due profili usa spazio libero a destra del grafico. Il codice è uno snapshot statico, non scarica opzioni in TradingView.')
+            selected_code = st.selectbox(
+                'Situazione', list(scripts),
+                format_func=lambda slot: f'{slot} — Pine pronto',
+                key=f'pine_view_{week}_{day}')
+            st.code(scripts[selected_code], language='pine')
+    st.caption('TradingView → Pine Editor → Nuovo indicatore → incolla il codice '
+               '→ Salva → Aggiungi al grafico ES. I quattro file usano soltanto '
+               'i rilevamenti realmente disponibili; nessuna opzione live viene scaricata in TradingView.')
     st.caption('NET GAMMA(K) = (OI Call + VOL Call) × Gamma Call − (OI Put + VOL Put) × Gamma Put. Nessun fattore monetario aggiunto.')
