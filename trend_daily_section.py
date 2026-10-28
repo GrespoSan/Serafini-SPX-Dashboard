@@ -123,16 +123,26 @@ def render(reference_day=None):
                    else "#ef4444" if result["bar_color"] == "ROSSA" else "#a1a1aa")
     range_text = f'{result["range_pct"]:.2f}%' if result["range_pct"] is not None else "N/D"
     baricentro_text = (
-        f'Daily {pd.Timestamp(result["last_day"]):%d/%m/%Y} — '
+        f'Daily prec. {pd.Timestamp(result["last_day"]):%d/%m/%Y} — '
         f'Baricentro: {result["midpoint"]:,.2f} · '
         f'chiusura {result["midpoint_state"].lower()} il proprio baricentro · '
         f'candela {result["bar_color"].lower()}.'
     )
     if impulse is not None:
+        is_bearish = impulse["side"] == "RIBASSISTA"
+        if impulse["status"] == "TENUTA":
+            explanation = ("nessuna candela successiva ha superato il baricentro"
+                           if is_bearish else
+                           "nessuna candela successiva è scesa sotto il baricentro")
+        else:
+            above = ((is_bearish and impulse["status"] == "PERSO")
+                     or (not is_bearish and impulse["status"] == "RECUPERATO"))
+            explanation = ("ultima chiusura Daily sopra il baricentro"
+                           if above else "ultima chiusura Daily sotto il baricentro")
         impulse_text = (
             f'Candela di impulso {pd.Timestamp(impulse["day"]):%d/%m/%Y} '
             f'({impulse["side"].lower()}) — Baricentro: {impulse["midpoint"]:,.2f} · '
-            f'esito: {impulse["status"].lower()} · {impulse["bars"]} barre successive.'
+            f'{explanation} · sedute successive esaminate: {impulse["bars"]}.'
         )
     else:
         impulse_text = 'Candela di impulso precedente: nessuna individuata nelle ultime 20 sedute con i criteri sperimentali.'
