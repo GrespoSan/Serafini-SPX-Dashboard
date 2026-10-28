@@ -91,7 +91,8 @@ def show(week, store, logs=None):
         st.caption("Candele ES=F: controllo automatico ogni 5 minuti mentre la pagina resta aperta. GEX e Serafini restano riferiti alla fotografia indicata.")
         ctx=st.session_state.get(f"gamma_compare_context_{week}")
         reading=st.radio("Rilevamento da confrontare",("Ultimo rilevamento","Mattina 07:30"),horizontal=True,key=f"edge_compare_reading_{week}")
-        source=st.radio("Origine GEX",("Automatico · stessa fotografia Serafini","Carica JSON Edge (alternativa)"),horizontal=True,key="edge_compare_source")
+        # Modalità automatica fissa; l’importazione JSON resta disponibile nel codice.
+        source="Automatico · stessa fotografia Serafini"
         if source.startswith("Automatico"):
             if not ctx or not ctx.get("snapshot"):
                 st.info("Apri NET GAMMA 0DTE / Weekly e seleziona la fotografia da confrontare.")
