@@ -89,14 +89,6 @@ def _plot(e, serafini_rows, candles, shift, bounds):
 def show(week, store, logs=None):
     with st.expander("GEX EDGE — CONFRONTO",expanded=False):
         st.caption("Candele ES=F: controllo automatico ogni 5 minuti mentre la pagina resta aperta. GEX e Serafini restano riferiti alla fotografia indicata.")
-        if st.button(
-            "Aggiorna analisi · ultima fotografia",
-            key="spx_refresh_both",
-            help="Seleziona la fotografia CBOE più recente per i calcoli separati Serafini ed Edge. Non acquisisce nuovi dati CBOE.",
-        ):
-            st.session_state[f"spx_refresh_latest_{week}"] = True
-            st.session_state.pop("edge_compare_yzoom", None)
-            st.rerun()
         ctx=st.session_state.get(f"gamma_compare_context_{week}")
         reading=st.radio("Rilevamento da confrontare",("Ultimo rilevamento","Mattina 07:30"),horizontal=True,key=f"edge_compare_reading_{week}")
         source=st.radio("Origine GEX",("Automatico · stessa fotografia Serafini","Carica JSON Edge (alternativa)"),horizontal=True,key="edge_compare_source")
