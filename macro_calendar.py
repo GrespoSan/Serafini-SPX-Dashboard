@@ -50,7 +50,7 @@ def _source_link(event, kind):
     try:
         parsed = urlparse(candidate)
         if parsed.scheme == "https" and parsed.netloc and not any(
-                c in candidate for c in "()[]<> \\n\\r"):
+                ch.isspace() or ch in "()[]<>" for ch in candidate):
             return candidate
     except (TypeError, ValueError):
         pass
@@ -70,13 +70,13 @@ def _kind(event):
 
     # Ordine: verbali e conferenza prima della decisione FOMC.
     if (code in ("fomc-minutes", "fed-minutes") or
-            re.search(r"\\bfomc minutes\\b|\\bfederal open market committee minutes\\b", normalized)):
+            re.search(r"\bfomc minutes\b|\bfederal open market committee minutes\b", normalized)):
         return "FOMC Minutes"
     if (code in ("fomc-press-conference", "fed-press-conference") or
-            re.search(r"\\b(fomc|fed|federal reserve) press conference\\b", normalized)):
+            re.search(r"\b(fomc|fed|federal reserve) press conference\b", normalized)):
         return "Conferenza stampa Fed"
     if (code in ("fomc", "fed-decision", "fomc-decision", "fed-funds") or
-            re.search(r"\\bfomc (rate )?decision\\b|\\bfomc meeting (decision|statement)\\b", normalized)):
+            re.search(r"\bfomc (rate )?decision\b|\bfomc meeting (decision|statement)\b", normalized)):
         return "FOMC"
     if code in ("ism-manufacturing", "us-ism-manufacturing", "ism-manufacturing-pmi") or (
             "ism" in normalized and "manufacturing" in normalized):
@@ -86,7 +86,7 @@ def _kind(event):
             ("services" in normalized or "non manufacturing" in normalized)):
         return "ISM Services"
     if code in ("jolts", "us-jolts") or re.search(
-            r"\\bjolts\\b|\\bjob openings and labor turnover\\b", normalized):
+            r"\bjolts\b|\bjob openings and labor turnover\b", normalized):
         return "JOLTS"
     if code in ("consumer-confidence", "us-consumer-confidence") or (
             "consumer confidence" in normalized and
@@ -99,24 +99,24 @@ def _kind(event):
     if code in ("us-flash-pmi", "sp-global-flash-pmi", "us-sp-global-flash-pmi") or (
             "s p global" in normalized and "flash pmi" in normalized):
         return "S&P Global Flash PMI"
-    if code in ("beige-book", "fed-beige-book") or re.search(r"\\bbeige book\\b", normalized):
+    if code in ("beige-book", "fed-beige-book") or re.search(r"\bbeige book\b", normalized):
         return "Beige Book"
     # Sei serie precedenti, stessa copertura e stessi nomi visibili.
-    if code in ("us-cpi", "cpi") or re.search(r"\\b(consumer price index|cpi)\\b", normalized):
+    if code in ("us-cpi", "cpi") or re.search(r"\b(consumer price index|cpi)\b", normalized):
         return "CPI"
-    if code in ("us-ppi", "ppi") or re.search(r"\\b(producer price index|ppi)\\b", normalized):
+    if code in ("us-ppi", "ppi") or re.search(r"\b(producer price index|ppi)\b", normalized):
         return "PPI"
     if (code in ("us-pce", "us-pce-price-index", "pce") or
-        re.search(r"\\b(personal income and outlays|personal consumption expenditures|pce price index|core pce)\\b", normalized)):
+        re.search(r"\b(personal income and outlays|personal consumption expenditures|pce price index|core pce)\b", normalized)):
         return "PCE"
-    if (re.search(r"\\b(jobless claims|initial unemployment claims|initial claims)\\b", normalized)
+    if (re.search(r"\b(jobless claims|initial unemployment claims|initial claims)\b", normalized)
         or "jobless" in code or "initial-claims" in code):
         return "Jobless Claims"
     if (code in ("us-nfp", "nfp", "us-nonfarm-payrolls") or
-        re.search(r"\\b(nonfarm payrolls|non farm payrolls|employment situation)\\b", normalized)):
+        re.search(r"\b(nonfarm payrolls|non farm payrolls|employment situation)\b", normalized)):
         return "NFP"
     if (code in ("us-retail-sales", "retail-sales") or
-        re.search(r"\\bretail sales\\b", normalized)):
+        re.search(r"\bretail sales\b", normalized)):
         return "Retail Sales"
     return None
 
