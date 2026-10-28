@@ -811,13 +811,6 @@ def render(store, week, snaps, logs):
         st.caption(f'Rilevamento selezionato: {acquisition_label} · '
                    f'Timestamp Cboe: {timestamp or "n.d."} · '
                    f'Cboe: {quality_label} · file {choice}')
-    shared_bounds = profile_gamma_bounds(computed_profiles.values())
-    st.caption('Scale indipendenti: confrontare le intensità tramite i valori numerici.'
-               if independent_scale else
-               'Scala comune 0DTE / Weekly sul rilevamento selezionato: stesso valore = stessa lunghezza. '
-               'La scala può cambiare tra rilevamenti.')
-    st.caption('Tooltip: componente Call positiva, componente Put negativa e saldo netto '
-               'della formula Serafini (OI + Volume) × Gamma; non valori monetari delle posizioni.')
     st.markdown('**Priorità operativa alle 0DTE:** Serafini richiama un peso numerico del '
                 '**60% per le 0DTE** e del **23% per le Weekly** e, in caso di dubbio, '
                 'privilegia i livelli 0DTE più marcati.')
@@ -835,6 +828,13 @@ def render(store, week, snaps, logs):
         key='gamma_independent_scale_v1',
         help='Disattivato: stessa scala per confrontare 0DTE e Weekly. '
              'Attivato: le lunghezze NON sono confrontabili tra i due profili.')
+    shared_bounds = profile_gamma_bounds(computed_profiles.values())
+    st.caption('Scale indipendenti: confrontare le intensità tramite i valori numerici.'
+               if independent_scale else
+               'Scala comune 0DTE / Weekly sul rilevamento selezionato: stesso valore = stessa lunghezza. '
+               'La scala può cambiare tra rilevamenti.')
+    st.caption('Tooltip: componente Call positiva, componente Put negativa e saldo netto '
+               'della formula Serafini (OI + Volume) × Gamma; non valori monetari delle posizioni.')
     profile_cols = st.columns(2, gap='small')
     for (title, expiry), profile_col in zip(
             [('0DTE', day), ('Weekly', weekly_exp)], profile_cols):
