@@ -274,124 +274,125 @@ with st.expander('REPORT GIORNALIERO AI', expanded=False):
 
 # Archivio settimanale e amministrazione riservati all'amministratore.
 if role == 'admin':
-    col_records, col_zip, col_admin = st.columns([1, 1, 1], gap='medium')
-    with col_records:
-        if st.checkbox(f'RILEVAMENTI CBOE — {len(snaps)} snapshot · {len(logs)} registri',
-                       value=False, key=f'cb_show_records_{week}'):
-            col_snapshots, col_logs = st.columns([1, 1], gap='medium')
-            col_snapshots.metric('Snapshot distinti', len(snaps))
-            col_logs.metric('Registri', len(logs))
+    with st.expander('GESTIONE DATI CBOE — AMMINISTRATORE', expanded=False):
+        col_records, col_zip, col_admin = st.columns([1, 1, 1], gap='medium')
+        with col_records:
+            if st.checkbox(f'RILEVAMENTI CBOE — {len(snaps)} snapshot · {len(logs)} registri',
+                           value=False, key=f'cb_show_records_{week}'):
+                col_snapshots, col_logs = st.columns([1, 1], gap='medium')
+                col_snapshots.metric('Snapshot distinti', len(snaps))
+                col_logs.metric('Registri', len(logs))
 
-            if logs:
-                rows = []
-                for obj in logs:
-                    try:
-                        value = json.loads(store.download(f"{week}/logs/{obj['name']}"))
-                        rows.append({
-                            'Download (ora di Roma)': format_download_rome(value.get('download_utc')),
-                            'Acquisizione': (
-                                'Test manuale'
-                                if str(value.get('scheduled_slot') or '') == '30 13 * * 1-5'
-                                and str(value.get('download_rome') or '').startswith('2026-10-22T17:57:')
-                                else describe_slot(value.get('scheduled_slot'))
-                            ),
-                            'Stato': value.get('status', ''),
-                            'Qualità dati': describe_quality(value, store),
-                            'Timestamp Cboe (originale)': value.get('cboe_timestamp', ''),
-                            'SPX': value.get('spot_spx', ''),
-                            'Contratti': value.get('contracts', ''),
-                            'File originale': value.get('file', ''),
-                        })
-                    except Exception:
-                        rows.append({'Stato': 'Impossibile leggere un registro', 'Qualità dati': 'DA VERIFICARE'})
-                st.caption('Gli orari di download sono convertiti in Europe/Rome. Il timestamp Cboe rimane come nella fonte, senza attribuirgli un fuso non dichiarato. I vecchi registri etichettati “automatico” non identificano necessariamente lo slot.')
-                # La colorazione riguarda solo la qualita', non la colonna Stato (NUOVO/INVARIATO).
-                import pandas as pd
-                frame = pd.DataFrame(rows)
-                def quality_color(series):
-                    return [
-                        'color: #FF4B4B; font-weight: 700' if str(value).startswith('NON VALIDO')
-                        else 'color: #28C76F; font-weight: 600' if str(value) == 'VALIDO'
-                        else 'color: #EAB308' for value in series
-                    ]
-                st.dataframe(frame.style.apply(quality_color, subset=['Qualità dati']),
-                             use_container_width=True, hide_index=True)
-            else:
-                st.info('Non sono presenti registri per questa settimana.')
+                if logs:
+                    rows = []
+                    for obj in logs:
+                        try:
+                            value = json.loads(store.download(f"{week}/logs/{obj['name']}"))
+                            rows.append({
+                                'Download (ora di Roma)': format_download_rome(value.get('download_utc')),
+                                'Acquisizione': (
+                                    'Test manuale'
+                                    if str(value.get('scheduled_slot') or '') == '30 13 * * 1-5'
+                                    and str(value.get('download_rome') or '').startswith('2026-10-22T17:57:')
+                                    else describe_slot(value.get('scheduled_slot'))
+                                ),
+                                'Stato': value.get('status', ''),
+                                'Qualità dati': describe_quality(value, store),
+                                'Timestamp Cboe (originale)': value.get('cboe_timestamp', ''),
+                                'SPX': value.get('spot_spx', ''),
+                                'Contratti': value.get('contracts', ''),
+                                'File originale': value.get('file', ''),
+                            })
+                        except Exception:
+                            rows.append({'Stato': 'Impossibile leggere un registro', 'Qualità dati': 'DA VERIFICARE'})
+                    st.caption('Gli orari di download sono convertiti in Europe/Rome. Il timestamp Cboe rimane come nella fonte, senza attribuirgli un fuso non dichiarato. I vecchi registri etichettati “automatico” non identificano necessariamente lo slot.')
+                    # La colorazione riguarda solo la qualita', non la colonna Stato (NUOVO/INVARIATO).
+                    import pandas as pd
+                    frame = pd.DataFrame(rows)
+                    def quality_color(series):
+                        return [
+                            'color: #FF4B4B; font-weight: 700' if str(value).startswith('NON VALIDO')
+                            else 'color: #28C76F; font-weight: 600' if str(value) == 'VALIDO'
+                            else 'color: #EAB308' for value in series
+                        ]
+                    st.dataframe(frame.style.apply(quality_color, subset=['Qualità dati']),
+                                 use_container_width=True, hide_index=True)
+                else:
+                    st.info('Non sono presenti registri per questa settimana.')
 
-            # Acquisizione manuale nello stesso pannello, senza un secondo expander.
-            from manual_acquisition import render as render_manual_acquisition
-            if role == 'admin':
-                st.divider()
-                render_manual_acquisition(role, week, store, embedded=True)
+                # Acquisizione manuale nello stesso pannello, senza un secondo expander.
+                from manual_acquisition import render as render_manual_acquisition
+                if role == 'admin':
+                    st.divider()
+                    render_manual_acquisition(role, week, store, embedded=True)
 
-    with col_zip:
-        # Il file ZIP non contiene trasformazioni sui dati originali.
-        if st.button('Prepara ZIP dati Cboe della settimana', disabled=not (snaps or logs)):
-            try:
-                with st.spinner('Lettura dei file e creazione ZIP...'):
-                    out = io.BytesIO()
-                    manifest = []
-                    with zipfile.ZipFile(out, 'w', compression=zipfile.ZIP_STORED) as archive:
-                        for folder, objects in [('snapshots', snaps), ('logs', logs)]:
-                            for obj in objects:
-                                name = obj['name']
-                                path = f'{week}/{folder}/{name}'
-                                content = store.download(path)
-                                if folder == 'snapshots':
-                                    raw = gzip.decompress(content)
-                                    payload = json.loads(raw)
-                                    if not isinstance(payload.get('data', {}).get('options'), list):
-                                        raise ValueError('Formato catena Cboe inatteso')
-                                else:
-                                    json.loads(content)
-                                archive.writestr(path, content)
-                                manifest.append({'path': path, 'sha256': hashlib.sha256(content).hexdigest(),
-                                                 'bytes': len(content)})
-                        archive.writestr('manifest.json', json.dumps({'week': week, 'files': manifest}, indent=2))
-                    data = out.getvalue()
-                    st.session_state.archive = data
-                    st.session_state.archive_week = week
-                    st.session_state.manifest = manifest
-                    st.session_state.archive_sha = hashlib.sha256(data).hexdigest()
-            except Exception:
-                st.error('ZIP non generato: un file è illeggibile o la connessione non è riuscita.')
+        with col_zip:
+            # Il file ZIP non contiene trasformazioni sui dati originali.
+            if st.button('Prepara ZIP dati Cboe della settimana', disabled=not (snaps or logs)):
+                try:
+                    with st.spinner('Lettura dei file e creazione ZIP...'):
+                        out = io.BytesIO()
+                        manifest = []
+                        with zipfile.ZipFile(out, 'w', compression=zipfile.ZIP_STORED) as archive:
+                            for folder, objects in [('snapshots', snaps), ('logs', logs)]:
+                                for obj in objects:
+                                    name = obj['name']
+                                    path = f'{week}/{folder}/{name}'
+                                    content = store.download(path)
+                                    if folder == 'snapshots':
+                                        raw = gzip.decompress(content)
+                                        payload = json.loads(raw)
+                                        if not isinstance(payload.get('data', {}).get('options'), list):
+                                            raise ValueError('Formato catena Cboe inatteso')
+                                    else:
+                                        json.loads(content)
+                                    archive.writestr(path, content)
+                                    manifest.append({'path': path, 'sha256': hashlib.sha256(content).hexdigest(),
+                                                     'bytes': len(content)})
+                            archive.writestr('manifest.json', json.dumps({'week': week, 'files': manifest}, indent=2))
+                        data = out.getvalue()
+                        st.session_state.archive = data
+                        st.session_state.archive_week = week
+                        st.session_state.manifest = manifest
+                        st.session_state.archive_sha = hashlib.sha256(data).hexdigest()
+                except Exception:
+                    st.error('ZIP non generato: un file è illeggibile o la connessione non è riuscita.')
 
-        if st.session_state.get('archive_week') == week and st.session_state.get('archive'):
-            sha = st.session_state.archive_sha
-            st.success(f"ZIP pronto · {len(st.session_state.archive):,} byte · SHA256: {sha}")
-            st.download_button('Scarica ZIP', data=st.session_state.archive,
-                               file_name=f'Serafini_SPX_{week}.zip', mime='application/zip')
-            st.caption('Verifica sul tuo PC di poter aprire lo ZIP. Scaricare non elimina i file dal cloud.')
-    with col_admin:
-        with st.expander('Cancella dati Cboe della settimana dal cloud', expanded=False):
-            st.warning('Operazione irreversibile. Prima salva e verifica lo ZIP sul tuo PC.')
-            if st.session_state.get('archive_week') != week or not st.session_state.get('archive'):
-                st.info('Prepara lo ZIP prima di cancellare la settimana.')
-            else:
+            if st.session_state.get('archive_week') == week and st.session_state.get('archive'):
                 sha = st.session_state.archive_sha
-                typed = st.text_input('Inserisci SHA256 dello ZIP che hai verificato', key=f'sha_{week}')
-                confirmed = st.checkbox('Ho scaricato e verificato lo ZIP sul mio PC', key=f'confirmed_{week}')
-                ready = confirmed and hmac.compare_digest(typed.strip().lower(), sha)
-                if st.button('Elimina settimana da Supabase', disabled=not ready, type='secondary'):
-                    exported = {entry['path']: entry['sha256'] for entry in st.session_state.manifest}
-                    try:
-                        current = [f'{week}/{folder}/{o["name"]}'
-                                   for folder in ('snapshots', 'logs') for o in store.list(f'{week}/{folder}/')]
-                        if set(current) != set(exported):
-                            st.error('Sono arrivati nuovi file dopo lo ZIP: rigenera l’archivio.')
-                        elif any(hashlib.sha256(store.download(path)).hexdigest() != exported[path]
-                                 for path in current):
-                            st.error('Un file cloud è cambiato: rigenera l’archivio.')
-                        else:
-                            for i in range(0, len(current), 100):
-                                store.delete(current[i:i + 100])
-                            remaining = [f'{week}/{folder}/{o["name"]}'
-                                         for folder in ('snapshots', 'logs') for o in store.list(f'{week}/{folder}/')]
-                            if remaining:
-                                st.error('Cancellazione parziale: controlla il contenuto del bucket.')
+                st.success(f"ZIP pronto · {len(st.session_state.archive):,} byte · SHA256: {sha}")
+                st.download_button('Scarica ZIP', data=st.session_state.archive,
+                                   file_name=f'Serafini_SPX_{week}.zip', mime='application/zip')
+                st.caption('Verifica sul tuo PC di poter aprire lo ZIP. Scaricare non elimina i file dal cloud.')
+        with col_admin:
+            with st.expander('Cancella dati Cboe della settimana dal cloud', expanded=False):
+                st.warning('Operazione irreversibile. Prima salva e verifica lo ZIP sul tuo PC.')
+                if st.session_state.get('archive_week') != week or not st.session_state.get('archive'):
+                    st.info('Prepara lo ZIP prima di cancellare la settimana.')
+                else:
+                    sha = st.session_state.archive_sha
+                    typed = st.text_input('Inserisci SHA256 dello ZIP che hai verificato', key=f'sha_{week}')
+                    confirmed = st.checkbox('Ho scaricato e verificato lo ZIP sul mio PC', key=f'confirmed_{week}')
+                    ready = confirmed and hmac.compare_digest(typed.strip().lower(), sha)
+                    if st.button('Elimina settimana da Supabase', disabled=not ready, type='secondary'):
+                        exported = {entry['path']: entry['sha256'] for entry in st.session_state.manifest}
+                        try:
+                            current = [f'{week}/{folder}/{o["name"]}'
+                                       for folder in ('snapshots', 'logs') for o in store.list(f'{week}/{folder}/')]
+                            if set(current) != set(exported):
+                                st.error('Sono arrivati nuovi file dopo lo ZIP: rigenera l’archivio.')
+                            elif any(hashlib.sha256(store.download(path)).hexdigest() != exported[path]
+                                     for path in current):
+                                st.error('Un file cloud è cambiato: rigenera l’archivio.')
                             else:
-                                st.session_state.pop('archive', None)
-                                st.success('Settimana eliminata dal cloud. Conserva lo ZIP locale.')
-                    except Exception:
-                        st.error('Impossibile completare la cancellazione. Controlla il bucket.')
+                                for i in range(0, len(current), 100):
+                                    store.delete(current[i:i + 100])
+                                remaining = [f'{week}/{folder}/{o["name"]}'
+                                             for folder in ('snapshots', 'logs') for o in store.list(f'{week}/{folder}/')]
+                                if remaining:
+                                    st.error('Cancellazione parziale: controlla il contenuto del bucket.')
+                                else:
+                                    st.session_state.pop('archive', None)
+                                    st.success('Settimana eliminata dal cloud. Conserva lo ZIP locale.')
+                        except Exception:
+                            st.error('Impossibile completare la cancellazione. Controlla il bucket.')
