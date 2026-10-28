@@ -1,4 +1,4 @@
-"""Esporta tre profili Pine v6: 0DTE precedente opzionale, 0DTE e Weekly attuali.
+"""Esporta tre profili Pine v6 DISTANZIATI: precedente opzionale, 0DTE e Weekly.
 
 L'esportatore esistente delle 07:30 rimane intatto e identico (V49).
 Non vengono ricalcolati, stimati o normalizzati valori NET GAMMA.
@@ -35,21 +35,23 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
         code = code.replace(before, after)
 
     patch("// EXPORT REVISION: V49-TV-COMMON-SCALE-LABEL",
-          "// EXPORT REVISION: V50-TV-OPTIONAL-PREVIOUS-0DTE")
+          "// EXPORT REVISION: V51-TV-SPACED-THREE-COLUMNS")
     patch("// 0DTE e Weekly usano SEMPRE la stessa scala effettiva nel medesimo snapshot.",
           "// La scala effettiva e' comune ai profili visualizzati.")
     patch('offsetOdte = input.int(60, "Distanza 0DTE da ultima candela", minval=45, maxval=170)',
           'offsetOdte = input.int(60, "Distanza 0DTE attuale (senza precedente)", minval=45, maxval=170)\n'
           'showPrevious = input.bool(true, "Mostra 0DTE precedente")\n'
-          'offsetPrevious = input.int(55, "Distanza 0DTE precedente", minval=30, maxval=120)\n'
-          'offsetOdteCompare = input.int(215, "Distanza 0DTE attuale (con precedente)", minval=170, maxval=270)\n'
-          'offsetWeeklyCompare = input.int(375, "Distanza Weekly (con precedente)", minval=320, maxval=430)')
+          'offsetPrevious = input.int(70, "1 · Distanza 0DTE precedente", minval=40, maxval=140)\n'
+          'offsetOdteCompare = input.int(235, "2 · Distanza 0DTE attuale", minval=165, maxval=300)\n'
+          'offsetWeeklyCompare = input.int(400, "3 · Distanza Weekly attuale", minval=300, maxval=440)')
     patch("var array<float> odteLevels = ",
           "var array<float> prevLevels = " +
           _pine_array(previous_odte["rows"], "strike_spx", float(offset)) +
           "\nvar array<float> prevValues = " +
           _pine_array(previous_odte["rows"], "net_gamma") +
           "\nvar array<float> odteLevels = ")
+    patch('string scaleText = " | scala comune " + str.tostring(actualScale, "#.######") + " Gamma/bar" + (adjusted ? " (adattata)" : "")',
+          'string scaleText = adjusted ? " · scala " + str.tostring(actualScale, "#.###") : ""')
     patch("if barstate.islast\n",
           "requiredCompactScale(array<float> gamma, float room) =>\n"
           "    float maxAbsolute = 0.0\n"
@@ -62,17 +64,28 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
         "    bool adjusted = actualScale > gammaPerCandle + 0.000001\n"
         f'    renderProfile(odteLevels, odteValues, bar_index + offsetOdte, "0DTE {current_odte["expiry"]} | {current_slot}", actualScale, adjusted)\n'
         f'    renderProfile(weeklyLevels, weeklyValues, bar_index + offsetWeekly, "WEEKLY {current_weekly["expiry"]} | {current_slot}", actualScale, adjusted)',
-        "    int currentCenter = showPrevious ? offsetOdteCompare : offsetOdte\n"
-        "    int weeklyCenter = showPrevious ? offsetWeeklyCompare : offsetWeekly\n"
-        "    float compactRoom = math.min(float(offsetOdteCompare - offsetPrevious) / 2.0 - 8.0, float(offsetWeeklyCompare - offsetOdteCompare) / 2.0 - 8.0)\n"
-        "    compactRoom := math.min(compactRoom, float(480 - offsetWeeklyCompare))\n"
-        "    float normalScale = math.max(requiredScale(odteValues, offsetOdte), requiredScale(weeklyValues, offsetWeekly))\n"
-        "    float compareScale = math.max(requiredCompactScale(prevValues, compactRoom), math.max(requiredCompactScale(odteValues, compactRoom), requiredCompactScale(weeklyValues, compactRoom)))\n"
+        "    // Le distanze sono indipendenti. Se troppo vicine, i centri\n"
+        "    // vengono separati automaticamente (nessun livello troncato).\n"
+        "    int minSeparation = 130\n"
+        "    int prevCenter = math.min(offsetPrevious, 430 - 2 * minSeparation)\n"
+        "    int currentCompareCenter = math.min(math.max(offsetOdteCompare, prevCenter + minSeparation), 430 - minSeparation)\n"
+        "    int weeklyCompareCenter = math.min(math.max(offsetWeeklyCompare, currentCompareCenter + minSeparation), 430)\n"
+        "    int currentCenter = showPrevious ? currentCompareCenter : offsetOdte\n"
+        "    int weeklyCenter = showPrevious ? weeklyCompareCenter : math.min(430, math.max(offsetWeekly, offsetOdte + 70))\n"
+        "    // Barre verso destra e sinistra: almeno 22 barre vuote fra profili.\n"
+        "    float gapLeft = float(currentCompareCenter - prevCenter - 22) / 2.0\n"
+        "    float gapRight = float(weeklyCompareCenter - currentCompareCenter - 22) / 2.0\n"
+        "    float compareRoom = math.max(1.0, math.min(math.min(gapLeft, gapRight), math.min(float(480 - weeklyCompareCenter - 10), float(prevCenter - 10))))\n"
+        "    float normalRoom = math.max(1.0, math.min(float(weeklyCenter - currentCenter - 22) / 2.0, math.min(float(480 - weeklyCenter - 10), float(currentCenter - 10))))\n"
+        "    float normalScale = math.max(requiredCompactScale(odteValues, normalRoom), requiredCompactScale(weeklyValues, normalRoom))\n"
+        "    float compareScale = math.max(requiredCompactScale(prevValues, compareRoom), math.max(requiredCompactScale(odteValues, compareRoom), requiredCompactScale(weeklyValues, compareRoom)))\n"
         "    float actualScale = math.max(gammaPerCandle, showPrevious ? compareScale : normalScale)\n"
         "    bool adjusted = actualScale > gammaPerCandle + 0.000001\n"
+        f'    string currentTitle = showPrevious ? "2 · 0DTE {current_slot}" : "0DTE {current_slot}"\n'
+        f'    string weeklyTitle = showPrevious ? "3 · Weekly {current_slot}" : "Weekly {current_slot}"\n'
         "    if showPrevious\n"
-        f'        renderProfile(prevLevels, prevValues, bar_index + offsetPrevious, "0DTE {previous_odte["expiry"]} | {previous_slot} (precedente)", actualScale, adjusted)\n'
-        f'    renderProfile(odteLevels, odteValues, bar_index + currentCenter, "0DTE {current_odte["expiry"]} | {current_slot}", actualScale, adjusted)\n'
-        f'    renderProfile(weeklyLevels, weeklyValues, bar_index + weeklyCenter, "WEEKLY {current_weekly["expiry"]} | {current_slot}", actualScale, adjusted)'
+        f'        renderProfile(prevLevels, prevValues, bar_index + prevCenter, "1 · 0DTE {previous_slot}", actualScale, adjusted)\n'
+        f'    renderProfile(odteLevels, odteValues, bar_index + currentCenter, currentTitle, actualScale, adjusted)\n'
+        f'    renderProfile(weeklyLevels, weeklyValues, bar_index + weeklyCenter, weeklyTitle, actualScale, adjusted)'
     )
     return code
