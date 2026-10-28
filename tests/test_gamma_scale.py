@@ -82,7 +82,7 @@ class GammaScaleTest(unittest.TestCase):
                               if abs(shape.y0 / 7800.0 - 1) > 0.0099
                               and abs(shape.y0 / 7800.0 - 1) < 0.0101]
                 self.assertEqual(len(emphasized), 2)
-                self.assertTrue(all(shape.line.width == 1.7 for shape in emphasized))
+                self.assertTrue(all(shape.line.width == 1.8 for shape in emphasized))
                 figures.append(fig)
             if not independent:
                 self.assertEqual(figures[0].layout.xaxis.range, figures[1].layout.xaxis.range)
