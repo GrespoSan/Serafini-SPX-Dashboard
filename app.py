@@ -189,29 +189,9 @@ with st.sidebar:
 # La connessione al bucket viene creata SOLO DOPO il controllo password.
 store = Store(url, service_key, bucket)
 
-# Prima sezione unificata di contesto; nessuna modifica ai motori di calcolo.
-with st.expander('1. ANALISI DEL CONTESTO — News · Volatilità · Trend Daily', expanded=True):
-    st.markdown('#### News e calendario macroeconomico')
-    from macro_calendar import render as render_macro_calendar
-    render_macro_calendar()
-    st.divider()
-    st.markdown('#### Volatilità e regime VIX')
-    st.caption('Contesto della giornata corrente (ora di Roma). Il quadro VIX associato a uno '
-               'snapshot storico resta disponibile nel NET GAMMA, senza modifiche.')
-    from vix_regime import render as render_vix_context
-    try:
-        render_vix_context(datetime.now(ZoneInfo('Europe/Rome')).date())
-    except Exception:
-        st.info('Il quadro VIX non è disponibile in questo momento.')
-    st.divider()
-    from trend_daily_section import render as render_trend_daily
-    render_trend_daily()
-
-# Una sola riga: scelta della settimana a sinistra e conteggi a destra.
-col_week, col_snapshots, col_logs = st.columns([2.2, 1, 1], gap='medium', vertical_alignment='bottom')
-with col_week:
-    week = week_choice()
-
+# Scelta della settimana e caricamento dati prima del contesto:
+# la data di analisi deve coincidere con quella dello snapshot NET GAMMA.
+week = week_choice()
 try:
     snaps = store.list(f'{week}/snapshots/')
     logs = store.list(f'{week}/logs/')
@@ -219,6 +199,47 @@ except Exception:
     st.error('Impossibile elencare gli snapshot. Controlla Secrets e bucket Supabase.')
     st.stop()
 
+# Stessa chiave di selezione usata in gamma_section.render, senza creare
+# un secondo widget Streamlit con la medesima key.
+snapshot_names = sorted((obj['name'] for obj in snaps), reverse=True)
+snapshot_key = f'serafini_selected_snapshot_{week}'
+selected_name = st.session_state.get(snapshot_key)
+if selected_name not in snapshot_names:
+    selected_name = snapshot_names[0] if snapshot_names else None
+# La selezione dello snapshot avviene nel modulo NET GAMMA.
+# In caso di refresh/latest, usa lo snapshot più recente anche nel contesto.
+if st.session_state.get(f'spx_refresh_latest_{week}', False) and snapshot_names:
+    selected_name = snapshot_names[0]
+
+context_day = None
+if selected_name:
+    try:
+        stamp = selected_name.split('SPX_CBOE_', 1)[1][:8]
+        context_day = datetime.strptime(stamp, '%Y%m%d').date()
+    except (IndexError, ValueError):
+        pass
+
+with st.expander('1. ANALISI DEL CONTESTO — News · Volatilità · Trend Daily', expanded=True):
+    st.markdown('#### News e calendario macroeconomico')
+    from macro_calendar import render as render_macro_calendar
+    render_macro_calendar()
+    st.divider()
+    st.markdown('#### Volatilità e regime VIX')
+    from vix_regime import render as render_vix_context
+    if context_day is not None:
+        st.caption(f'Data del rilevamento NET GAMMA selezionato: {context_day:%d/%m/%Y}. '
+                   'Il modulo VIX utilizza la medesima data, senza modificare i suoi calcoli.')
+        try:
+            render_vix_context(context_day)
+        except Exception:
+            st.info('Il quadro VIX non è disponibile per la giornata selezionata.')
+    else:
+        st.info('Seleziona una settimana con snapshot Cboe validi per analizzare il VIX.')
+    st.divider()
+    from trend_daily_section import render as render_trend_daily
+    render_trend_daily()
+
+col_snapshots, col_logs = st.columns([1, 1], gap='medium')
 col_snapshots.metric('Snapshot distinti', len(snaps))
 col_logs.metric('Registri', len(logs))
 
