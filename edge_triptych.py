@@ -235,6 +235,22 @@ def show(week, store, logs=None):
                                            y=[p[1] for p in valid_points],mode="lines"))
                     f.add_hline(y=0, line_dash="dash", line_color="#f4c95d", line_width=1.5)
                     st.plotly_chart(f,use_container_width=True)
+                    st.markdown(
+                        "**Come leggere la curva teorica GEX**\n\n"
+                        "**A cosa serve?** Se l'SPX raggiungesse un determinato prezzo, "
+                        "come cambierebbe l'esposizione Gamma complessiva delle opzioni 0DTE considerate? "
+                        "La curva mostra il GEX ricalcolato per diversi prezzi ipotetici "
+                        "partendo dalla stessa fotografia Cboe, senza ipotizzare nuove operazioni "
+                        "o variazioni delle posizioni aperte.\n\n"
+                        "**Sopra lo zero (GEX positivo):** in determinate condizioni, "
+                        "le coperture dei dealer possono contrastare i movimenti del prezzo, "
+                        "favorendo una maggiore stabilità. "
+                        "**Sotto lo zero (GEX negativo):** le coperture possono invece "
+                        "amplificare i movimenti e la volatilità.\n\n"
+                        "**Il passaggio attraverso lo zero** identifica un Gamma Flip teorico. "
+                        "La curva non prevede la direzione del mercato e non costituisce "
+                        "un segnale automatico di acquisto o vendita."
+                    )
                 else:
                     st.markdown(f"**{curve_title}**")
             else:
