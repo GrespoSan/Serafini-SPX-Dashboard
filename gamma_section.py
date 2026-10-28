@@ -877,6 +877,10 @@ def render(store, week, snaps, logs):
                     st.caption('Deviazione Serafini M15 non disponibile: ' + sigma_error)
                 elif offset is None:
                     st.caption('Deviazione Serafini ES M15: richiede differenziale ES-SPX per allineare il grafico.')
+                elif sigma_levels and sigma_levels.get('status') != 'VALIDO':
+                    st.caption('Deviazione Serafini M15 non disponibile: ' +
+                               str(sigma_levels.get('reason', 'storico insufficiente')) +
+                               '. Nessun livello ipotizzato.')
                 elif sigma_levels and sigma_levels.get('status') == 'VALIDO':
                     st.caption('σ cash ES=F M15 (Chicago 08:30–15:00), rif. close precedente 15:15: '
                                f"L90 {sigma_levels['L90']:.2f} · "
