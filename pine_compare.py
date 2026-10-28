@@ -51,8 +51,6 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
           "\nvar array<float> prevValues = " +
           _pine_array(previous_odte["rows"], "net_gamma") +
           "\nvar array<float> odteLevels = ")
-    patch('string scaleText = " | scala comune " + str.tostring(actualScale, "#.######") + " Gamma/bar" + (adjusted ? " (adattata)" : "")',
-          'string scaleText = " · scala MAN. " + str.tostring(actualScale, "#.###") + " G/bar"')
     patch("if barstate.islast\n",
           "// Calcola SOLO il minimo SUGGERITO per separare le barre adiacenti.\n"
           "// Non cambia mai la scala manuale inserita dall'utente.\n"
@@ -90,11 +88,14 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
         label unsafe = label.new(bar_index + 10, close, "Scala manuale insufficiente per limite TradingView +500: aumenta ad almeno " + str.tostring(math.ceil(minimumSafe * 10) / 10.0, "#.0") + " G/bar", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.orange, textcolor=color.black, size=size.small)
         array.push(drawnLabels, unsafe)
     else
-        string scaleHint = actualScale + 0.000001 < recommendedScale ? "Scala consigliata almeno " + str.tostring(math.ceil(recommendedScale * 10) / 10.0, "#.0") + " G/bar\\n" : ""
-        string currentTitle = scaleHint + (showPrevious ? "2 · 0DTE {current_slot}" : "0DTE {current_slot}")
-        string weeklyTitle = showPrevious ? "3 · Weekly {current_slot}" : "Weekly {current_slot}"
+        string recommendedText = "Scala ottimale " + str.tostring(math.ceil(recommendedScale * 10) / 10.0, "#.0") + " G/bar"
+        string currentTitle = showPrevious ? "0DTE {current_slot}" : "0DTE {current_slot}"
+        string weeklyTitle = "Weekly {current_slot}"
+        if showTitles
+            label optimal = label.new(bar_index + currentCenter, array.max(odteLevels) + math.max(18.0, (array.max(odteLevels) - array.min(odteLevels)) / 8), recommendedText, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_down, color=color.new(color.black, 35), textcolor=color.white, size=size.normal)
+            array.push(drawnLabels, optimal)
         if showPrevious
-            renderProfile(prevLevels, prevValues, bar_index + prevCenter, "1 · 0DTE {previous_slot}", actualScale, adjusted)
+            renderProfile(prevLevels, prevValues, bar_index + prevCenter, "0DTE {previous_slot}", actualScale, adjusted)
         renderProfile(odteLevels, odteValues, bar_index + currentCenter, currentTitle, actualScale, adjusted)
         renderProfile(weeklyLevels, weeklyValues, bar_index + weeklyCenter, weeklyTitle, actualScale, adjusted)
 """
