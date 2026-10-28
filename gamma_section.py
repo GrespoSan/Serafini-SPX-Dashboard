@@ -830,11 +830,11 @@ def render(store, week, snaps, logs):
                 for pct in (-1.5, -1.0, -0.5, 0.5, 1.0, 1.5):
                     target = previous_close_es * (1.0 + pct / 100.0)
                     emphasis = abs(pct) == 1.0
-                    line_color = ('rgba(192,203,218,0.54)' if emphasis
-                                  else 'rgba(170,183,202,0.28)')
+                    line_color = ('rgba(205,215,230,0.62)' if emphasis
+                                  else 'rgba(195,205,220,0.46)')
                     fig.add_hline(
                         y=target, line_dash='dot',
-                        line_width=1.7 if emphasis else 1.0,
+                        line_width=1.8 if emphasis else 1.2,
                         line_color=line_color,
                     )
                     fig.add_annotation(
@@ -842,11 +842,11 @@ def render(store, week, snaps, logs):
                         text=f'{pct:+.1f}%'.replace('.', ','),
                         showarrow=False, xanchor='right', yanchor='middle',
                         font=dict(
-                            color=('rgba(216,223,233,0.86)' if emphasis
-                                   else 'rgba(196,205,219,0.64)'),
+                            color=('rgba(225,232,240,0.92)' if emphasis
+                                   else 'rgba(210,218,228,0.82)'),
                             size=10,
                         ),
-                        bgcolor='rgba(13,17,23,0.65)', borderpad=1,
+                        bgcolor='rgba(13,17,23,0.78)', borderpad=1,
                     )
                 # Il riferimento principale rimane visivamente prioritario.
                 fig.add_annotation(
