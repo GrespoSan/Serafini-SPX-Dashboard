@@ -1,7 +1,7 @@
 """Pine Script v6 exporter of already computed Serafini net-gamma profiles.
 Graphical-only translation to TradingView, no recomputation of exposure.
 """
-from math import isfinite
+from math import isfinite, ceil
 import re
 
 
@@ -20,6 +20,20 @@ def _pine_array(rows, field: str, offset: float = 0.0):
     return 'array.from(\n        ' + ',\n        '.join(', '.join(vals[i:i + 8]) for i in range(0, len(vals), 8)) + '\n    )'
 
 
+def _initial_manual_scale(profiles):
+    """Scala iniziale sicura per xloc.bar_index +500; nessuna riscalatura dei Gamma."""
+    minimum = 1.0
+    for profile, center in profiles:
+        positives = [max(0.0, float(row["net_gamma"])) for row in profile["rows"]]
+        negatives = [max(0.0, -float(row["net_gamma"])) for row in profile["rows"]]
+        if not positives:
+            continue
+        needed = max(max(positives) / float(480 - center),
+                     max(negatives) / float(9500 + center))
+        minimum = max(minimum, needed)
+    return ceil(minimum * 10.0 - 1e-8) / 10.0
+
+
 def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stamp: str, acquisition_label: str = '') -> str:
     if not isfinite(offset):
         raise ValueError('Il differenziale non è finito')
@@ -28,6 +42,7 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
     for group in (odte, weekly):
         if len(group['rows']) > 50:
             raise ValueError('Al massimo 50 livelli per profilo')
+    default_scale = _initial_manual_scale([(odte, 60), (weekly, 160)])
     same_exp = odte['expiry'] == weekly['expiry']
     origin = re.sub(r'[^0-9T: .-]', '', cboe_stamp)[:72]
     # Usa solo etichette del registro di acquisizione, non presume il fuso del timestamp Cboe.
@@ -51,7 +66,7 @@ indicator("Serafini SPX NET GAMMA | {date_text}{tag}", overlay=true, max_lines_c
 // Nessuna modifica, troncamento o normalizzazione dei NET GAMMA.
 // Non calcola gamma flip e non usa dati opzioni live in TradingView.
 
-gammaPerCandle = input.float(1.0, "Scala MANUALE · Gamma/barra", minval=0.1, step=0.1, tooltip="Sempre applicata esattamente come impostata. Se troppo bassa, il grafico segnala di aumentarla: nessuna modifica automatica.")
+gammaPerCandle = input.float({default_scale:.1f}, "Scala MANUALE · Gamma/barra", minval=0.1, step=0.1, tooltip="Sempre applicata esattamente come impostata. Se troppo bassa, il grafico segnala di aumentarla: nessuna modifica automatica.")
 offsetOdte = input.int(60, "Distanza 0DTE da ultima candela", minval=45, maxval=170)
 offsetWeekly = input.int(160, "Distanza Weekly da ultima candela", minval=55, maxval=300)
 positiveColor = input.color(color.rgb(0, 230, 117), "NET GAMMA positivo")
