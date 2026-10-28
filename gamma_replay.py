@@ -222,22 +222,32 @@ def render(store, week, logs, view_mode=None):
                    "e' stato attivato successivamente.")
 
 
+    # Unica fonte: differenziale della medesima data gia' calcolato/impostato
+    # in ANALISI NET GAMMA. Nessun input o calcolo parallelo nel Replay.
     offset_key = f"basis_override_{day.isoformat()}"
-    proposed = str(st.session_state.get(offset_key, "")).strip()
-    offset_text = st.text_input(
-        "Differenziale ES − SPX (stesso valore per tutti i frame)",
-        value=proposed, key=f"replay_basis_{week}_{day}",
-        help="Verificare il differenziale ES−SPX in NET GAMMA. "
-             "Vuoto = grafico in strike SPX.",
-    )
+    offset_text = str(st.session_state.get(offset_key, "")).strip()
+    if not offset_text:
+        cached = st.session_state.get("auto_basis_results", {}).get(day.isoformat())
+        if cached is not None:
+            try:
+                from decimal import Decimal, ROUND_HALF_UP
+                offset_text = str(int(Decimal(str(cached["basis"])).quantize(
+                    Decimal("1"), rounding=ROUND_HALF_UP)))
+            except (ValueError, TypeError, KeyError, ArithmeticError):
+                offset_text = ""
     try:
-        offset = float(offset_text.replace(",", ".")) if offset_text.strip() else None
+        offset = float(offset_text.replace(",", ".")) if offset_text else None
+        if offset is not None and not math.isfinite(offset):
+            offset = None
     except ValueError:
-        st.warning("Differenziale non numerico: mostro gli strike SPX.")
         offset = None
     if offset is None:
-        st.warning("Il replay mostra strike SPX; per visualizzare livelli ES "
-                   "inserire il differenziale corretto.")
+        st.info("Differenziale ES − SPX non disponibile per questa giornata. "
+                "Apri ANALISI NET GAMMA per calcolarlo o verificarlo; "
+                "nel frattempo il Replay mostra gli strike SPX.")
+    else:
+        st.caption(f"Differenziale ES − SPX: {offset:g} punti · "
+                   "valore condiviso con ANALISI NET GAMMA.")
 
     def numeric_spot(item):
         """Never substitute live prices for a historical Cboe observation."""
