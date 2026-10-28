@@ -1,4 +1,5 @@
 import copy
+import math
 from datetime import date
 from pathlib import Path
 import textwrap
@@ -56,13 +57,32 @@ class GammaScaleTest(unittest.TestCase):
                            net=[r['net_gamma'] for r in records], colors=['red', 'green'],
                            title='test', day=date(2026, 10, 27), capture_info='test', offset=0,
                            independent_scale=independent, shared_bounds=shared,
-                           profile_gamma_bounds=profile_gamma_bounds, gamma_components=gamma_components)
+                           profile_gamma_bounds=profile_gamma_bounds, gamma_components=gamma_components, math=math, ref=7800.0)
                 exec(chart_code, env)
                 fig = env['fig']
                 expected = profile_gamma_bounds([result]) if independent else shared
                 self.assertEqual(list(fig.layout.xaxis.range), expected)
                 self.assertEqual(fig.layout.xaxis.fixedrange, not independent)
                 self.assertEqual(list(fig.data[0].x), env['net'])
+                # Close prec. + sei riferimenti percentuali non modificano le barre.
+                horizontal = [shape for shape in fig.layout.shapes
+                              if shape.yref == 'y' and shape.y0 == shape.y1]
+                self.assertEqual(len(horizontal), 7)
+                expected_levels = sorted([7800.0] + [
+                    7800.0 * (1.0 + pct / 100.0)
+                    for pct in (-1.5, -1.0, -0.5, 0.5, 1.0, 1.5)
+                ])
+                for actual, expected_level in zip(
+                        sorted(shape.y0 for shape in horizontal), expected_levels):
+                    self.assertAlmostEqual(actual, expected_level)
+                self.assertEqual(len(fig.layout.annotations), 7)
+                self.assertEqual(sum(shape.line.dash == 'dot'
+                                     for shape in horizontal), 6)
+                emphasized = [shape for shape in horizontal
+                              if abs(shape.y0 / 7800.0 - 1) > 0.0099
+                              and abs(shape.y0 / 7800.0 - 1) < 0.0101]
+                self.assertEqual(len(emphasized), 2)
+                self.assertTrue(all(shape.line.width == 1.7 for shape in emphasized))
                 figures.append(fig)
             if not independent:
                 self.assertEqual(figures[0].layout.xaxis.range, figures[1].layout.xaxis.range)
