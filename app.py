@@ -224,7 +224,7 @@ with st.expander('1. ANALISI DEL CONTESTO — News · Volatilità · Trend Daily
     from macro_calendar import render as render_macro_calendar
     render_macro_calendar()
     st.divider()
-    st.markdown(f'#### Volatilità e VIX — {context_day:%d/%m/%Y}' if context_day else '#### Volatilità e VIX')
+    st.markdown('#### Volatilità — seduta precedente')
     from vix_regime import render as render_vix_context
     if context_day is not None:
         try:
