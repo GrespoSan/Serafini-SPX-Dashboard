@@ -1051,9 +1051,12 @@ def render(store, week, snaps, logs):
         st.divider()
         render_asia_gamma(day, asia_c1, asia_p1, level_context=asia_level_context)
     st.subheader('Esporta i profili su TradingView — 4 situazioni')
-    st.caption('07:30: 0DTE + Weekly originali. Gli altri export mostrano '
-               '0DTE precedente a sinistra, 0DTE attuale al centro e Weekly attuale '
-               'a destra. Nei Pine 2–4 puoi disattivare "Mostra 0DTE precedente".')
+    st.caption('07:30: 0DTE + Weekly originali. I Pine 2–4 separano '
+               '0DTE precedente, 0DTE attuale e Weekly in tre colonne con '
+               'distanze regolabili e minimo 130 barre fra i centri. '
+               'Puoi disattivare "Mostra 0DTE precedente" nelle impostazioni TradingView. '
+               '**Usa un solo indicatore Serafini NET GAMMA alla volta sul grafico:** '
+               'caricare più esportazioni insieme fa sovrapporre i profili.')
     scripts = {}
     export_issues = {}
     if offset is None or not math.isfinite(offset):
