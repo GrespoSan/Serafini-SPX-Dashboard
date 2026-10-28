@@ -35,15 +35,18 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
         code = code.replace(before, after)
 
     patch("// EXPORT REVISION: V49-TV-COMMON-SCALE-LABEL",
-          "// EXPORT REVISION: V51-TV-SPACED-THREE-COLUMNS")
+          "// EXPORT REVISION: V52-TV-CLEAN-THREE-COLUMNS")
     patch("// 0DTE e Weekly usano SEMPRE la stessa scala effettiva nel medesimo snapshot.",
           "// La scala effettiva e' comune ai profili visualizzati.")
     patch('offsetOdte = input.int(60, "Distanza 0DTE da ultima candela", minval=45, maxval=170)',
-          'offsetOdte = input.int(60, "Distanza 0DTE attuale (senza precedente)", minval=45, maxval=170)\n'
           'showPrevious = input.bool(true, "Mostra 0DTE precedente")\n'
-          'offsetPrevious = input.int(70, "1 · Distanza 0DTE precedente", minval=40, maxval=140)\n'
-          'offsetOdteCompare = input.int(235, "2 · Distanza 0DTE attuale", minval=165, maxval=300)\n'
-          'offsetWeeklyCompare = input.int(400, "3 · Distanza Weekly attuale", minval=300, maxval=440)')
+          '// Le posizioni regolabili servono solo quando il precedente e visibile.\n'
+          'offsetPrevious = input.int(70, "1 · Posizione 0DTE precedente", minval=40, maxval=140, active=showPrevious)\n'
+          'offsetOdteCompare = input.int(200, "2 · Posizione 0DTE attuale", minval=165, maxval=300, active=showPrevious)\n'
+          'offsetWeeklyCompare = input.int(330, "3 · Posizione Weekly attuale", minval=300, maxval=440, active=showPrevious)')
+    # Il precedente esportatore V49 usa due distanze; nei Pine comparativi
+    # il layout senza precedente le gestisce automaticamente (60 e 160).
+    patch('offsetWeekly = input.int(160, "Distanza Weekly da ultima candela", minval=55, maxval=300)\n', '')
     patch("var array<float> odteLevels = ",
           "var array<float> prevLevels = " +
           _pine_array(previous_odte["rows"], "strike_spx", float(offset)) +
@@ -51,7 +54,7 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
           _pine_array(previous_odte["rows"], "net_gamma") +
           "\nvar array<float> odteLevels = ")
     patch('string scaleText = " | scala comune " + str.tostring(actualScale, "#.######") + " Gamma/bar" + (adjusted ? " (adattata)" : "")',
-          'string scaleText = adjusted ? " · scala " + str.tostring(actualScale, "#.###") : ""')
+          'string scaleText = " · scala " + str.tostring(actualScale, "#.###") + " G/bar"')
     patch("if barstate.islast\n",
           "requiredCompactScale(array<float> gamma, float room) =>\n"
           "    float maxAbsolute = 0.0\n"
@@ -70,8 +73,8 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
         "    int prevCenter = math.min(offsetPrevious, 430 - 2 * minSeparation)\n"
         "    int currentCompareCenter = math.min(math.max(offsetOdteCompare, prevCenter + minSeparation), 430 - minSeparation)\n"
         "    int weeklyCompareCenter = math.min(math.max(offsetWeeklyCompare, currentCompareCenter + minSeparation), 430)\n"
-        "    int currentCenter = showPrevious ? currentCompareCenter : offsetOdte\n"
-        "    int weeklyCenter = showPrevious ? weeklyCompareCenter : math.min(430, math.max(offsetWeekly, offsetOdte + 70))\n"
+        "    int currentCenter = showPrevious ? currentCompareCenter : 60\n"
+        "    int weeklyCenter = showPrevious ? weeklyCompareCenter : 160\n"
         "    // Barre verso destra e sinistra: almeno 22 barre vuote fra profili.\n"
         "    float gapLeft = float(currentCompareCenter - prevCenter - 22) / 2.0\n"
         "    float gapRight = float(weeklyCompareCenter - currentCompareCenter - 22) / 2.0\n"
