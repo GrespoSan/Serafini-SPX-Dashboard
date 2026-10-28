@@ -736,4 +736,4 @@ def render(store, week, snaps, logs):
                    f"nella cronologia · {ready['study']} Replay di studio.")
         st.download_button('Scarica report JSON + PDF (ZIP)',data=ready['data'],
                            file_name=f'Serafini_SPX_AI_{day.isoformat()}.zip',mime='application/zip',
-                           key=f'ai_download_{day}')
+                           key=f'ai_download_{day}', on_click="ignore")
