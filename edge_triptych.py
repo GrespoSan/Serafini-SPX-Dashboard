@@ -87,7 +87,7 @@ def _plot(e, serafini_rows, candles, shift, bounds):
 
 @st.fragment(run_every="5m")
 def show(week, store, logs=None):
-    with st.expander("CONFRONTO — Prezzo | Serafini | Edge GEX",expanded=False):
+    with st.expander("GEX EDGE — CONFRONTO",expanded=False):
         st.caption("Tre pannelli affiancati con scala ES condivisa; i motori restano indipendenti.")
         st.caption("Candele ES=F: controllo automatico ogni 5 minuti mentre la pagina resta aperta. GEX e Serafini restano riferiti alla fotografia indicata.")
         if st.button(
