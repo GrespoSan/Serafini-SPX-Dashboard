@@ -804,9 +804,24 @@ def render(store, week, snaps, logs):
             computed_profiles[title] = profile(snap, expiry, ref)
         except ValueError as exc:
             profile_errors[title] = str(exc)
+    # Nomi tecnici conservati come valori interni; il menu mostra gli orari
+    # di acquisizione ricavati dai registri, non dal timestamp originale Cboe.
+    snapshot_menu_labels = {}
+    for snapshot_name in names:
+        date_code = snapshot_name[len('SPX_CBOE_'):len('SPX_CBOE_') + 8]
+        date_display = (f'{date_code[6:8]}/{date_code[4:6]}/{date_code[:4]}'
+                        if len(date_code) == 8 and date_code.isdigit() else 'Data n.d.')
+        slot_label = _acquisition_label(store, week, logs, snapshot_name)
+        actual_clock = _snapshot_download_clock(store, week, logs, snapshot_name)
+        clock_label = (f' · download {actual_clock} Roma'
+                       if actual_clock else ' · ora download non disponibile')
+        snapshot_menu_labels[snapshot_name] = (
+            f'{date_display} · {slot_label}{clock_label} · {snapshot_name}'
+        )
     col_snapshot, col_snapshot_info = st.columns([1.25, 2.75], gap='small', vertical_alignment='bottom')
     with col_snapshot:
-        st.selectbox('Snapshot originale Cboe', names, key=selection_key)
+        st.selectbox('Snapshot originale Cboe', names, key=selection_key,
+                     format_func=lambda snapshot_name: snapshot_menu_labels.get(snapshot_name, snapshot_name))
     with col_snapshot_info:
         st.caption(f'Rilevamento selezionato: {acquisition_label} · '
                    f'Timestamp Cboe: {timestamp or "n.d."} · '
