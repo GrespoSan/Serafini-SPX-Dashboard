@@ -62,15 +62,12 @@ def evaluate(frame):
 
 def render(reference_day=None):
     st.subheader("Trend Daily — contesto SPX / ES")
-    st.caption("Metodo Serafini: confronto delle ultime due barre Daily chiuse, range e baricentro. "
-               "Analisi informativa: non modifica NET GAMMA, 0DTE, Weekly, Replay o GEX.")
-
     try:
         bars = _daily_bars()
         if bars.empty:
             st.info("Dati Daily ES non disponibili: analisi non calcolata.")
             return
-        # Yahoo può includere la seduta corrente ancora in formazione.
+        # Solo sedute chiuse anteriori alla data di riferimento.
         today_rome = reference_day or datetime.now(ZoneInfo("Europe/Rome")).date()
         index_dates = pd.to_datetime(bars.index).date
         bars = bars.loc[index_dates < today_rome]
@@ -80,25 +77,46 @@ def render(reference_day=None):
         st.caption(f"Dettaglio diagnostico: {type(exc).__name__}")
         return
 
-    st.caption(f"Future ES · ultima candela chiusa: {result['last_day']} · sorgente Yahoo Finance (ES=F) · riferimento {today_rome:%d/%m/%Y}")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Struttura Daily", result["direction"])
-    c2.metric("Range", f"{result['range_pct']:.2f}%" if result["range_pct"] is not None else "N/D")
-    c3.metric("Variazione del range", result["range_shape"])
-    count_color = "#22c55e" if result["bar_color"] == "VERDE" else ("#ef4444" if result["bar_color"] == "ROSSA" else "#a1a1aa")
-    c4.markdown("**Barre stesso colore**")
-    c4.markdown(
-        f'<div style="font-size:2rem;font-weight:500;line-height:1.45;color:{count_color}">'
-        f'{result["same_color"]}</div>',
-        unsafe_allow_html=True,
+    from html import escape
+    count_color = ("#22c55e" if result["bar_color"] == "VERDE"
+                   else "#ef4444" if result["bar_color"] == "ROSSA" else "#a1a1aa")
+    range_text = f'{result["range_pct"]:.2f}%' if result["range_pct"] is not None else "N/D"
+    baricentro_text = (
+        f'Baricentro ultima Daily: {result["midpoint"]:,.2f} · '
+        f'chiusura {result["midpoint_state"].lower()} il baricentro · '
+        f'ultima barra {result["bar_color"].lower()}.'
     )
-    st.caption(f"Baricentro ultima Daily: {result['midpoint']:,.2f} · "
-               f"chiusura {result['midpoint_state'].lower()} il baricentro · "
-               f"ultima barra {result['bar_color'].lower()}.")
+    # Solo visualizzazione: la logica evaluate e i valori restano invariati.
+    st.markdown(f"""
+<style>
+.spx-trend-card {{
+  border:1px solid #34363c; border-radius:13px; padding:14px 18px;
+  background:#090a0c; color:#f4f5f6;
+}}
+.spx-trend-grid {{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:center;}}
+.spx-trend-kpi {{padding:6px 16px;border-left:1px solid #292b30;min-width:0;}}
+.spx-trend-kpi:first-child {{border-left:0;padding-left:0;}}
+.spx-trend-label {{font-size:.82rem;color:#b6bcc5;margin-bottom:6px;}}
+.spx-trend-value {{font-size:1.22rem;font-weight:700;overflow-wrap:anywhere;}}
+.spx-trend-foot {{
+  border-top:1px solid #292b30;margin-top:12px;padding-top:10px;
+  color:#cbd5e1;font-size:1rem;line-height:1.45;
+}}
+@media(max-width:750px) {{
+  .spx-trend-grid {{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:10px;}}
+  .spx-trend-kpi:nth-child(3) {{border-left:0;padding-left:0;}}
+}}
+</style>
+<div class="spx-trend-card">
+  <div class="spx-trend-grid">
+    <div class="spx-trend-kpi"><div class="spx-trend-label">Struttura Daily</div><div class="spx-trend-value">{escape(result["direction"])}</div></div>
+    <div class="spx-trend-kpi"><div class="spx-trend-label">Range</div><div class="spx-trend-value">{escape(range_text)}</div></div>
+    <div class="spx-trend-kpi"><div class="spx-trend-label">Variazione del range</div><div class="spx-trend-value">{escape(result["range_shape"])}</div></div>
+    <div class="spx-trend-kpi"><div class="spx-trend-label">Barre stesso colore</div><div class="spx-trend-value" style="color:{count_color}">{result["same_color"]}</div></div>
+  </div>
+  <div class="spx-trend-foot">{escape(baricentro_text)}</div>
+</div>
+""", unsafe_allow_html=True)
     if result["same_color"] >= 3:
         st.warning("Tre o più candele consecutive dello stesso colore: verificare se sono "
                    "barre estese prima di applicare la regola di cautela di Serafini.")
-    st.caption("Il riferimento dell'1,3% è descrittivo: non genera segnali. "
-               "Espansione/compressione confronta i range delle due ultime sedute. "
-               "Il baricentro mostrato appartiene all'ultima Daily, non identifica "
-               "automaticamente una candela di impulso.")
