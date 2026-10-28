@@ -1,6 +1,6 @@
-import math
 """Three aligned, read-only views: ES price / Serafini / Edge GEX."""
 from __future__ import annotations
+import math
 import hashlib
 from datetime import date, datetime
 import plotly.graph_objects as go
