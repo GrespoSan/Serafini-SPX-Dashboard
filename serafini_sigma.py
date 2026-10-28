@@ -105,21 +105,26 @@ def compute_cash_levels(candles, day: date):
 
 @st.cache_data(ttl=21600, max_entries=90, show_spinner=False)
 def serafini_cash_levels(day: date):
-    """Un'unica richiesta M15 su richiesta della pagina; cache 6 ore."""
-    start = (day - timedelta(days=42)).isoformat()
-    stop = (day + timedelta(days=1)).isoformat()
-    raw = yf.download("ES=F", start=start, end=stop, interval="15m",
-                      auto_adjust=False, progress=False, prepost=True,
-                      threads=False)
-    if raw is None or raw.empty:
-        raise ValueError("Yahoo ES=F M15 non disponibile")
-    if isinstance(raw.columns, pd.MultiIndex):
-        # Yahoo yfinance usa talvolta (campo, ticker) o (ticker, campo).
-        for level in range(raw.columns.nlevels):
-            if "Close" in raw.columns.get_level_values(level):
-                raw.columns = raw.columns.get_level_values(level)
-                break
-    return compute_cash_levels(raw, day)
+    """Un'unica richiesta M15, anche gli insuccessi sono cache per 6 ore."""
+    try:
+        start = (day - timedelta(days=42)).isoformat()
+        stop = (day + timedelta(days=1)).isoformat()
+        raw = yf.download("ES=F", start=start, end=stop, interval="15m",
+                          auto_adjust=False, progress=False, prepost=True,
+                          threads=False)
+        if raw is None or raw.empty:
+            raise ValueError("Yahoo ES=F M15 non disponibile")
+        if isinstance(raw.columns, pd.MultiIndex):
+            # Yahoo yfinance usa talvolta (campo, ticker) o (ticker, campo).
+            for level in range(raw.columns.nlevels):
+                if "Close" in raw.columns.get_level_values(level):
+                    raw.columns = raw.columns.get_level_values(level)
+                    break
+        return compute_cash_levels(raw, day)
+    except Exception as exc:
+        return {"status": "NON DISPONIBILE",
+                "reason": f"{type(exc).__name__}: {str(exc)[:140]}",
+                "source": "Yahoo Finance ES=F M15"}
 
 
 def add_sigma_markers(fig, levels, y_values):
