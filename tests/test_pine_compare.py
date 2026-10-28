@@ -1,4 +1,4 @@
-"""Regression tests for the four Pine exports (no market-data calls)."""
+"""Regression tests for manual-scale Pine exports (no external data)."""
 import unittest
 
 from pine_export import make_pine
@@ -6,12 +6,14 @@ from pine_compare import make_pine_comparison
 
 
 def _profile(expiry, shift=0.0):
-    rows = [
-        {"strike_spx": float(7500 + 5 * k),
-         "net_gamma": (float(k - 25) * 1.6) + shift}
-        for k in range(50)
-    ]
-    return {"expiry": expiry, "rows": rows}
+    return {
+        "expiry": expiry,
+        "rows": [
+            {"strike_spx": float(7500 + 5 * k),
+             "net_gamma": (float(k - 25) * 1.6) + shift}
+            for k in range(50)
+        ],
+    }
 
 
 class PineComparisons(unittest.TestCase):
@@ -20,79 +22,49 @@ class PineComparisons(unittest.TestCase):
         self.weekly = _profile("2026-10-30", 15.0)
         self.earlier = _profile("2026-10-28", -12.0)
 
-    def test_original_0730_remains_two_profiles(self):
-        script = make_pine(self.odte, self.weekly, 36,
-                           "2026-10-28", "2026-10-28 03:19:18", "Mattina 07:30")
-        self.assertIn("V49-TV-COMMON-SCALE-LABEL", script)
-        self.assertNotIn("showPrevious", script)
-        self.assertIn("renderProfile(odteLevels, odteValues", script)
+    def test_original_0730_is_manual_two_profiles(self):
+        code = make_pine(self.odte, self.weekly, 36,
+                         "2026-10-28", "2026-10-28 03:19:18", "Mattina 07:30")
+        self.assertIn("V53-TV-MANUAL-SCALE", code)
+        self.assertNotIn("showPrevious", code)
+        self.assertIn("float actualScale = gammaPerCandle", code)
+        self.assertIn("Scala MANUALE", code)
+        self.assertNotIn("float actualScale = math.max(gammaPerCandle", code)
+        self.assertIn("renderProfile(odteLevels, odteValues", code)
 
-    def test_each_comparison_has_three_profiles_and_optional_previous(self):
-        for prev, current in [("07:30", "13:30"), ("07:30", "15:50"),
-                              ("15:50", "20:30")]:
-            with self.subTest(prev=prev, current=current):
+    def test_all_comparisons_have_manual_scale_and_3_closer_columns(self):
+        for previous, current in [
+            ("07:30", "13:30"),
+            ("07:30", "15:50"),
+            ("15:50", "20:30"),
+        ]:
+            with self.subTest(previous=previous, current=current):
                 code = make_pine_comparison(
                     self.earlier, self.odte, self.weekly, 36,
-                    "2026-10-28", prev, current, "2026-10-28 03:19:18")
+                    "2026-10-28", previous, current, "2026-10-28 03:19:18")
+                self.assertIn("V53-TV-MANUAL-CLOSE-THREE-COLUMNS", code)
+                self.assertIn("float actualScale = gammaPerCandle", code)
+                self.assertNotIn("float actualScale = math.max(gammaPerCandle", code)
+                self.assertNotIn("minSeparation = 130", code)
                 self.assertIn('showPrevious = input.bool(true, "Mostra 0DTE precedente")', code)
-                self.assertIn("if showPrevious\n        renderProfile(prevLevels", code)
-                self.assertIn(f"1 · 0DTE {prev}", code)
-                self.assertIn(f"3 · Weekly {current}", code)
-                self.assertIn("requiredCompactScale", code)
-                self.assertIn("V52-TV-CLEAN-THREE-COLUMNS", code)
-                self.assertIn("minSeparation = 130", code)
-                self.assertIn("int prevCenter", code)
-                self.assertIn("currentCompareCenter", code)
-                self.assertIn("weeklyCompareCenter", code)
-                self.assertIn("compareRoom", code)
-                self.assertIn('1 · Posizione 0DTE precedente', code)
-                self.assertIn('2 · Posizione 0DTE attuale', code)
-                self.assertIn('3 · Posizione Weekly attuale', code)
-                self.assertIn('active=showPrevious', code)
-                self.assertNotIn('Distanza 0DTE attuale (senza precedente)', code)
-                self.assertNotIn('Distanza Weekly da ultima candela', code)
-                self.assertIn('int currentCenter = showPrevious ? currentCompareCenter : 60', code)
-                self.assertIn('int weeklyCenter = showPrevious ? weeklyCompareCenter : 160', code)
-                self.assertIn(' · scala " + str.tostring(actualScale, "#.###") + " G/bar', code)
-                self.assertIn('1 · 0DTE', code)
+                self.assertIn('input.int(70, "1 · Posizione 0DTE precedente"', code)
+                self.assertIn('input.int(165, "2 · Posizione 0DTE attuale"', code)
+                self.assertIn('input.int(275, "3 · Posizione Weekly attuale"', code)
+                self.assertIn("int prevCenter = offsetPrevious", code)
+                self.assertIn("int currentCenter = showPrevious ? offsetOdteCompare : 60", code)
+                self.assertIn("int weeklyCenter = showPrevious ? offsetWeeklyCompare : 160", code)
+                self.assertIn("requiredGapScale", code)
+                self.assertIn("Possibile sovrapposizione", code)
+                self.assertIn("limite TradingView +500", code)
                 self.assertIn('string currentTitle', code)
-                self.assertIn("bar_index + currentCenter", code)
-                self.assertIn("bar_index + weeklyCenter", code)
-                self.assertIn("var array<float> prevLevels", code)
-                self.assertIn("var array<float> weeklyLevels", code)
-
-    def test_default_positions_match_screenshot_effective_geometry(self):
-        # L'utente aveva scelto 70/165/300 e il layout li portava a
-        # 70/200/330 con 130 barre di separazione minima.
-        prev, current, weekly = 70, 165, 300
-        actual_prev = min(prev, 430 - 260)
-        actual_current = min(max(current, actual_prev + 130), 430 - 130)
-        actual_weekly = min(max(weekly, actual_current + 130), 430)
-        self.assertEqual((actual_prev, actual_current, actual_weekly),
-                         (70, 200, 330))
-
-    def test_three_column_geometry_cannot_overlap(self):
-        # Verifica il vincolo geometrico delle regole V51, anche con
-        # impostazioni estreme dei tre offset indipendenti.
-        from itertools import product
-        for previous, current, weekly in product(
-                [40, 70, 140], [165, 235, 300], [300, 400, 440]):
-            min_separation = 130
-            p = min(previous, 430 - 2 * min_separation)
-            c = min(max(current, p + min_separation), 430 - min_separation)
-            w = min(max(weekly, c + min_separation), 430)
-            room = max(1., min(
-                (c - p - 22) / 2.,
-                (w - c - 22) / 2.,
-                480 - w - 10,
-                p - 10,
-            ))
-            self.assertGreaterEqual(c - p, min_separation)
-            self.assertGreaterEqual(w - c, min_separation)
-            self.assertGreaterEqual((c - room) - (p + room), 22)
-            self.assertGreaterEqual((w - room) - (c + room), 22)
-            self.assertGreaterEqual(p - room, 10)
-            self.assertLessEqual(w + room, 480)
+                self.assertIn('var array<float> prevLevels', code)
+                self.assertIn('var array<float> weeklyLevels', code)
+                self.assertIn(f"1 · 0DTE {previous}", code)
+                self.assertIn(f"3 · Weekly {current}", code)
+                self.assertIn("if showPrevious\n            renderProfile(prevLevels", code)
+                self.assertIn("renderProfile(odteLevels, odteValues", code)
+                self.assertIn("renderProfile(weeklyLevels, weeklyValues", code)
+                self.assertNotIn("Distanza 0DTE attuale (senza precedente)", code)
 
     def test_invalid_pair_fails_closed(self):
         with self.assertRaises(ValueError):
@@ -101,6 +73,12 @@ class PineComparisons(unittest.TestCase):
 
     def test_missing_strikes_not_exported(self):
         prior = {"expiry": "2026-10-28", "rows": self.earlier["rows"][:-1]}
+        with self.assertRaises(ValueError):
+            make_pine_comparison(prior, self.odte, self.weekly, 36,
+                                 "2026-10-28", "07:30", "13:30")
+
+    def test_previous_expiry_must_match_current(self):
+        prior = _profile("2026-10-27")
         with self.assertRaises(ValueError):
             make_pine_comparison(prior, self.odte, self.weekly, 36,
                                  "2026-10-28", "07:30", "13:30")
