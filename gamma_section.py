@@ -971,7 +971,7 @@ def render(store, week, snaps, logs):
                     mime='text/csv', key=f'csv_{detail_title}_{choice}',
                 )
     if candidate_0dte is not None:
-        with st.expander('LIVELLI CALL/PUT PROPOSTI - STRUTTURA OPZIONI', expanded=False):
+        with st.expander('STRUTTURA OPZIONI SPERIMENTALE', expanded=False):
             st.warning('Questi sono CANDIDATI basati sulle tre barre NET GAMMA più intense per lato, NON livelli C1–C3/P1–P3 confermati da Serafini. Non sono segnali automatici. Il calcolo NET GAMMA resta invariato.')
             st.caption('Criterio fisso di prova: tra i 25 strike sopra la chiusura SPX, le tre barre NET GAMMA positive più lunghe; tra i 25 sotto, le tre barre negative con valore assoluto maggiore. Nessun confronto con le barre vicine. C1→C3 in ordine crescente di prezzo, P1→P3 in ordine decrescente.')
             suggestions = proposed_levels(candidate_0dte)
