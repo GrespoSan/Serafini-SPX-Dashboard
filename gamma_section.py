@@ -1165,6 +1165,23 @@ def render(store, week, snaps, logs):
         except Exception as exc:
             st.caption(f'Rilevamenti esportabili non leggibili: {type(exc).__name__}.')
             sources = {}
+    # Le quattro esportazioni ricevono le news del calendario già usato
+    # dalla dashboard. Eventuali errori del feed non interrompono gli export.
+    if scripts:
+        try:
+            from macro_calendar import _fetch, _prepare
+            from pine_news_overlay import append_news
+            daily_news = [
+                event for event in _prepare(
+                    _fetch(day.isoformat(), day.isoformat()), day)
+                if event["day"] == day
+            ]
+            if daily_news:
+                scripts = {slot: append_news(code, daily_news)
+                           for slot, code in scripts.items()}
+        except Exception:
+            st.caption("Linee news non disponibili nel Pine: calendario non verificabile.")
+
     columns = st.columns(4, gap='small')
     descriptions = (
         ('07:30', '07:30 · 0DTE + Weekly'),
