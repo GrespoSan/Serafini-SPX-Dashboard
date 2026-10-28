@@ -122,7 +122,7 @@ def week_choice() -> str:
     return week
 
 
-st.title('Serafini · SPX — archivio Cboe')
+st.title('Serafini · SPX — NET GAMMA')
 
 
 try:
