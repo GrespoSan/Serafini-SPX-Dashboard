@@ -12,7 +12,7 @@ import streamlit as st
 def _daily_bars():
     import yfinance as yf
     # ES future, coerente con la lettura del grafico future nel corso.
-    data = yf.download("ES=F", period="3mo", interval="1d",
+    data = yf.download("ES=F", period="1y", interval="1d",
                        auto_adjust=False, progress=False, threads=False)
     if data is None or data.empty:
         return pd.DataFrame()
@@ -60,7 +60,7 @@ def evaluate(frame):
     }
 
 
-def render():
+def render(reference_day=None):
     st.subheader("Trend Daily — contesto SPX / ES")
     st.caption("Metodo Serafini: confronto delle ultime due barre Daily chiuse, range e baricentro. "
                "Analisi informativa: non modifica NET GAMMA, 0DTE, Weekly, Replay o GEX.")
@@ -71,7 +71,7 @@ def render():
             st.info("Dati Daily ES non disponibili: analisi non calcolata.")
             return
         # Yahoo può includere la seduta corrente ancora in formazione.
-        today_rome = datetime.now(ZoneInfo("Europe/Rome")).date()
+        today_rome = reference_day or datetime.now(ZoneInfo("Europe/Rome")).date()
         index_dates = pd.to_datetime(bars.index).date
         bars = bars.loc[index_dates < today_rome]
         result = evaluate(bars)
@@ -80,7 +80,7 @@ def render():
         st.caption(f"Dettaglio diagnostico: {type(exc).__name__}")
         return
 
-    st.caption(f"Future ES · ultima candela chiusa: {result['last_day']} · sorgente Yahoo Finance (ES=F)")
+    st.caption(f"Future ES · ultima candela chiusa: {result['last_day']} · sorgente Yahoo Finance (ES=F) · riferimento {today_rome:%d/%m/%Y}")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Struttura Daily", result["direction"])
     c2.metric("Range", f"{result['range_pct']:.2f}%" if result["range_pct"] is not None else "N/D")
