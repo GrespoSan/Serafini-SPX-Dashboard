@@ -265,32 +265,60 @@ def render_comparison(store, week, snaps, logs):
     if len(same_day) < 2:
         st.info('Servono due snapshot validi della stessa giornata per il confronto NET GAMMA.')
     else:
-        col_a, col_b = st.columns(2)
+        # Defaults per orari effettivi di acquisizione (registri Europe/Rome).
+        # Scelta manuale successiva sempre preservata.
+        clock_by_name = {name: _snapshot_download_clock(store, week, logs, name)
+                         for name in same_day}
+        def closest_slot(candidates, hour, minute, tolerance=20):
+            target = hour * 60 + minute
+            matches = []
+            for name in candidates:
+                clock = clock_by_name.get(name)
+                if not clock:
+                    continue
+                try:
+                    hh, mm = map(int, clock[:5].split(':'))
+                    delta = abs(hh * 60 + mm - target)
+                    if delta <= tolerance:
+                        matches.append((delta, name))
+                except (ValueError, TypeError):
+                    continue
+            return min(matches)[1] if matches else None
+
+        now_rome = datetime.now(ZoneInfo('Europe/Rome'))
+        allow_afternoon = (day < now_rome.date()
+                           or (day == now_rome.date() and
+                               (now_rome.hour, now_rome.minute) >= (15, 50)))
+        default_first = closest_slot(same_day[:-1], 7, 30) or same_day[0]
         first_key = f'v19_first_{day}'
-        first_selected = st.session_state.get(first_key)
-        if first_selected not in same_day[:-1]:
-            first_selected = same_day[0]
-        first_clock_preview = _snapshot_download_clock(store, week, logs, first_selected)
+        if st.session_state.get(first_key) not in same_day[:-1]:
+            st.session_state[first_key] = default_first
+        col_a, col_b = st.columns(2)
+        first_clock_preview = clock_by_name.get(st.session_state[first_key])
         first_caption = first_clock_preview or 'ora non disponibile'
         with col_a:
             first_name = st.selectbox(
                 f'Snapshot iniziale — download {first_caption} Roma',
-                same_day[:-1], index=0, key=first_key,
+                same_day[:-1], key=first_key,
             )
         later = [n for n in same_day if n > first_name]
         if not later:
             st.info('Non ci sono snapshot successivi per il confronto.')
             return
         second_key = f'v19_second_{day}_{first_name}'
-        second_selected = st.session_state.get(second_key)
-        if second_selected not in later:
-            second_selected = later[-1]
-        second_clock_preview = _snapshot_download_clock(store, week, logs, second_selected)
+        default_second = (closest_slot(later, 15, 50) if allow_afternoon else None)
+        if default_second is None:
+            default_second = closest_slot(later, 13, 30)
+        if default_second is None:
+            default_second = later[-1]
+        if st.session_state.get(second_key) not in later:
+            st.session_state[second_key] = default_second
+        second_clock_preview = clock_by_name.get(st.session_state[second_key])
         second_caption = second_clock_preview or 'ora non disponibile'
         with col_b:
             second_name = st.selectbox(
                 f'Snapshot finale — download {second_caption} Roma',
-                later, index=len(later)-1, key=second_key,
+                later, key=second_key,
             )
         first_clock = _snapshot_download_clock(store, week, logs, first_name)
         second_clock = _snapshot_download_clock(store, week, logs, second_name)
