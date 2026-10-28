@@ -645,6 +645,20 @@ def render(store, week, snaps, logs):
             Decimal('1'), rounding=ROUND_HALF_UP)))
         return result
 
+    recalc_error_key = f'basis_recalc_error_{day.isoformat()}'
+
+    def _recalculate_basis():
+        # Callback Streamlit: viene eseguita PRIMA della creazione dei widget
+        # nel rerun. Evita la modifica di basis_key dopo st.text_input.
+        try:
+            with st.spinner('Acquisizione e confronto barre ES/SPX a 15 minuti...'):
+                _apply_auto_basis()
+            st.session_state.pop(recalc_error_key, None)
+            st.session_state.pop(f'basis_auto_error_{day.isoformat()}', None)
+        except Exception as exc:
+            # Non sovrascrivere il valore inserito manualmente in caso di errore.
+            st.session_state[recalc_error_key] = str(exc)[:250]
+
     # Una sola acquisizione automatica per giorno e sessione Streamlit.
     # Non sovrascrivere un valore gia' modificato manualmente.
     if attempt_key not in st.session_state:
@@ -680,14 +694,12 @@ def render(store, week, snaps, logs):
     with col3:
         # Allinea il pulsante all'altezza dei campi, anziché alle intestazioni.
         st.markdown('<div style="height: 29px"></div>', unsafe_allow_html=True)
-        if st.button('Ricalcola ES − SPX', key=f'auto_basis_{day}', use_container_width=True):
-            try:
-                with st.spinner('Acquisizione e confronto barre ES/SPX a 15 minuti...'):
-                    _apply_auto_basis()
-                st.session_state.pop(f'basis_auto_error_{day.isoformat()}', None)
-                st.rerun()
-            except Exception as exc:
-                st.warning(f'Ricalcolo non disponibile: {str(exc)[:250]}. Mantengo il valore inserito.')
+        st.button('Ricalcola ES − SPX', key=f'auto_basis_{day}',
+                  on_click=_recalculate_basis, use_container_width=True)
+    if st.session_state.get(recalc_error_key):
+        st.warning('Ricalcolo non disponibile: ' +
+                   st.session_state[recalc_error_key] +
+                   '. Mantengo il valore inserito.')
     if st.session_state.get(f'basis_auto_error_{day.isoformat()}'):
         st.caption('Calcolo automatico non disponibile: ' +
                    st.session_state[f'basis_auto_error_{day.isoformat()}'] +
