@@ -190,7 +190,10 @@ with st.sidebar:
 store = Store(url, service_key, bucket)
 
 # Contesto operativo unico; il selettore della settimana e i contatori sono sulla stessa riga.
-with st.expander('ANALISI DEL CONTESTO — News · Volatilità · Trend Daily', expanded=True):
+# Apertura iniziale secondo l'ora locale italiana; l'utente può poi aprire/chiudere liberamente.
+context_open_initially = datetime.now(ZoneInfo('Europe/Rome')).hour < 13
+with st.expander('ANALISI DEL CONTESTO — News · Volatilità · Trend Daily',
+                 expanded=context_open_initially):
     col_week, col_snapshots, col_logs = st.columns([2.2, 1, 1], gap='medium', vertical_alignment='bottom')
     with col_week:
         week = week_choice()
