@@ -22,10 +22,13 @@ def _matching_serafini(store, week, digest, day, reference):
         return result["rows"], name
     return None, None
 
-def _plot(e, serafini_rows, candles, shift, bounds):
+def _plot(e, serafini_rows, candles, shift, bounds, reading_clock=None):
+    clock_suffix = f" · {reading_clock}" if reading_clock else " · ora non verificata"
     fig = make_subplots(rows=1, cols=3, shared_yaxes=True,
         column_widths=[0.5,0.25,0.25], horizontal_spacing=0.038,
-        subplot_titles=("PREZZO ES · 5 minuti", "SERAFINI · NET Gamma 0DTE · livelli ES", "EDGE · GEX 0DTE"))
+        subplot_titles=("PREZZO ES · 5 minuti",
+                        "SERAFINI NET GAMMA · " + (reading_clock or "ora n.d."),
+                        "GEX 0DTE · " + (reading_clock or "ora n.d.")))
     if candles is not None and not candles.empty:
         fig.add_trace(go.Candlestick(x=candles["bar_close"], open=candles["open"],
             high=candles["high"], low=candles["low"], close=candles["close"],
@@ -89,6 +92,7 @@ def _plot(e, serafini_rows, candles, shift, bounds):
 def show(week, store, logs=None):
     with st.expander("GEX EDGE — CONFRONTO",expanded=False):
         st.caption("Candele ES=F: controllo automatico ogni 5 minuti mentre la pagina resta aperta. GEX e Serafini restano riferiti alla fotografia indicata.")
+        reading_clock = None
         ctx=st.session_state.get(f"gamma_compare_context_{week}")
         reading=st.radio("Rilevamento da confrontare",("Ultimo rilevamento","Mattina 07:30"),horizontal=True,key=f"edge_compare_reading_{week}")
         # Modalità automatica fissa; l’importazione JSON resta disponibile nel codice.
@@ -144,15 +148,7 @@ def show(week, store, logs=None):
                 e=result_from_snapshot(raw,float(ctx["offset"]))
                 from gamma_section import _snapshot_download_clock
                 download_clock=_snapshot_download_clock(store,week,logs or [],selected_name)
-                acquisition=(f"{download_clock} Roma" if download_clock
-                             else "ORARIO NON VERIFICATO")
-                st.markdown(
-                    f"### GEX EDGE e SERAFINI — rilevamento {day_for_choice:%d/%m/%Y} · {acquisition}"
-                )
-                st.caption(
-                    f"{reading} · fotografia Cboe identica per entrambi i profili · "
-                    f"file {selected_name}"
-                )
+                reading_clock = download_clock
             except Exception as err:
                 st.error("Calcolo Edge automatico non disponibile: "+str(err))
                 st.info("È ancora possibile caricare il report JSON Edge selezionando la modalità alternativa.")
@@ -166,9 +162,6 @@ def show(week, store, logs=None):
                 e=read_report(file.getvalue())
             except (ValueError,KeyError,TypeError) as err:
                 st.error(str(err));return
-            st.markdown("### GEX EDGE — report JSON caricato")
-            st.caption("Orario di acquisizione non verificato in questa schermata: "
-                       "il file deve essere confrontato con una fotografia Serafini identica.")
         if not ctx:
             st.warning("Apri prima NET GAMMA 0DTE/Weekly e scegli la fotografia e il riferimento Serafini.")
             return
@@ -192,7 +185,6 @@ def show(week, store, logs=None):
         except Exception as err:
             st.error("Impossibile verificare la fotografia Serafini: "+str(err));return
         price=float(e["spot_spx"])+shift
-        st.caption(f"Fotografia identica: {name} · SHA256 {e['sha256'][:12]} · Scadenza {day} · Basis ES−SPX {shift:+g}")
         p=st.columns(5)
         p[0].metric("Spot ES equivalente",f"{price:,.2f}")
         for c,key,lab in zip(p[1:4],("put_wall_spx","gamma_flip_spx","call_wall_spx"),("Put Wall","Gamma Flip","Call Wall")):
@@ -211,7 +203,7 @@ def show(week, store, logs=None):
         all_bounds=(min(y_values)-10,max(y_values)+10)
         view=st.radio("Scala verticale condivisa",("Zoom ±100 punti","Vista completa"),horizontal=True,key="edge_compare_yzoom")
         bounds=(price-100,price+100) if view.startswith("Zoom") else all_bounds
-        fig=_plot(e,sr,candles,shift,bounds)
+        fig=_plot(e,sr,candles,shift,bounds,reading_clock=reading_clock)
         st.plotly_chart(fig,use_container_width=True,key="edge_compare_three_charts")
         st.markdown(
             "**Legenda GEX:** 🟢 **Call GEX** (barre verdi) · 🔴 **Put GEX** (barre rosse) · "
