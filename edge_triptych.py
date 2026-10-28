@@ -212,6 +212,7 @@ def show(week, store, logs=None):
             "**Gamma Flip** (tratteggio giallo)."
         )
         with st.expander("Curva teorica GEX",expanded=False):
+            st.markdown(f"**Curva teorica GEX 0DTE — fotografia Cboe ore {reading_clock} Roma**" if reading_clock else "**Curva teorica GEX 0DTE — orario del rilevamento non disponibile**")
             curve=e.get("curve",[])
             if curve:
                 f=go.Figure(go.Scatter(x=[_number(r["spot_spx"])+shift for r in curve],y=[_number(r["net_gex"])/1e9 for r in curve],mode="lines"))
