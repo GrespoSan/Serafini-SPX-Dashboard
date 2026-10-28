@@ -85,7 +85,13 @@ def render(reference_day=None):
     c1.metric("Struttura Daily", result["direction"])
     c2.metric("Range", f"{result['range_pct']:.2f}%" if result["range_pct"] is not None else "N/D")
     c3.metric("Variazione del range", result["range_shape"])
-    c4.metric("Barre stesso colore", str(result["same_color"]))
+    count_color = "#22c55e" if result["bar_color"] == "VERDE" else ("#ef4444" if result["bar_color"] == "ROSSA" else "#a1a1aa")
+    c4.markdown("**Barre stesso colore**")
+    c4.markdown(
+        f'<div style="font-size:2rem;font-weight:500;line-height:1.45;color:{count_color}">'
+        f'{result["same_color"]}</div>',
+        unsafe_allow_html=True,
+    )
     st.caption(f"Baricentro ultima Daily: {result['midpoint']:,.2f} · "
                f"chiusura {result['midpoint_state'].lower()} il baricentro · "
                f"ultima barra {result['bar_color'].lower()}.")
