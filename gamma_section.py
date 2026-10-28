@@ -698,7 +698,6 @@ def render(store, week, snaps, logs):
         st.error('Data dello snapshot non riconosciuta nel nome del file.')
         return
     previous = snap['data'].get('prev_day_close')
-    st.caption(f'Chiusura SPX precedente dichiarata nel payload Cboe: {previous}')
     @st.cache_data(ttl=3600, show_spinner=False)
     def _auto_basis(target_day):
         result = download_and_calculate(target_day)
