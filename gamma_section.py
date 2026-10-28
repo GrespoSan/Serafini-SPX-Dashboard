@@ -825,6 +825,30 @@ def render(store, week, snaps, logs):
                     y=previous_close_es, line_dash='dash',
                     line_width=1.5, line_color='#f0cc65',
                 )
+                # Guide percentuali rispetto allo STESSO Close prec. ES.
+                # Sono solamente riferimenti grafici; il NET GAMMA resta intatto.
+                for pct in (-1.5, -1.0, -0.5, 0.5, 1.0, 1.5):
+                    target = previous_close_es * (1.0 + pct / 100.0)
+                    emphasis = abs(pct) == 1.0
+                    line_color = ('rgba(192,203,218,0.54)' if emphasis
+                                  else 'rgba(170,183,202,0.28)')
+                    fig.add_hline(
+                        y=target, line_dash='dot',
+                        line_width=1.7 if emphasis else 1.0,
+                        line_color=line_color,
+                    )
+                    fig.add_annotation(
+                        x=0.995, xref='paper', y=target, yref='y',
+                        text=f'{pct:+.1f}%'.replace('.', ','),
+                        showarrow=False, xanchor='right', yanchor='middle',
+                        font=dict(
+                            color=('rgba(216,223,233,0.86)' if emphasis
+                                   else 'rgba(196,205,219,0.64)'),
+                            size=10,
+                        ),
+                        bgcolor='rgba(13,17,23,0.65)', borderpad=1,
+                    )
+                # Il riferimento principale rimane visivamente prioritario.
                 fig.add_annotation(
                     x=0.995, xref='paper', y=previous_close_es, yref='y',
                     text='Close prec.', showarrow=False,
