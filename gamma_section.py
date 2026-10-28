@@ -1117,13 +1117,6 @@ def render(store, week, snaps, logs):
         from asia_gamma import render_auto as render_asia_gamma
         render_asia_gamma(day, asia_c1, asia_p1, level_context=asia_level_context)
     st.subheader('Esporta i profili su TradingView — 4 situazioni')
-    st.caption('Tutti e quattro i Pine usano una **scala NET GAMMA manuale**, '
-               'senza adattamento automatico: se le barre si sovrappongono, '
-               'aumenta tu i Gamma/barra. Nei Pine 2–4 le colonne sono '
-               'più vicine (70 / 165 / 275 barre), con posizioni regolabili '
-               'e possibilità di nascondere il precedente. '
-               '**Usa un solo indicatore Serafini NET GAMMA alla volta:** '
-               'più esportazioni simultanee possono sovrapporsi.')
     scripts = {}
     export_issues = {}
     if offset is None or not math.isfinite(offset):
