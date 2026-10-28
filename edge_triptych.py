@@ -1,3 +1,4 @@
+import math
 """Three aligned, read-only views: ES price / Serafini / Edge GEX."""
 from __future__ import annotations
 import hashlib
@@ -212,9 +213,29 @@ def show(week, store, logs=None):
             "**Gamma Flip** (tratteggio giallo)."
         )
         with st.expander("Curva teorica GEX",expanded=False):
-            st.markdown(f"**Curva teorica GEX 0DTE — fotografia Cboe ore {reading_clock} Roma**" if reading_clock else "**Curva teorica GEX 0DTE — orario del rilevamento non disponibile**")
             curve=e.get("curve",[])
+            curve_title = (f"Curva teorica GEX 0DTE — fotografia Cboe ore {reading_clock} Roma"
+                           if reading_clock else "Curva teorica GEX 0DTE — orario del rilevamento non disponibile")
             if curve:
-                f=go.Figure(go.Scatter(x=[_number(r["spot_spx"])+shift for r in curve],y=[_number(r["net_gex"])/1e9 for r in curve],mode="lines"))
-                f.add_hline(y=0,line_dash="dot")
-                st.plotly_chart(f,use_container_width=True)
+                # Estremi ricavati dagli stessi punti mostrati nel grafico.
+                valid_points = [
+                    (_number(r["spot_spx"]) + shift, _number(r["net_gex"]) / 1e9)
+                    for r in curve
+                ]
+                valid_points = [(x, y) for x, y in valid_points
+                                if math.isfinite(x) and math.isfinite(y)]
+                if valid_points:
+                    max_point = max(valid_points, key=lambda point: point[1])
+                    min_point = min(valid_points, key=lambda point: point[1])
+                    st.markdown(
+                        f"**{curve_title} · Max {max_point[1]:+.2f} mld (ES {max_point[0]:,.2f})"
+                        f" · Min {min_point[1]:+.2f} mld (ES {min_point[0]:,.2f})**"
+                    )
+                    f=go.Figure(go.Scatter(x=[p[0] for p in valid_points],
+                                           y=[p[1] for p in valid_points],mode="lines"))
+                    f.add_hline(y=0,line_dash="dot")
+                    st.plotly_chart(f,use_container_width=True)
+                else:
+                    st.markdown(f"**{curve_title}**")
+            else:
+                st.markdown(f"**{curve_title}**")
