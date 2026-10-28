@@ -39,10 +39,44 @@ class PineComparisons(unittest.TestCase):
                 self.assertIn(f"0DTE 2026-10-28 | {prev} (precedente)", code)
                 self.assertIn(f"WEEKLY 2026-10-30 | {current}", code)
                 self.assertIn("requiredCompactScale", code)
+                self.assertIn("V51-TV-SPACED-THREE-COLUMNS", code)
+                self.assertIn("minSeparation = 130", code)
+                self.assertIn("int prevCenter", code)
+                self.assertIn("currentCompareCenter", code)
+                self.assertIn("weeklyCompareCenter", code)
+                self.assertIn("compareRoom", code)
+                self.assertIn('1 · Distanza 0DTE precedente', code)
+                self.assertIn('2 · Distanza 0DTE attuale', code)
+                self.assertIn('3 · Distanza Weekly attuale', code)
+                self.assertIn('1 · 0DTE', code)
+                self.assertIn('string currentTitle', code)
                 self.assertIn("bar_index + currentCenter", code)
                 self.assertIn("bar_index + weeklyCenter", code)
                 self.assertIn("var array<float> prevLevels", code)
                 self.assertIn("var array<float> weeklyLevels", code)
+
+    def test_three_column_geometry_cannot_overlap(self):
+        # Verifica il vincolo geometrico delle regole V51, anche con
+        # impostazioni estreme dei tre offset indipendenti.
+        from itertools import product
+        for previous, current, weekly in product(
+                [40, 70, 140], [165, 235, 300], [300, 400, 440]):
+            min_separation = 130
+            p = min(previous, 430 - 2 * min_separation)
+            c = min(max(current, p + min_separation), 430 - min_separation)
+            w = min(max(weekly, c + min_separation), 430)
+            room = max(1., min(
+                (c - p - 22) / 2.,
+                (w - c - 22) / 2.,
+                480 - w - 10,
+                p - 10,
+            ))
+            self.assertGreaterEqual(c - p, min_separation)
+            self.assertGreaterEqual(w - c, min_separation)
+            self.assertGreaterEqual((c - room) - (p + room), 22)
+            self.assertGreaterEqual((w - room) - (c + room), 22)
+            self.assertGreaterEqual(p - room, 10)
+            self.assertLessEqual(w + room, 480)
 
     def test_invalid_pair_fails_closed(self):
         with self.assertRaises(ValueError):
