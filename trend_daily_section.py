@@ -60,6 +60,46 @@ def evaluate(frame):
     }
 
 
+def impulse_reference(frame, threshold_pct=1.3, body_fraction=0.60, lookback=20):
+    """Criterio sperimentale dichiarato, distinto dalle regole validate.
+    Cerca l'ultima candela di impulso PRECEDENTE all'ultima Daily chiusa.
+    Range >= 1.3% del close anteriore, corpo >= 60% del range.
+    """
+    start = max(1, len(frame) - lookback - 1)
+    for i in range(len(frame) - 2, start - 1, -1):
+        candle = frame.iloc[i]
+        previous_close = float(frame.iloc[i - 1]["Close"])
+        hi, lo = float(candle["High"]), float(candle["Low"])
+        op, cl = float(candle["Open"]), float(candle["Close"])
+        bar_range = hi - lo
+        if previous_close <= 0 or bar_range <= 0:
+            continue
+        if 100 * bar_range / previous_close < threshold_pct:
+            continue
+        if abs(cl - op) / bar_range < body_fraction:
+            continue
+        midpoint = (hi + lo) / 2
+        subsequent = frame.iloc[i + 1:]
+        lows = subsequent["Low"].astype(float)
+        highs = subsequent["High"].astype(float)
+        closes = subsequent["Close"].astype(float)
+        bullish = cl > op
+        if bullish:
+            status = ("TENUTA" if (lows > midpoint).all() else
+                      ("RECUPERATO" if closes.iloc[-1] > midpoint else "PERSO"))
+        else:
+            status = ("TENUTA" if (highs < midpoint).all() else
+                      ("PERSO" if closes.iloc[-1] > midpoint else "RECUPERATO"))
+        return {
+            "day": str(pd.Timestamp(frame.index[i]).date()),
+            "midpoint": midpoint,
+            "side": "RIALZISTA" if bullish else "RIBASSISTA",
+            "status": status,
+            "bars": len(subsequent),
+        }
+    return None
+
+
 def render(reference_day=None):
     st.subheader("Trend Daily — contesto SPX / ES")
     try:
@@ -72,6 +112,7 @@ def render(reference_day=None):
         index_dates = pd.to_datetime(bars.index).date
         bars = bars.loc[index_dates < today_rome]
         result = evaluate(bars)
+        impulse = impulse_reference(bars)
     except Exception as exc:
         st.info("Analisi Daily temporaneamente non disponibile; gli altri moduli rimangono operativi.")
         st.caption(f"Dettaglio diagnostico: {type(exc).__name__}")
@@ -82,10 +123,19 @@ def render(reference_day=None):
                    else "#ef4444" if result["bar_color"] == "ROSSA" else "#a1a1aa")
     range_text = f'{result["range_pct"]:.2f}%' if result["range_pct"] is not None else "N/D"
     baricentro_text = (
-        f'Baricentro ultima Daily: {result["midpoint"]:,.2f} · '
-        f'chiusura {result["midpoint_state"].lower()} il baricentro · '
-        f'ultima barra {result["bar_color"].lower()}.'
+        f'Daily {pd.Timestamp(result["last_day"]):%d/%m/%Y} — '
+        f'Baricentro: {result["midpoint"]:,.2f} · '
+        f'chiusura {result["midpoint_state"].lower()} il proprio baricentro · '
+        f'candela {result["bar_color"].lower()}.'
     )
+    if impulse is not None:
+        impulse_text = (
+            f'Candela di impulso {pd.Timestamp(impulse["day"]):%d/%m/%Y} '
+            f'({impulse["side"].lower()}) — Baricentro: {impulse["midpoint"]:,.2f} · '
+            f'esito: {impulse["status"].lower()} · {impulse["bars"]} barre successive.'
+        )
+    else:
+        impulse_text = 'Candela di impulso precedente: nessuna individuata nelle ultime 20 sedute con i criteri sperimentali.'
     # Solo visualizzazione: la logica evaluate e i valori restano invariati.
     st.markdown(f"""
 <style>
@@ -114,9 +164,14 @@ def render(reference_day=None):
     <div class="spx-trend-kpi"><div class="spx-trend-label">Variazione del range</div><div class="spx-trend-value">{escape(result["range_shape"])}</div></div>
     <div class="spx-trend-kpi"><div class="spx-trend-label">Barre stesso colore</div><div class="spx-trend-value" style="color:{count_color}">{result["same_color"]}</div></div>
   </div>
-  <div class="spx-trend-foot">{escape(baricentro_text)}</div>
+  <div class="spx-trend-foot">{escape(baricentro_text)}</div>\n  <div class="spx-trend-foot">{escape(impulse_text)}</div>
 </div>
 """, unsafe_allow_html=True)
+    st.caption("Candela di impulso: criterio sperimentale (range ≥1,3% della chiusura precedente, "
+               "corpo ≥60% del range, ricerca nelle ultime 20 sedute). "
+               "Tenuta = tutte le barre successive rispettano il baricentro; "
+               "recuperato/perso = posizione dell'ultima chiusura dopo una violazione. "
+               "Non è un segnale operativo validato.")
     if result["same_color"] >= 3:
         st.warning("Tre o più candele consecutive dello stesso colore: verificare se sono "
                    "barre estese prima di applicare la regola di cautela di Serafini.")
