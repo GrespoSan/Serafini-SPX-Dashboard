@@ -1,4 +1,4 @@
-"""Avvisi per sei pubblicazioni macro USA, senza servizi a pagamento.
+"""Calendario macro USA essenziale, con priorita per SPX/ES e fonte libera.
 
 Le date provengono da Finance Calendar (fonte terza, attribuzione richiesta).
 Non influenzano calcoli NET GAMMA, file Cboe o acquisizioni Cloud.
@@ -6,7 +6,7 @@ Non influenzano calcoli NET GAMMA, file Cboe o acquisizioni Cloud.
 import json
 import re
 from datetime import datetime, timedelta, time
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
@@ -23,30 +23,100 @@ OFFICIAL = {
     "Jobless Claims": "https://www.dol.gov/agencies/eta/ui-data",
     "NFP": "https://www.bls.gov/schedule/news_release/empsit.htm",
     "Retail Sales": "https://www.census.gov/retail/release_schedule.html",
+    "FOMC": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+    "Conferenza stampa Fed": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+    "FOMC Minutes": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+    "ISM Manufacturing": "https://www.ismworld.org/supply-management-news-and-reports/reports/ism-report-on-business/",
+    "ISM Services": "https://www.ismworld.org/supply-management-news-and-reports/reports/ism-report-on-business/",
+    "JOLTS": "https://www.bls.gov/schedule/news_release/jolts.htm",
+    "Consumer Confidence": "https://www.conference-board.org/topics/consumer-confidence",
+    "Michigan Sentiment": "https://data.sca.isr.umich.edu/",
+    "S&P Global Flash PMI": "https://www.spglobal.com/marketintelligence/en/mi/research-analysis/pmi.html",
+    "Beige Book": "https://www.federalreserve.gov/monetarypolicy/beige-book-default.htm",
 }
+HIGH_PRIORITY = frozenset((
+    "CPI", "PCE", "PPI", "Jobless Claims", "NFP", "Retail Sales",
+    "FOMC", "Conferenza stampa Fed", "FOMC Minutes",
+    "ISM Manufacturing", "ISM Services", "JOLTS",
+))
+# Altri indicatori non sostituiscono mai eventi ad alta priorita.
+SECONDARY = frozenset(("Consumer Confidence", "Michigan Sentiment",
+                       "S&P Global Flash PMI", "Beige Book"))
+
+
+def _source_link(event, kind):
+    """Solo https; la classificazione e le etichette non usano testi HTML remoti."""
+    candidate = str(event.get("source_url") or "").strip()
+    try:
+        parsed = urlparse(candidate)
+        if parsed.scheme == "https" and parsed.netloc and not any(
+                c in candidate for c in "()[]<> \\n\\r"):
+            return candidate
+    except (TypeError, ValueError):
+        pass
+    return OFFICIAL[kind]
 
 
 def _kind(event):
-    """Usa codice serie e titolo insieme: nessuna classificazione per impatto."""
+    """Classificazione conservativa per codice serie + nomi riconoscibili.
+
+    Non identifica genericamente 'Fed', 'PMI' o 'confidence':
+    evitiamo falsi FOMC e collisioni con altri paesi/indici.
+    """
+    code = str(event.get("series_code") or "").lower().strip()
     name = " ".join(str(event.get(k) or "") for k in
-                    ("series_code", "series_name", "name", "title")).lower()
+                    ("series_name", "name", "title")).lower()
     normalized = re.sub(r"[^a-z0-9]+", " ", name)
-    code = str(event.get("series_code") or "").lower()
-    if code in ("us-cpi", "cpi") or re.search(r"\b(consumer price index|cpi)\b", normalized):
+
+    # Ordine: verbali e conferenza prima della decisione FOMC.
+    if (code in ("fomc-minutes", "fed-minutes") or
+            re.search(r"\\bfomc minutes\\b|\\bfederal open market committee minutes\\b", normalized)):
+        return "FOMC Minutes"
+    if (code in ("fomc-press-conference", "fed-press-conference") or
+            re.search(r"\\b(fomc|fed|federal reserve) press conference\\b", normalized)):
+        return "Conferenza stampa Fed"
+    if (code in ("fomc", "fed-decision", "fomc-decision", "fed-funds") or
+            re.search(r"\\bfomc (rate )?decision\\b|\\bfomc meeting (decision|statement)\\b", normalized)):
+        return "FOMC"
+    if code in ("ism-manufacturing", "us-ism-manufacturing", "ism-manufacturing-pmi") or (
+            "ism" in normalized and "manufacturing" in normalized):
+        return "ISM Manufacturing"
+    if code in ("ism-services", "us-ism-services", "ism-non-manufacturing") or (
+            "ism" in normalized and
+            ("services" in normalized or "non manufacturing" in normalized)):
+        return "ISM Services"
+    if code in ("jolts", "us-jolts") or re.search(
+            r"\\bjolts\\b|\\bjob openings and labor turnover\\b", normalized):
+        return "JOLTS"
+    if code in ("consumer-confidence", "us-consumer-confidence") or (
+            "consumer confidence" in normalized and
+            ("conference board" in normalized or "us" in normalized or code)):
+        return "Consumer Confidence"
+    if code in ("michigan-sentiment", "us-michigan-sentiment",
+                "university-michigan-sentiment") or (
+            "michigan" in normalized and "sentiment" in normalized):
+        return "Michigan Sentiment"
+    if code in ("us-flash-pmi", "sp-global-flash-pmi", "us-sp-global-flash-pmi") or (
+            "s p global" in normalized and "flash pmi" in normalized):
+        return "S&P Global Flash PMI"
+    if code in ("beige-book", "fed-beige-book") or re.search(r"\\bbeige book\\b", normalized):
+        return "Beige Book"
+    # Sei serie precedenti, stessa copertura e stessi nomi visibili.
+    if code in ("us-cpi", "cpi") or re.search(r"\\b(consumer price index|cpi)\\b", normalized):
         return "CPI"
-    if code in ("us-ppi", "ppi") or re.search(r"\b(producer price index|ppi)\b", normalized):
+    if code in ("us-ppi", "ppi") or re.search(r"\\b(producer price index|ppi)\\b", normalized):
         return "PPI"
     if (code in ("us-pce", "us-pce-price-index", "pce") or
-        re.search(r"\b(personal income and outlays|personal consumption expenditures|pce price index|core pce)\b", normalized)):
+        re.search(r"\\b(personal income and outlays|personal consumption expenditures|pce price index|core pce)\\b", normalized)):
         return "PCE"
-    if (re.search(r"\b(jobless claims|initial unemployment claims|initial claims)\b", normalized)
+    if (re.search(r"\\b(jobless claims|initial unemployment claims|initial claims)\\b", normalized)
         or "jobless" in code or "initial-claims" in code):
         return "Jobless Claims"
     if (code in ("us-nfp", "nfp", "us-nonfarm-payrolls") or
-        re.search(r"\b(nonfarm payrolls|non farm payrolls|employment situation)\b", normalized)):
+        re.search(r"\\b(nonfarm payrolls|non farm payrolls|employment situation)\\b", normalized)):
         return "NFP"
     if (code in ("us-retail-sales", "retail-sales") or
-        re.search(r"\bretail sales\b", normalized)):
+        re.search(r"\\bretail sales\\b", normalized)):
         return "Retail Sales"
     return None
 
@@ -136,11 +206,33 @@ def _prepare(raw, today):
         if identity in seen:
             continue
         seen.add(identity)
+        status = str(event.get("status") or "").lower()
         result.append({
             "day": day, "clock": clock, "kind": kind,
-            "status": str(event.get("status") or "").lower(),
-            "source": str(event.get("source_url") or OFFICIAL[kind]),
+            "priority": "ALTA" if kind in HIGH_PRIORITY else "SECONDARIA",
+            "status": status,
+            "source": _source_link(event, kind),
         })
+        # La conferenza segue alle 14:30 ET una decisione FOMC ordinaria
+        # alle 14:00 ET, come da calendario Fed. Non derivarla per
+        # riunioni straordinarie o decisioni con orario diverso.
+        if kind == "FOMC" and dt is not None:
+            et = dt.astimezone(NEW_YORK)
+            if et.hour == 14 and et.minute == 0:
+                press = et + timedelta(minutes=30)
+                local_press = press.astimezone(ROME)
+                press_key = (local_press.date().isoformat(),
+                             "Conferenza stampa Fed", local_press.strftime("%H:%M"))
+                if press_key not in seen:
+                    seen.add(press_key)
+                    result.append({
+                        "day": local_press.date(),
+                        "clock": local_press.strftime("%H:%M"),
+                        "kind": "Conferenza stampa Fed", "priority": "ALTA",
+                        "status": status,
+                        "source": OFFICIAL["Conferenza stampa Fed"],
+                        "inferred_schedule": "14:30 ET da FOMC ordinario 14:00 ET",
+                    })
     return sorted(result, key=lambda e: (e["day"], e["clock"], e["kind"]))
 
 
@@ -170,22 +262,45 @@ def render():
         return
 
     today_events = [e for e in events if e["day"] == today]
-    if today_events:
-        st.warning(f"ATTENZIONE — Oggi {len(today_events)} pubblicazion"
-                   f"{'e' if len(today_events) == 1 else 'i'} macro USA da monitorare. "
-                   "Possibili movimenti rapidi del future anche prima dell'apertura cash.")
-        for item in today_events:
-            status = " · pubblicato (secondo il calendario)" if item["status"] == "released" else ""
-            st.markdown(f"**{item['clock']} (Roma) — {item['kind']}**{status} · "
-                        f"[Fonte]({item['source']})")
+    urgent = [e for e in today_events if e["priority"] == "ALTA"]
+    secondary = [e for e in today_events if e["priority"] == "SECONDARIA"]
+
+    def event_line(item, show_day=False):
+        scheduled = " · orario Fed previsto" if item.get("inferred_schedule") else ""
+        released = " · pubblicato (secondo il calendario)" if item["status"] == "released" else ""
+        tentative = " · data/orario da verificare" if item["status"] == "estimated" else ""
+        date_text = f"{item['day']:%d/%m/%Y} · " if show_day else ""
+        st.markdown(
+            f"**{date_text}{item['clock']} Roma** — **{item['kind']}**"
+            f"{scheduled}{released}{tentative} · [Fonte]({item['source']})"
+        )
+
+    if urgent:
+        st.warning(f"ATTENZIONE — Oggi {len(urgent)} event"
+                   f"{'o' if len(urgent) == 1 else 'i'} macro USA prioritari "
+                   "da monitorare anche durante la sessione americana.")
+        for item in urgent:
+            event_line(item)
     else:
-        st.info("Nessuno dei sei eventi macro selezionati risulta previsto oggi "
+        st.info("Nessun evento macro USA ad alta priorità risulta previsto oggi "
                 "nel calendario consultato.")
+
+    if secondary:
+        with st.expander(f"Altri eventi USA di oggi · {len(secondary)}", expanded=False):
+            for item in secondary:
+                event_line(item)
 
     upcoming = [e for e in events if e["day"] > today]
     if upcoming:
         with st.expander("Prossimi dati macro USA · 7 giorni", expanded=False):
             for item in upcoming:
-                st.markdown(f"**{item['day']:%d/%m/%Y} · {item['clock']} Roma** — "
-                            f"{item['kind']} · [Fonte]({item['source']})")
-    
+                priority = " · priorità secondaria" if item["priority"] == "SECONDARIA" else ""
+                st.markdown(
+                    f"**{item['day']:%d/%m/%Y} · {item['clock']} Roma** — "
+                    f"**{item['kind']}**{priority}"
+                    f"{' · orario Fed previsto' if item.get('inferred_schedule') else ''}"
+                    f" · [Fonte]({item['source']})"
+                )
+    st.caption("Orari Europe/Rome con ora legale automatica · "
+               "FOMC: conferenza 30 minuti dopo la decisione ordinaria, "
+               "da confermare sul calendario Fed.")
