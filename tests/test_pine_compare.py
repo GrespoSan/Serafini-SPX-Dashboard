@@ -36,24 +36,40 @@ class PineComparisons(unittest.TestCase):
                     "2026-10-28", prev, current, "2026-10-28 03:19:18")
                 self.assertIn('showPrevious = input.bool(true, "Mostra 0DTE precedente")', code)
                 self.assertIn("if showPrevious\n        renderProfile(prevLevels", code)
-                self.assertIn(f"0DTE 2026-10-28 | {prev} (precedente)", code)
-                self.assertIn(f"WEEKLY 2026-10-30 | {current}", code)
+                self.assertIn(f"1 · 0DTE {prev}", code)
+                self.assertIn(f"3 · Weekly {current}", code)
                 self.assertIn("requiredCompactScale", code)
-                self.assertIn("V51-TV-SPACED-THREE-COLUMNS", code)
+                self.assertIn("V52-TV-CLEAN-THREE-COLUMNS", code)
                 self.assertIn("minSeparation = 130", code)
                 self.assertIn("int prevCenter", code)
                 self.assertIn("currentCompareCenter", code)
                 self.assertIn("weeklyCompareCenter", code)
                 self.assertIn("compareRoom", code)
-                self.assertIn('1 · Distanza 0DTE precedente', code)
-                self.assertIn('2 · Distanza 0DTE attuale', code)
-                self.assertIn('3 · Distanza Weekly attuale', code)
+                self.assertIn('1 · Posizione 0DTE precedente', code)
+                self.assertIn('2 · Posizione 0DTE attuale', code)
+                self.assertIn('3 · Posizione Weekly attuale', code)
+                self.assertIn('active=showPrevious', code)
+                self.assertNotIn('Distanza 0DTE attuale (senza precedente)', code)
+                self.assertNotIn('Distanza Weekly da ultima candela', code)
+                self.assertIn('int currentCenter = showPrevious ? currentCompareCenter : 60', code)
+                self.assertIn('int weeklyCenter = showPrevious ? weeklyCompareCenter : 160', code)
+                self.assertIn(' · scala " + str.tostring(actualScale, "#.###") + " G/bar', code)
                 self.assertIn('1 · 0DTE', code)
                 self.assertIn('string currentTitle', code)
                 self.assertIn("bar_index + currentCenter", code)
                 self.assertIn("bar_index + weeklyCenter", code)
                 self.assertIn("var array<float> prevLevels", code)
                 self.assertIn("var array<float> weeklyLevels", code)
+
+    def test_default_positions_match_screenshot_effective_geometry(self):
+        # L'utente aveva scelto 70/165/300 e il layout li portava a
+        # 70/200/330 con 130 barre di separazione minima.
+        prev, current, weekly = 70, 165, 300
+        actual_prev = min(prev, 430 - 260)
+        actual_current = min(max(current, actual_prev + 130), 430 - 130)
+        actual_weekly = min(max(weekly, actual_current + 130), 430)
+        self.assertEqual((actual_prev, actual_current, actual_weekly),
+                         (70, 200, 330))
 
     def test_three_column_geometry_cannot_overlap(self):
         # Verifica il vincolo geometrico delle regole V51, anche con
