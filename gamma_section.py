@@ -471,8 +471,8 @@ def render_comparison(store, week, snaps, logs):
                     extent = max(extent, 1.0)
                     st.markdown(f'**Confronto NET GAMMA {selected_profile} — {day:%d/%m/%Y}**')
                     st.markdown(
-                        f'### PRIMA: {first_label} Roma = contorno  |  '
-                        f'DOPO: {second_label} Roma = barra piena'
+                        f'### PRIMA: {first_label} Roma (contorno) - '
+                        f'DOPO: {second_label} Roma (barra piena)'
                     )
                     fig.update_layout(
                         title='Evoluzione NET GAMMA — prima (contorno) / dopo (pieno)',
