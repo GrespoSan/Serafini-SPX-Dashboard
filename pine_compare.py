@@ -90,7 +90,8 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
         label unsafe = label.new(bar_index + 10, close, "Scala manuale insufficiente per limite TradingView +500: aumenta ad almeno " + str.tostring(math.ceil(minimumSafe * 10) / 10.0, "#.0") + " G/bar", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.orange, textcolor=color.black, size=size.small)
         array.push(drawnLabels, unsafe)
     else
-        string currentTitle = showPrevious ? "2 · 0DTE {current_slot}" : "0DTE {current_slot}"
+        string scaleHint = actualScale + 0.000001 < recommendedScale ? "Scala consigliata almeno " + str.tostring(math.ceil(recommendedScale * 10) / 10.0, "#.0") + " G/bar\\n" : ""
+        string currentTitle = scaleHint + (showPrevious ? "2 · 0DTE {current_slot}" : "0DTE {current_slot}")
         string weeklyTitle = showPrevious ? "3 · Weekly {current_slot}" : "Weekly {current_slot}"
         if showPrevious
             renderProfile(prevLevels, prevValues, bar_index + prevCenter, "1 · 0DTE {previous_slot}", actualScale, adjusted)
