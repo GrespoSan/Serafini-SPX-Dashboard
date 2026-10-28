@@ -18,9 +18,13 @@ from spx_market_clock import classify_0dte_download, cash_open_rome, spxw_expiry
 
 ROME = ZoneInfo("Europe/Rome")
 SLOTS = ("07:30", "11:00", "13:30", "15:50", "16:01", "16:16",
-         "16:31", "16:46", "17:30", "18:00", "18:30", "20:00", "21:30")
-OFFICIAL = {"07:30": "30 7 * * 1-5", "13:30": "30 13 * * 1-5",
-            "15:50": "50 15 * * 1-5"}
+         "16:31", "16:46", "17:30", "18:00", "18:30", "20:00",
+         "20:30", "21:30")
+OFFICIAL = {"07:30": "30 7 * * 1-5", "15:50": "50 15 * * 1-5",
+            "20:30": "30 20 * * 1-5"}
+# Vecchie catene complete delle 13:30: si possono leggere, ma SOLO
+# come studio storico; i file originali e le etichette storiche restano intatti.
+LEGACY_STUDY = {"13:30": "30 13 * * 1-5"}
 
 def weekly_expiry(day):
     from datetime import timedelta
@@ -48,7 +52,7 @@ def _official_frames(store, week, day, logs):
     for log in logs:
         try:
             item = json.loads(store.download(f"{week}/logs/{log['name']}"))
-            slot = next((k for k, v in OFFICIAL.items()
+            slot = next((k for k, v in (OFFICIAL | LEGACY_STUDY).items()
                          if item.get("scheduled_slot") == v), None)
             if (not slot or item.get("rome_date") != day.isoformat()
                     or item.get("status") not in ("NUOVO", "INVARIATO")
@@ -84,7 +88,9 @@ def _official_frames(store, week, day, logs):
                 result[slot] = {
                     "slot_rome": slot, "clock": clock.strftime("%H:%M:%S"),
                     "download_rome": clock.isoformat(timespec="seconds"),
-                    "origin": "UFFICIALE", "spot": snap["data"].get("current_price"),
+                    "origin": ("STUDIO STORICO DA ARCHIVIO" if slot in LEGACY_STUDY
+                               else "UFFICIALE"),
+                    "spot": snap["data"].get("current_price"),
                     "reference_spx": ref, "profiles": profiles,
                     "cboe_timestamp_original": snap.get("timestamp"),
                 }
@@ -131,9 +137,9 @@ def _study_frames(store, week, day):
 
 def render(store, week, logs, view_mode=None):
     st.subheader("Replay / History — evoluzione NET GAMMA")
-    st.caption("Studio intraday, separato dal metodo ufficiale. "
-               "I frame intermedi sono conservati per circa 30 giorni; "
-               "dal processo Cloud. Nessun file originale Cboe aggiuntivo archiviato.")
+    st.caption("Ufficiali: 07:30, 15:50 e 20:30 Roma. "
+               "13:30 e altri orari: studio intraday compatto (circa 30 giorni). "
+               "Le vecchie catene complete delle 13:30 restano leggibili come storico.")
     iso_year, iso_week = map(int, week.split("-W"))
     from datetime import timedelta
     monday = date.fromisocalendar(iso_year, iso_week, 1)
@@ -161,7 +167,10 @@ def render(store, week, logs, view_mode=None):
         st.rerun()
     with st.spinner("Caricamento profili compatti e snapshot ufficiali..."):
         frames = _study_frames(store, week, day)
-        frames.update(_official_frames(store, week, day, logs))
+        for slot, item in _official_frames(store, week, day, logs).items():
+            # Il frame compatto 13:30 ha precedenza sul vecchio raw 13:30.
+            if slot not in LEGACY_STUDY or slot not in frames:
+                frames[slot] = item
     all_available = [(slot, frames[slot]) for slot in SLOTS if slot in frames
                      and frames[slot].get("profiles", {}).get(kind, {}).get("rows")]
     post_expiry = [
