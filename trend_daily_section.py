@@ -189,6 +189,7 @@ def render(reference_day=None):
 .spx-trend-kpi:first-child {{border-left:0;padding-left:0;}}
 .spx-trend-label {{font-size:.82rem;color:#b6bcc5;margin-bottom:6px;}}
 .spx-trend-value {{font-size:1.22rem;font-weight:700;overflow-wrap:anywhere;}}
+.spx-trend-note {{border-top:1px solid #292b30;margin-top:9px;padding-top:9px;color:#9ca3af;font-size:.78rem;line-height:1.45;}}
 .spx-trend-foot {{
   border-top:1px solid #292b30;margin-top:12px;padding-top:10px;
   color:#cbd5e1;font-size:1rem;line-height:1.45;
@@ -205,14 +206,9 @@ def render(reference_day=None):
     <div class="spx-trend-kpi"><div class="spx-trend-label">Variazione del range</div><div class="spx-trend-value">{escape(result["range_shape"])}</div></div>
     <div class="spx-trend-kpi"><div class="spx-trend-label">Barre stesso colore</div><div class="spx-trend-value" style="color:{count_color}">{result["same_color"]}</div></div>
   </div>
-  <div class="spx-trend-foot">{escape(baricentro_text)}</div>\n  <div class="spx-trend-foot">{escape(impulse_text)}</div>\n  <div class="spx-trend-foot">{escape(meaning)}</div>
+  <div class="spx-trend-foot">{escape(baricentro_text)}</div>\n  <div class="spx-trend-foot">{escape(impulse_text)}</div>\n  <div class="spx-trend-foot">{escape(meaning)}</div>\n  <div class="spx-trend-note">Candela di impulso: criterio sperimentale (range ≥1,3% della chiusura precedente, corpo ≥60% del range, ricerca nelle ultime 20 sedute). Tenuta = tutte le barre successive rispettano il baricentro; recuperato/perso = posizione dell’ultima chiusura dopo una violazione. Non è un segnale operativo validato.</div>
 </div>
 """, unsafe_allow_html=True)
-    st.caption("Candela di impulso: criterio sperimentale (range ≥1,3% della chiusura precedente, "
-               "corpo ≥60% del range, ricerca nelle ultime 20 sedute). "
-               "Tenuta = tutte le barre successive rispettano il baricentro; "
-               "recuperato/perso = posizione dell'ultima chiusura dopo una violazione. "
-               "Non è un segnale operativo validato.")
     if result["same_color"] >= 3:
         st.warning("Tre o più candele consecutive dello stesso colore: verificare se sono "
                    "barre estese prima di applicare la regola di cautela di Serafini.")
