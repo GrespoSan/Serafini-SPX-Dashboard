@@ -389,26 +389,17 @@ def render_comparison(store, week, snaps, logs):
                                "delle posizioni: probabile cambio di sessione Volume.")
                 comparisons, stats = compare_profiles(old_prof, new_prof, offset)
                 main_levels = select_key_levels(comparisons, count_per_sign=4, minimum_separation=5.0)
-                if not main_levels:
+                if not comparisons:
                     st.info('Non ci sono strike confrontabili per la scadenza selezionata. Verificare scadenza e riferimento SPX.')
                 else:
                     import plotly.graph_objects as go
-                    # Grafico principale: solo otto concentrazioni, colori per ORARIO.
-                    # Grafico di transizione separato: colori per SEGNO NET (rosso/verde).
-                    def _price_label(r):
-                        return (f"{r['Prezzo ES']:,.0f}".replace(',', '.')
-                                if r['Prezzo ES'] is not None else f"{r['Strike SPX']:g} SPX")
-
-                    # Grafico UNICO: otto concentrazioni principali e, nel 0DTE,
-                    # tutti gli strike presenti nella tabella delle zone di transizione.
-                    # Il prezzo e' una categoria unica, quindi PRE e POST coincidono
-                    # esattamente per centro e altezza: niente barre disallineate.
-                    indexed = {float(r['Strike SPX']): r for r in main_levels}
-                    zones = transition_zones(comparisons) if selected_profile == '0DTE' else []
-                    for zone in zones:
-                        for rec in zone['rows']:
-                            indexed[float(rec['Strike SPX'])] = rec
-                    ordered = sorted(indexed.values(), key=lambda r: float(r['Strike SPX']))
+                    # Visualizza tutti gli strike realmente comuni ai due profili
+                    # 25 sopra + 25 sotto: massimo 50, nessun valore inventato.
+                    # Le concentrazioni principali restano calcolate a parte per
+                    # il riepilogo operativo, senza limitarne il grafico.
+                    ordered = sorted(comparisons, key=lambda r: float(r['Strike SPX']))
+                    if len(ordered) > 50:
+                        raise ValueError('Confronto oltre i 50 strike previsti dal metodo Serafini.')
                     def _comparison_label(rec):
                         a = float(rec['NET mattina'])
                         b = float(rec['NET pomeriggio'])
