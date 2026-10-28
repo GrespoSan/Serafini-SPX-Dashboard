@@ -476,7 +476,7 @@ def render_comparison(store, week, snaps, logs):
                     fig.update_layout(
                         title='Evoluzione NET GAMMA — prima (contorno) / dopo (pieno)',
                         barmode='overlay', template='plotly_dark',
-                        height=max(510, 48 * len(ordered) + 125),
+                        height=max(480, 22 * len(ordered) + 135),
                         margin=dict(l=18, r=55, t=57, b=55),
                         showlegend=False,
                         xaxis=dict(title='NET GAMMA',
