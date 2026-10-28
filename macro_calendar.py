@@ -277,24 +277,55 @@ def render():
             f"{label}{released}{tentative} · [Fonte]({item['source']})"
         )
 
-    # Scheda compatta con eventi prioritari affiancati;
-    # calendari, fonti, orari e classificazioni restano invariati.
-    with st.container(border=True):
-        if urgent:
-            st.markdown(
-                f"**ATTENZIONE — {len(urgent)} "
-                f"{'evento macro USA prioritario' if len(urgent) == 1 else 'eventi macro USA prioritari'} oggi**"
+    # Unica scheda scura, eventi prioritari su righe separate.
+    # I dati e la costruzione dei collegamenti restano invariati.
+    st.markdown("""
+<style>
+.macro-priority-card {
+    background:#090a0c; border:1px solid #34363c;
+    border-radius:13px; padding:14px 18px; color:#f4f5f6;
+}
+.macro-priority-card .macro-alert {color:#ff4b4b;font-weight:750;margin-bottom:10px;}
+.macro-priority-card .macro-event {padding:7px 0;line-height:1.5;}
+.macro-priority-card .macro-event + .macro-event {border-top:1px solid #292b30;}
+.macro-priority-card a {color:#66b5ff;}
+</style>
+""", unsafe_allow_html=True)
+    if urgent:
+        from html import escape as html_escape
+        headline = (f"ATTENZIONE — {len(urgent)} "
+                    f"{'evento prioritario' if len(urgent) == 1 else 'eventi prioritari'} oggi")
+        event_html = []
+        for item in urgent:
+            extra = " · orario Fed previsto" if item.get("inferred_schedule") else ""
+            released = " · pubblicato (secondo il calendario)" if item["status"] == "released" else ""
+            tentative = " · data/orario da verificare" if item["status"] == "estimated" else ""
+            label = f"{item['clock']} Roma — {item['kind']}"
+            red = item["kind"] in ("FOMC", "Conferenza stampa Fed")
+            label_color = "#ff646a" if red else "#f4f5f6"
+            event_html.append(
+                '<div class="macro-event">'
+                f'<span style="color:{label_color};font-weight:650">{html_escape(label)}</span>'
+                f'{html_escape(extra + released + tentative)}'
+                f' · <a href="{html_escape(item["source"], quote=True)}" target="_blank" rel="noopener noreferrer">Fonte</a>'
+                '</div>'
             )
-            event_columns = st.columns(min(len(urgent), 3), gap="small")
-            for i, item in enumerate(urgent):
-                with event_columns[i % len(event_columns)]:
-                    event_line(item)
-        else:
-            st.markdown("**Nessun evento macro USA ad alta priorità previsto oggi**")
-        if secondary:
-            with st.expander(f"Altri eventi USA di oggi · {len(secondary)}", expanded=False):
-                for item in secondary:
-                    event_line(item)
+        st.markdown(
+            '<div class="macro-priority-card">'
+            f'<div class="macro-alert">{html_escape(headline)}</div>'
+            + ''.join(event_html) + '</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            '<div class="macro-priority-card">'
+            'Nessun evento macro USA ad alta priorità previsto oggi.</div>',
+            unsafe_allow_html=True,
+        )
+    if secondary:
+        with st.expander(f"Altri eventi USA di oggi · {len(secondary)}", expanded=False):
+            for item in secondary:
+                event_line(item)
 
     upcoming = [e for e in events if e["day"] > today]
     if upcoming:
