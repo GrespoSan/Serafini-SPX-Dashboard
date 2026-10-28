@@ -470,9 +470,11 @@ def render_comparison(store, week, snaps, logs):
                     extent = max(abs(val) for val in old_values + new_values)
                     extent = max(extent, 1.0)
                     st.markdown(f'**Confronto NET GAMMA {selected_profile} — {day:%d/%m/%Y}**')
+                    st.markdown(
+                        f'### PRIMA: {first_label} Roma = contorno  |  '
+                        f'DOPO: {second_label} Roma = barra piena'
+                    )
                     st.caption(
-                        f'PRIMA: {first_label} Roma = contorno; '
-                        f'DOPO: {second_label} Roma = barra piena. '
                         'Verde NET positivo, rosso NET negativo. '
                         'I due profili usano la stessa scala e la stessa altezza per strike.'
                     )
