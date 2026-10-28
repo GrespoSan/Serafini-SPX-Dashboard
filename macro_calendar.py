@@ -291,53 +291,54 @@ def render():
 .macro-priority-card a {color:#66b5ff;}
 </style>
 """, unsafe_allow_html=True)
-    if urgent:
-        from html import escape as html_escape
-        headline = (f"ATTENZIONE — {len(urgent)} "
-                    f"{'evento prioritario' if len(urgent) == 1 else 'eventi prioritari'} oggi")
-        event_html = []
-        for item in urgent:
-            extra = " · orario Fed previsto" if item.get("inferred_schedule") else ""
-            released = " · pubblicato (secondo il calendario)" if item["status"] == "released" else ""
-            tentative = " · data/orario da verificare" if item["status"] == "estimated" else ""
-            label = f"{item['clock']} Roma — {item['kind']}"
-            red = item["kind"] in ("FOMC", "Conferenza stampa Fed")
-            label_color = "#ff646a" if red else "#f4f5f6"
-            event_html.append(
-                '<div class="macro-event">'
-                f'<span style="color:{label_color};font-weight:650">{html_escape(label)}</span>'
-                f'{html_escape(extra + released + tentative)}'
-                f' · <a href="{html_escape(item["source"], quote=True)}" target="_blank" rel="noopener noreferrer">Fonte</a>'
-                '</div>'
-            )
-        st.markdown(
-            '<div class="macro-priority-card">'
-            f'<div class="macro-alert">{html_escape(headline)}</div>'
-            + ''.join(event_html) + '</div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(
-            '<div class="macro-priority-card">'
-            'Nessun evento macro USA ad alta priorità previsto oggi.</div>',
-            unsafe_allow_html=True,
-        )
-    if secondary:
-        with st.expander(f"Altri eventi USA di oggi · {len(secondary)}", expanded=False):
-            for item in secondary:
-                event_line(item)
-
-    upcoming = [e for e in events if e["day"] > today]
-    if upcoming:
-        with st.expander("Prossimi dati macro USA · 7 giorni", expanded=False):
-            for item in upcoming:
-                priority = " · priorità secondaria" if item["priority"] == "SECONDARIA" else ""
-                st.markdown(
-                    f"**{item['day']:%d/%m/%Y} · {item['clock']} Roma** — "
-                    f"**{item['kind']}**{priority}"
-                    f"{' · orario Fed previsto' if item.get('inferred_schedule') else ''}"
-                    f" · [Fonte]({item['source']})"
+    with st.container(key="macro_calendar_panel"):
+        if urgent:
+            from html import escape as html_escape
+            headline = (f"ATTENZIONE — {len(urgent)} "
+                        f"{'evento prioritario' if len(urgent) == 1 else 'eventi prioritari'} oggi")
+            event_html = []
+            for item in urgent:
+                extra = " · orario Fed previsto" if item.get("inferred_schedule") else ""
+                released = " · pubblicato (secondo il calendario)" if item["status"] == "released" else ""
+                tentative = " · data/orario da verificare" if item["status"] == "estimated" else ""
+                label = f"{item['clock']} Roma — {item['kind']}"
+                red = item["kind"] in ("FOMC", "Conferenza stampa Fed")
+                label_color = "#ff646a" if red else "#f4f5f6"
+                event_html.append(
+                    '<div class="macro-event">'
+                    f'<span style="color:{label_color};font-weight:650">{html_escape(label)}</span>'
+                    f'{html_escape(extra + released + tentative)}'
+                    f' · <a href="{html_escape(item["source"], quote=True)}" target="_blank" rel="noopener noreferrer">Fonte</a>'
+                    '</div>'
                 )
+            st.markdown(
+                '<div class="macro-priority-card">'
+                f'<div class="macro-alert">{html_escape(headline)}</div>'
+                + ''.join(event_html) + '</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                '<div class="macro-priority-card">'
+                'Nessun evento macro USA ad alta priorità previsto oggi.</div>',
+                unsafe_allow_html=True,
+            )
+        if secondary:
+            with st.expander(f"Altri eventi USA di oggi · {len(secondary)}", expanded=False):
+                for item in secondary:
+                    event_line(item)
+
+        upcoming = [e for e in events if e["day"] > today]
+        if upcoming:
+            with st.expander("Prossimi dati macro USA · 7 giorni", expanded=False):
+                for item in upcoming:
+                    priority = " · priorità secondaria" if item["priority"] == "SECONDARIA" else ""
+                    st.markdown(
+                        f"**{item['day']:%d/%m/%Y} · {item['clock']} Roma** — "
+                        f"**{item['kind']}**{priority}"
+                        f"{' · orario Fed previsto' if item.get('inferred_schedule') else ''}"
+                        f" · [Fonte]({item['source']})"
+                    )
     st.caption("Orari Europe/Rome con ora legale automatica · "
                "FOMC: conferenza 30 minuti dopo la decisione ordinaria, "
                "da confermare sul calendario Fed.")
