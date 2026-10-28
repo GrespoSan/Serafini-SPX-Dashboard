@@ -279,22 +279,11 @@ with st.expander(f'RILEVAMENTI CBOE — {len(snaps)} snapshot · {len(logs)} reg
     else:
         st.info('Non sono presenti registri per questa settimana.')
 
-# Acquisizione supplementare riservata all'amministratore: gli orari ufficiali restano invariati.
-from manual_acquisition import render as render_manual_acquisition
-# Centra la sola etichetta dell'expander, mantenendo la freccia di apertura a sinistra.
-st.markdown("""
-<style>
-.st-key-manual_cboe_centered [data-testid="stExpander"] summary [data-testid="stMarkdownContainer"] {
-    flex: 1;
-    text-align: center;
-}
-.st-key-manual_cboe_centered [data-testid="stExpander"] summary [data-testid="stMarkdownContainer"] p {
-    text-align: center;
-}
-</style>
-""", unsafe_allow_html=True)
-with st.container(key="manual_cboe_centered"):
-    render_manual_acquisition(role, week, store)
+    # Acquisizione manuale nello stesso pannello, senza un secondo expander.
+    from manual_acquisition import render as render_manual_acquisition
+    if role == 'admin':
+        st.divider()
+        render_manual_acquisition(role, week, store, embedded=True)
 
 # Calcolo di sola lettura, anche per il ruolo amici. Nessuna cancellazione qui.
 with st.expander('NET GAMMA 0DTE / Weekly', expanded=False):
