@@ -90,9 +90,6 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
         label unsafe = label.new(bar_index + 10, close, "Scala manuale insufficiente per limite TradingView +500: aumenta ad almeno " + str.tostring(math.ceil(minimumSafe * 10) / 10.0, "#.0") + " G/bar", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.orange, textcolor=color.black, size=size.small)
         array.push(drawnLabels, unsafe)
     else
-        if actualScale + 0.000001 < recommendedScale
-            label overlap = label.new(bar_index + 10, close, "Possibile sovrapposizione - scala manuale " + str.tostring(actualScale, "#.###") + "; consigliata almeno " + str.tostring(math.ceil(recommendedScale * 10) / 10.0, "#.0"), xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.new(color.orange, 20), textcolor=color.black, size=size.small)
-            array.push(drawnLabels, overlap)
         string currentTitle = showPrevious ? "2 · 0DTE {current_slot}" : "0DTE {current_slot}"
         string weeklyTitle = showPrevious ? "3 · Weekly {current_slot}" : "Weekly {current_slot}"
         if showPrevious
