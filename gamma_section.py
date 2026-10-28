@@ -824,10 +824,6 @@ def render(store, week, snaps, logs):
         sigma_levels = None
         sigma_error = f'{type(exc).__name__}: {str(exc)[:115]}'
     shared_bounds = profile_gamma_bounds(computed_profiles.values())
-    st.caption('Scale indipendenti: confrontare le intensità tramite i valori numerici.'
-               if st.session_state.get('gamma_independent_scale_v1', False) else
-               'Scala comune 0DTE / Weekly sul rilevamento selezionato: stesso valore = stessa lunghezza. '
-               'La scala può cambiare tra rilevamenti.')
     st.caption('Tooltip: componente Call positiva, componente Put negativa e saldo netto '
                'della formula Serafini (OI + Volume) × Gamma; non valori monetari delle posizioni.')
     independent_scale = st.checkbox(
@@ -951,7 +947,7 @@ def render(store, week, snaps, logs):
                                f"S350 {sigma_levels['S350']:.2f}."
                                + (' Fuori dai 50 strike: ' + ', '.join(clipped_sigma) + '.'
                                   if clipped_sigma else '')
-                               + ' Feed Yahoo: confrontare con Pine ES1! su TradingView.')
+                              )
 
     # Dettagli numerici allineati sotto entrambi i grafici.
     detail_cols = st.columns(2, gap='small')
