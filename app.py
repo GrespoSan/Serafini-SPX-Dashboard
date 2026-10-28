@@ -189,37 +189,39 @@ with st.sidebar:
 # La connessione al bucket viene creata SOLO DOPO il controllo password.
 store = Store(url, service_key, bucket)
 
-# Scelta della settimana e caricamento dati prima del contesto:
-# la data di analisi deve coincidere con quella dello snapshot NET GAMMA.
-week = week_choice()
-try:
-    snaps = store.list(f'{week}/snapshots/')
-    logs = store.list(f'{week}/logs/')
-except Exception:
-    st.error('Impossibile elencare gli snapshot. Controlla Secrets e bucket Supabase.')
-    st.stop()
-
-# Stessa chiave di selezione usata in gamma_section.render, senza creare
-# un secondo widget Streamlit con la medesima key.
-snapshot_names = sorted((obj['name'] for obj in snaps), reverse=True)
-snapshot_key = f'serafini_selected_snapshot_{week}'
-selected_name = st.session_state.get(snapshot_key)
-if selected_name not in snapshot_names:
-    selected_name = snapshot_names[0] if snapshot_names else None
-# La selezione dello snapshot avviene nel modulo NET GAMMA.
-# In caso di refresh/latest, usa lo snapshot più recente anche nel contesto.
-if st.session_state.get(f'spx_refresh_latest_{week}', False) and snapshot_names:
-    selected_name = snapshot_names[0]
-
-context_day = None
-if selected_name:
-    try:
-        stamp = selected_name.split('SPX_CBOE_', 1)[1][:8]
-        context_day = datetime.strptime(stamp, '%Y%m%d').date()
-    except (IndexError, ValueError):
-        pass
-
+# Contesto operativo unico; il selettore della settimana e i contatori sono sulla stessa riga.
 with st.expander('1. ANALISI DEL CONTESTO — News · Volatilità · Trend Daily', expanded=True):
+    col_week, col_snapshots, col_logs = st.columns([2.2, 1, 1], gap='medium', vertical_alignment='bottom')
+    with col_week:
+        week = week_choice()
+    try:
+        snaps = store.list(f'{week}/snapshots/')
+        logs = store.list(f'{week}/logs/')
+    except Exception:
+        st.error('Impossibile elencare gli snapshot. Controlla Secrets e bucket Supabase.')
+        st.stop()
+
+    # Stessa chiave di selezione usata in gamma_section.render, senza creare
+    # un secondo widget Streamlit con la medesima key.
+    snapshot_names = sorted((obj['name'] for obj in snaps), reverse=True)
+    snapshot_key = f'serafini_selected_snapshot_{week}'
+    selected_name = st.session_state.get(snapshot_key)
+    if selected_name not in snapshot_names:
+        selected_name = snapshot_names[0] if snapshot_names else None
+    # La selezione dello snapshot avviene nel modulo NET GAMMA.
+    # In caso di refresh/latest, usa lo snapshot più recente anche nel contesto.
+    if st.session_state.get(f'spx_refresh_latest_{week}', False) and snapshot_names:
+        selected_name = snapshot_names[0]
+
+    context_day = None
+    if selected_name:
+        try:
+            stamp = selected_name.split('SPX_CBOE_', 1)[1][:8]
+            context_day = datetime.strptime(stamp, '%Y%m%d').date()
+        except (IndexError, ValueError):
+            pass
+    col_snapshots.metric('Snapshot distinti', len(snaps))
+    col_logs.metric('Registri', len(logs))
     st.markdown('#### News e calendario macroeconomico')
     from macro_calendar import render as render_macro_calendar
     render_macro_calendar()
@@ -237,58 +239,61 @@ with st.expander('1. ANALISI DEL CONTESTO — News · Volatilità · Trend Daily
     from trend_daily_section import render as render_trend_daily
     render_trend_daily(reference_day=context_day)
 
-with st.expander(f'RILEVAMENTI CBOE — {len(snaps)} snapshot · {len(logs)} registri', expanded=False):
-    col_snapshots, col_logs = st.columns([1, 1], gap='medium')
-    col_snapshots.metric('Snapshot distinti', len(snaps))
-    col_logs.metric('Registri', len(logs))
-
-    if logs:
-        rows = []
-        for obj in logs:
-            try:
-                value = json.loads(store.download(f"{week}/logs/{obj['name']}"))
-                rows.append({
-                    'Download (ora di Roma)': format_download_rome(value.get('download_utc')),
-                    'Acquisizione': (
-                        'Test manuale'
-                        if str(value.get('scheduled_slot') or '') == '30 13 * * 1-5'
-                        and str(value.get('download_rome') or '').startswith('2026-10-22T17:57:')
-                        else describe_slot(value.get('scheduled_slot'))
-                    ),
-                    'Stato': value.get('status', ''),
-                    'Qualità dati': describe_quality(value, store),
-                    'Timestamp Cboe (originale)': value.get('cboe_timestamp', ''),
-                    'SPX': value.get('spot_spx', ''),
-                    'Contratti': value.get('contracts', ''),
-                    'File originale': value.get('file', ''),
-                })
-            except Exception:
-                rows.append({'Stato': 'Impossibile leggere un registro', 'Qualità dati': 'DA VERIFICARE'})
-        st.caption('Gli orari di download sono convertiti in Europe/Rome. Il timestamp Cboe rimane come nella fonte, senza attribuirgli un fuso non dichiarato. I vecchi registri etichettati “automatico” non identificano necessariamente lo slot.')
-        # La colorazione riguarda solo la qualita', non la colonna Stato (NUOVO/INVARIATO).
-        import pandas as pd
-        frame = pd.DataFrame(rows)
-        def quality_color(series):
-            return [
-                'color: #FF4B4B; font-weight: 700' if str(value).startswith('NON VALIDO')
-                else 'color: #28C76F; font-weight: 600' if str(value) == 'VALIDO'
-                else 'color: #EAB308' for value in series
-            ]
-        st.dataframe(frame.style.apply(quality_color, subset=['Qualità dati']),
-                     use_container_width=True, hide_index=True)
-    else:
-        st.info('Non sono presenti registri per questa settimana.')
-
-    # Acquisizione manuale nello stesso pannello, senza un secondo expander.
-    from manual_acquisition import render as render_manual_acquisition
-    if role == 'admin':
-        st.divider()
-        render_manual_acquisition(role, week, store, embedded=True)
 
 # Calcolo di sola lettura, anche per il ruolo amici. Nessuna cancellazione qui.
-with st.expander('NET GAMMA 0DTE / Weekly', expanded=False):
+with st.expander('ANALISI NET GAMMA', expanded=False):
     from gamma_section import render
     render(store, week, snaps, logs)
+    st.divider()
+    if st.checkbox(f'RILEVAMENTI CBOE — {len(snaps)} snapshot · {len(logs)} registri',
+                   value=False, key=f'cb_show_records_{week}'):
+        col_snapshots, col_logs = st.columns([1, 1], gap='medium')
+        col_snapshots.metric('Snapshot distinti', len(snaps))
+        col_logs.metric('Registri', len(logs))
+
+        if logs:
+            rows = []
+            for obj in logs:
+                try:
+                    value = json.loads(store.download(f"{week}/logs/{obj['name']}"))
+                    rows.append({
+                        'Download (ora di Roma)': format_download_rome(value.get('download_utc')),
+                        'Acquisizione': (
+                            'Test manuale'
+                            if str(value.get('scheduled_slot') or '') == '30 13 * * 1-5'
+                            and str(value.get('download_rome') or '').startswith('2026-10-22T17:57:')
+                            else describe_slot(value.get('scheduled_slot'))
+                        ),
+                        'Stato': value.get('status', ''),
+                        'Qualità dati': describe_quality(value, store),
+                        'Timestamp Cboe (originale)': value.get('cboe_timestamp', ''),
+                        'SPX': value.get('spot_spx', ''),
+                        'Contratti': value.get('contracts', ''),
+                        'File originale': value.get('file', ''),
+                    })
+                except Exception:
+                    rows.append({'Stato': 'Impossibile leggere un registro', 'Qualità dati': 'DA VERIFICARE'})
+            st.caption('Gli orari di download sono convertiti in Europe/Rome. Il timestamp Cboe rimane come nella fonte, senza attribuirgli un fuso non dichiarato. I vecchi registri etichettati “automatico” non identificano necessariamente lo slot.')
+            # La colorazione riguarda solo la qualita', non la colonna Stato (NUOVO/INVARIATO).
+            import pandas as pd
+            frame = pd.DataFrame(rows)
+            def quality_color(series):
+                return [
+                    'color: #FF4B4B; font-weight: 700' if str(value).startswith('NON VALIDO')
+                    else 'color: #28C76F; font-weight: 600' if str(value) == 'VALIDO'
+                    else 'color: #EAB308' for value in series
+                ]
+            st.dataframe(frame.style.apply(quality_color, subset=['Qualità dati']),
+                         use_container_width=True, hide_index=True)
+        else:
+            st.info('Non sono presenti registri per questa settimana.')
+
+        # Acquisizione manuale nello stesso pannello, senza un secondo expander.
+        from manual_acquisition import render as render_manual_acquisition
+        if role == 'admin':
+            st.divider()
+            render_manual_acquisition(role, week, store, embedded=True)
+
 
 # Edge is a read-only, self-contained comparison panel.
 # Never import its calculation engine or feed its values into Serafini.
@@ -296,7 +301,7 @@ from edge_triptych import show as show_edge_triptych
 show_edge_triptych(week, store, logs)
 
 # Confronto e Replay condividono la stessa sezione, con calcoli invariati.
-with st.expander('REPLAY e confronto NET GAMMA', expanded=False):
+with st.expander('REPLAY E CONFRONTO', expanded=False):
     mode = st.radio(
         'Modalità di analisi',
         ('Replay con candele ES',
@@ -315,7 +320,7 @@ with st.expander('REPLAY e confronto NET GAMMA', expanded=False):
         render_gamma_replay(store, week, logs, view_mode=replay_view)
 
 # Report descrittivo e riproducibile per analisi AI (nessuna chiamata a servizi AI).
-with st.expander('REPORT giornaliero per analisi AI — JSON + PDF', expanded=False):
+with st.expander('REPORT GIORNALIERO AI', expanded=False):
     from ai_report import render as render_ai_report
     render_ai_report(store, week, snaps, logs)
 
