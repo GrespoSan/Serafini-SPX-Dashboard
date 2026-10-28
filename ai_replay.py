@@ -176,6 +176,38 @@ def attach_replay(store, report, week, day, reference, offset):
         if slot not in chosen:
             chosen[slot] = frame
 
+    # Prima del cambio di programma le 13:30 erano salvate come catena
+    # completa. Manteniamo accessibile quel dato storico come STUDIO,
+    # soltanto in assenza del corrispondente frame compatto 13:30.
+    if "13:30" not in chosen:
+        for rec in report["snapshots"]:
+            if (rec.get("status") != "VALIDO" or
+                    str(rec.get("acquisition_slot") or "") != "30 13 * * 1-5"):
+                continue
+            dt = _clock(rec.get("download_utc"))
+            if dt is None or dt.date() != day:
+                continue
+            profiles = rec.get("profiles", {})
+            if not all(len(profiles.get(k, {}).get("strikes", [])) == 50
+                       and profiles.get(k, {}).get("expiry") == expiry
+                       for k, expiry in expected.items()):
+                continue
+            chosen["13:30"] = {
+                "slot_rome": "13:30", "source": "STUDIO_STORICO_DA_ARCHIVIO",
+                "file": rec["file"],
+                "download_rome": dt.isoformat(timespec="seconds"),
+                "cboe_timestamp_original": rec.get("cboe_timestamp_original"),
+                "reference_spx": float(reference),
+                "market_timing": classify_0dte_download(day, dt),
+                "profiles": {
+                    label: {"expiry": expected[label],
+                            "summary": _summary(profiles[label]["strikes"]),
+                            "strikes": profiles[label]["strikes"]}
+                    for label in expected
+                },
+            }
+            break
+
     timeline = []
     previous_timestamp = None
     for slot in SLOTS:
