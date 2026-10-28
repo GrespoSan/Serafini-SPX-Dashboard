@@ -1113,8 +1113,7 @@ def render(store, week, snaps, logs):
                 'non costituisce conferma dei veri livelli Serafini.'
             )
     # Quadro dopo i profili e i selettori, sempre visibile fuori dall'expander.
-    with st.container(border=True):
-        st.subheader('QUADRO OPERATIVO — ORE 09:00')
+    with st.expander('QUADRO OPERATIVO — ORE 09:00', expanded=False):
         # Il modulo originale di volatilita' e' visualizzato nel contesto iniziale.
         # Nessuna modifica a calcoli Gamma, C1/P1 o analisi asiatica.
         from asia_gamma import render_auto as render_asia_gamma
