@@ -438,8 +438,10 @@ def render_comparison(store, week, snaps, logs):
                     # Asse Y numerico: disegniamo la sagoma come linee Scatter
                     # SOPRA le barre. Questo assicura stessa altezza, stesso
                     # centro e visibilita' completa del precedente.
-                    row_y = list(range(len(levels)))
-                    bar_height = 0.64
+                    price_values = [float(rec['Prezzo ES'] if offset is not None else rec['Strike SPX']) for rec in ordered]
+                    row_y = price_values
+                    gaps = [row_y[i + 1] - row_y[i] for i in range(len(row_y) - 1) if row_y[i + 1] > row_y[i]]
+                    bar_height = min(gaps) * 0.64 if gaps else 3.2
                     fig.add_bar(
                         name=f'DOPO {second_label}',
                         y=row_y, x=new_values, orientation='h',
@@ -456,12 +458,13 @@ def render_comparison(store, week, snaps, logs):
                     # Le SHAPES con layer='above' restano davvero sopra i bar.
                     half_height = bar_height / 2
                     for idx, before in enumerate(old_values):
+                        center_y = row_y[idx]
                         old_border = '#86EFAC' if before >= 0 else '#FDA4AF'
                         fig.add_shape(
                             type='rect',
                             xref='x', yref='y',
                             x0=min(0.0, before), x1=max(0.0, before),
-                            y0=idx - half_height, y1=idx + half_height,
+                            y0=center_y - half_height, y1=center_y + half_height,
                             fillcolor='rgba(0,0,0,0)',
                             line=dict(color=old_border, width=3, dash='dash'),
                             layer='above',
@@ -486,9 +489,42 @@ def render_comparison(store, week, snaps, logs):
                         yaxis=dict(title=None, automargin=True,
                                    tickmode='array', tickvals=row_y,
                                    ticktext=levels,
-                                   range=[-0.75, len(levels) - 0.25]),
+                                   range=[min(row_y) - bar_height * 1.3, max(row_y) + bar_height * 1.3]),
                     )
                     fig.add_vline(x=0, line_color='#CBD5E1', line_width=1)
+                    # Riferimenti grafici coerenti con il profilo singolo.
+                    # Nessuna modifica a calcoli NET GAMMA o frame di confronto.
+                    if offset is not None and math.isfinite(offset):
+                        previous_close_es = float(ref) + offset
+                        fig.add_hline(y=previous_close_es, line_dash='dash',
+                                      line_width=1.5, line_color='#f0cc65')
+                        for pct in (-1.5, -1.0, -0.5, 0.5, 1.0, 1.5):
+                            target = previous_close_es * (1.0 + pct / 100.0)
+                            emphasis = abs(pct) == 1.0
+                            fig.add_hline(y=target, line_dash='dot',
+                                          line_width=1.8 if emphasis else 1.2,
+                                          line_color=('rgba(205,215,230,0.62)' if emphasis
+                                                      else 'rgba(195,205,220,0.46)'))
+                            fig.add_annotation(
+                                x=0.995, xref='paper', y=target, yref='y',
+                                text=f'{pct:+.1f}%'.replace('.', ','),
+                                showarrow=False, xanchor='right', yanchor='middle',
+                                font=dict(color='rgba(225,232,240,0.92)', size=10),
+                                bgcolor='rgba(13,17,23,0.78)', borderpad=1)
+                        fig.add_annotation(
+                            x=0.995, xref='paper', y=previous_close_es, yref='y',
+                            text='Close prec.', showarrow=False,
+                            xanchor='right', yanchor='bottom',
+                            font=dict(color='#f0cc65', size=11),
+                            bgcolor='rgba(13,17,23,0.85)', borderpad=2)
+                        if selected_profile == '0DTE':
+                            try:
+                                sigma_compare = serafini_cash_levels(day)
+                                add_sigma_markers(fig, sigma_compare, row_y)
+                            except Exception:
+                                st.caption('L90 / L350 / S350 non disponibili per questa giornata.')
+                    else:
+                        st.caption('Riferimenti ES non disponibili: verificare il differenziale in ANALISI NET GAMMA.')
                     st.plotly_chart(
                         fig, use_container_width=True,
                         key=f'v42_one_gamma_{selected_profile}_{first_name}_{second_name}',
