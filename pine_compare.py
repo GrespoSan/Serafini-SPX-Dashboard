@@ -4,7 +4,7 @@ Il differenziale ES-SPX si applica solo ai prezzi. NET GAMMA inalterato.
 Non alterare automaticamente scala ne' posizioni scelte dall'utente.
 """
 from math import isfinite
-from pine_export import _pine_array, make_pine
+from pine_export import _pine_array, make_pine, _initial_manual_scale
 
 
 def make_pine_comparison(previous_odte, current_odte, current_weekly,
@@ -26,6 +26,13 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
 
     code = make_pine(current_odte, current_weekly, float(offset),
                      date_text, cboe_stamp, current_slot)
+    # Il quarto Pine può avere gamma molto maggiori della rilevazione 15:50.
+    # Il default è calcolato dai dati reali, ma resta una scala MANUALE.
+    base_default = _initial_manual_scale([(current_odte, 60), (current_weekly, 160)])
+    comparison_default = _initial_manual_scale([
+        (previous_odte, 70), (current_odte, 165), (current_weekly, 275)
+    ])
+    safe_default = max(base_default, comparison_default)
 
     def patch(before, after):
         nonlocal code
@@ -34,6 +41,10 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
                 "Il Pine di base e' cambiato: export di confronto non sicuro")
         code = code.replace(before, after)
 
+    patch(
+        f'gammaPerCandle = input.float({base_default:.1f}, "Scala MANUALE · Gamma/barra"',
+        f'gammaPerCandle = input.float({safe_default:.1f}, "Scala MANUALE · Gamma/barra"'
+    )
     patch("// EXPORT REVISION: V53-TV-MANUAL-SCALE",
           "// EXPORT REVISION: V53-TV-MANUAL-CLOSE-THREE-COLUMNS")
     patch("// La scala MANUALE e' COMUNE ai profili e non altera i gamma Cboe calcolati.",
