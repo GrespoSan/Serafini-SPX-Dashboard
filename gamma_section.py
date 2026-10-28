@@ -474,10 +474,6 @@ def render_comparison(store, week, snaps, logs):
                         f'### PRIMA: {first_label} Roma = contorno  |  '
                         f'DOPO: {second_label} Roma = barra piena'
                     )
-                    st.caption(
-                        'Verde NET positivo, rosso NET negativo. '
-                        'I due profili usano la stessa scala e la stessa altezza per strike.'
-                    )
                     fig.update_layout(
                         title='Evoluzione NET GAMMA — prima (contorno) / dopo (pieno)',
                         barmode='overlay', template='plotly_dark',
