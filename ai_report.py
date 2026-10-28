@@ -236,21 +236,31 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
         report['warnings'].append('Differenziale ES–SPX assente: strike_es=null; usare soltanto strike SPX.')
     report['warnings'].append('Le concentrazioni e le variazioni sono descrittive, non dimostrano acquisti/vendite reali di opzioni.')
     # Contesto indipendente: non modifica la formula NET GAMMA.
-    report['schema_version'] = 'serafini_spx_ai_report_v7'
+    report['schema_version'] = 'serafini_spx_ai_report_v8'
     report['market_context'] = {'vix_curve': {'status': 'NON DISPONIBILE'},
                                 'asia_session': {'status': 'NON DISPONIBILE'}}
+    # Identico motore di volatilita del quadro operativo: VX + range Daily ES.
+    # Non modificare profili, formule o selezione strike Cboe.
     try:
-        from vix_regime import previous_vix_curve, breakout_buffer_points
-        vx = previous_vix_curve(day)
-        pct = float(vx['contango_pct'])
-        report['market_context']['vix_curve'] = {
-            **vx, 'status': 'VALIDO',
-            'regime': 'BACKWARDATION' if pct < 0 else 'CONTANGO',
-            'breakout_buffer_es_points': breakout_buffer_points(pct),
-            'note': 'Settlement futures VX mensili della seduta precedente; non VIX spot intraday'}
+        from vix_regime import volatility_context
+        volatility = volatility_context(day)
+        report['market_context'].update(volatility)
+        if volatility['breakout_buffer']['buffer_es_points'] is None:
+            report['warnings'].append(
+                'Buffer standard non determinabile: verificare entrambi '
+                'i fattori VX e Range Daily ES della seduta precedente.')
+        if volatility['previous_daily_range'].get('status') != 'VALIDO':
+            report['warnings'].append(
+                'Range Daily ES precedente non disponibile: non presumere bassa volatilita.')
+        if volatility['vix_curve'].get('status') != 'VALIDO':
+            report['warnings'].append(
+                'Curva VX precedente non disponibile: non presumere contango.')
     except Exception as exc:
-        report['market_context']['vix_curve']['reason'] = type(exc).__name__
-        report['warnings'].append('Regime VX precedente non disponibile: non stimare il buffer.')
+        report['market_context']['breakout_buffer'] = {
+            'status': 'NON DETERMINABILE', 'buffer_es_points': None,
+            'reason': type(exc).__name__}
+        report['warnings'].append(
+            'Contesto volatilita incompleto: impossibile determinare il buffer.')
     # Riutilizza il modulo 5m già usato dal quadro operativo, non il vecchio range 15m.
     try:
         from asia_gamma import asian_session, level_events, asia_range_reading
@@ -332,6 +342,9 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
         'asia_verdict_0900': report['market_context']['asia_session'].get('verdict_0900'),
         'note': 'La zona asiatica è contesto, non segnale LONG/SHORT. NET GAMMA e VX non bastano per un ingresso.'}
     report['sources']['vix_curve'] = 'Cboe VX mensili: settlement seduta precedente, se disponibile'
+    report['sources']['previous_daily_range'] = (
+        'Yahoo Finance ES=F, candela Daily della seduta precedente; '
+        'range=(High-Low)/Close * 100, non necessariamente identico a ES1! TradingView')
     report['sources']['asia_session'] = (
         report['market_context']['asia_session'].get('source')
         or 'Yahoo ES=F 5m; recupero da Yahoo 1m soltanto se verificabile')
@@ -431,10 +444,30 @@ def pdf_summary(report):
     if vx.get('status') == 'VALIDO':
         story.append(Paragraph(
             f"VX mensili ({vx['day']}): M1 {vx['m1']:.2f}, M2 {vx['m2']:.2f}; "
-            f"{vx['regime']} {vx['contango_pct']:+.2f}%; "
-            f"buffer breakout {vx['breakout_buffer_es_points']} punti ES.", styles['SPXSmall']))
+            f"{vx['regime']} {vx['contango_pct']:+.2f}%.", styles['SPXSmall']))
     else:
         story.append(Paragraph('Regime VX: NON DISPONIBILE.', styles['SPXSmall']))
+    previous_daily = ctx.get('previous_daily_range') or {}
+    if previous_daily.get('status') == 'VALIDO':
+        story.append(Paragraph(
+            f"Daily ES=F precedente ({previous_daily['day']}): "
+            f"High {previous_daily['high']:.2f}; Low {previous_daily['low']:.2f}; "
+            f"Close {previous_daily['close']:.2f}; "
+            f"Range {previous_daily['range_points']:.2f} punti "
+            f"({previous_daily['range_pct']:.2f}%). "
+            "Fonte Yahoo, sessione Daily potenzialmente diversa da ES1!.", styles['SPXSmall']))
+    else:
+        story.append(Paragraph('Daily ES precedente: NON DISPONIBILE.', styles['SPXSmall']))
+    buffer = ctx.get('breakout_buffer') or {}
+    if buffer.get('buffer_es_points') is not None:
+        story.append(Paragraph(
+            f"<b>Buffer standard combinato: {buffer['buffer_es_points']} punti ES.</b> "
+            f"Motivazione: {buffer.get('reason', 'n.d.')}. "
+            "Non costituisce un segnale automatico.", styles['SPXSmall']))
+    else:
+        story.append(Paragraph(
+            'Buffer standard: NON DETERMINABILE, dati Daily/VX incompleti.',
+            styles['SPXSmall']))
     if asia.get('status') == 'VALIDO':
         story.append(Paragraph(
             f"Sessione asiatica ES 00:00-09:00 Roma: minimo {asia['low']:.2f}, "
@@ -673,7 +706,7 @@ def render(store, week, snaps, logs):
     # Firma del formato: impedisce il download del vecchio ZIP v2 salvato
     # nella sessione dopo l'aggiornamento di codice, a parita di parametri.
     report_key = (week, day.isoformat(), ref, offset,
-                  json.dumps(levels, sort_keys=True), 'serafini_spx_ai_report_v7_asia_reading')
+                  json.dumps(levels, sort_keys=True), 'serafini_spx_ai_report_v8_daily_vx_buffer')
     if st.button('Prepara report per analisi AI',key=f'ai_build_{week}',type='primary'):
         try:
             with st.spinner('Lettura snapshot Cboe e preparazione report...'):
