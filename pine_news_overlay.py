@@ -41,13 +41,14 @@ def append_news(script, events):
         names = names.replace("\\\\", "/").replace('"', "'")[:95]
         major = any(row.get("priority") == "ALTA" for row in rows)
         news_color = "color.red" if major else "color.orange"
-        short = "FOMC" if "FOMC" in names else ("FED" if "Conferenza" in names else names[:20])
-        label_text = f"{hh:02d}:{mm:02d} " + r"\n".join(short.upper())
+        short = "FOMC" if "FOMC" in names else ("FED" if "Conferenza" in names else names[:12].replace(" ", ""))
+        vertical = r"\n".join(short.upper())
+        label_text = f"{hh:02d}:{mm:02d}\\n{vertical}"
         lines.extend([
             f'        int newsTime{index} = timestamp("Europe/Rome", {y}, {mo}, {d}, {hh}, {mm})',
             f'        line newsLine{index} = line.new(newsTime{index}, low, newsTime{index}, high, xloc=xloc.bar_time, extend=extend.both, color={news_color}, style=line.style_dashed, width=1)',
             f'        array.push(macroNewsLines, newsLine{index})',
-            f'        label newsLabel{index} = label.new(newsTime{index}, macroTop, "{label_text}", xloc=xloc.bar_time, yloc=yloc.price, style=label.style_none, color=color.new({news_color}, 100), textcolor={news_color}, size=size.large, textalign=text.align_left)',
+            f'        label newsLabel{index} = label.new(newsTime{index}, macroTop, "{label_text}", xloc=xloc.bar_time, yloc=yloc.price, style=label.style_label_down, color={news_color}, textcolor=color.white, size=size.normal)',
             f'        array.push(macroNewsLabels, newsLabel{index})',
         ])
     return script + "\n" + "\n".join(lines) + "\n"
