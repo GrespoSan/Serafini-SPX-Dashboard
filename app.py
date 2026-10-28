@@ -189,9 +189,24 @@ with st.sidebar:
 # La connessione al bucket viene creata SOLO DOPO il controllo password.
 store = Store(url, service_key, bucket)
 
-# Avviso macro al termine del login, in cima alla dashboard.
-from macro_calendar import render as render_macro_calendar
-render_macro_calendar()
+# Prima sezione unificata di contesto; nessuna modifica ai motori di calcolo.
+with st.expander('1. ANALISI DEL CONTESTO — News · Volatilità · Trend Daily', expanded=True):
+    st.markdown('#### News e calendario macroeconomico')
+    from macro_calendar import render as render_macro_calendar
+    render_macro_calendar()
+    st.divider()
+    st.markdown('#### Volatilità e regime VIX')
+    st.caption('Contesto della giornata corrente (ora di Roma). Il quadro VIX associato a uno '
+               'snapshot storico resta disponibile nel NET GAMMA, senza modifiche.')
+    from vix_regime import render as render_vix_context
+    try:
+        render_vix_context(datetime.now(ZoneInfo('Europe/Rome')).date())
+    except Exception:
+        st.info('Il quadro VIX non è disponibile in questo momento.')
+    st.divider()
+    from trend_daily_section import render as render_trend_daily
+    render_trend_daily()
+
 # Una sola riga: scelta della settimana a sinistra e conteggi a destra.
 col_week, col_snapshots, col_logs = st.columns([2.2, 1, 1], gap='medium', vertical_alignment='bottom')
 with col_week:
@@ -260,11 +275,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 with st.container(key="manual_cboe_centered"):
     render_manual_acquisition(role, week, store)
-
-# Analisi del contesto: modulo Daily indipendente dai motori NET GAMMA/GEX.
-with st.expander('TREND DAILY — struttura, range e baricentro', expanded=True):
-    from trend_daily_section import render as render_trend_daily
-    render_trend_daily()
 
 # Calcolo di sola lettura, anche per il ruolo amici. Nessuna cancellazione qui.
 with st.expander('NET GAMMA 0DTE / Weekly', expanded=False):
