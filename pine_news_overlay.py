@@ -42,7 +42,7 @@ def append_news(script, events):
         major = any(row.get("priority") == "ALTA" for row in rows)
         news_color = "color.red" if major else "color.orange"
         short = "FOMC" if "FOMC" in names else ("FED" if "Conferenza" in names else names[:20])
-        label_text = f"{hh:02d}:{mm:02d} {short}"
+        label_text = f"{hh:02d}:{mm:02d} " + r"\n".join(short.upper())
         lines.extend([
             f'        int newsTime{index} = timestamp("Europe/Rome", {y}, {mo}, {d}, {hh}, {mm})',
             f'        line newsLine{index} = line.new(newsTime{index}, low, newsTime{index}, high, xloc=xloc.bar_time, extend=extend.both, color={news_color}, style=line.style_dashed, width=1)',
