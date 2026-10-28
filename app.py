@@ -304,8 +304,8 @@ show_edge_triptych(week, store, logs)
 with st.expander('REPLAY E CONFRONTO', expanded=False):
     mode = st.radio(
         'Modalità di analisi',
-        ('Replay con candele',
-         'Confronto diretto tra due rilevamenti'),
+        ('Confronto diretto tra due rilevamenti',
+         'Replay con candele'),
         index=0,
         key='gamma_analysis_mode',
     )
