@@ -277,22 +277,24 @@ def render():
             f"{label}{released}{tentative} · [Fonte]({item['source']})"
         )
 
-    if urgent:
-        st.warning(
-            f"ATTENZIONE — Oggi {len(urgent)} "
-            f"{'evento macro USA prioritario' if len(urgent) == 1 else 'eventi macro USA prioritari'} "
-            "da monitorare anche durante la sessione americana."
-        )
-        for item in urgent:
-            event_line(item)
-    else:
-        st.info("Nessun evento macro USA ad alta priorità risulta previsto oggi "
-                "nel calendario consultato.")
-
-    if secondary:
-        with st.expander(f"Altri eventi USA di oggi · {len(secondary)}", expanded=False):
-            for item in secondary:
-                event_line(item)
+    # Scheda compatta con eventi prioritari affiancati;
+    # calendari, fonti, orari e classificazioni restano invariati.
+    with st.container(border=True):
+        if urgent:
+            st.markdown(
+                f"**ATTENZIONE — {len(urgent)} "
+                f"{'evento macro USA prioritario' if len(urgent) == 1 else 'eventi macro USA prioritari'} oggi**"
+            )
+            event_columns = st.columns(min(len(urgent), 3), gap="small")
+            for i, item in enumerate(urgent):
+                with event_columns[i % len(event_columns)]:
+                    event_line(item)
+        else:
+            st.markdown("**Nessun evento macro USA ad alta priorità previsto oggi**")
+        if secondary:
+            with st.expander(f"Altri eventi USA di oggi · {len(secondary)}", expanded=False):
+                for item in secondary:
+                    event_line(item)
 
     upcoming = [e for e in events if e["day"] > today]
     if upcoming:
