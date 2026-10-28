@@ -122,6 +122,13 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
             rec['download_utc'] = log.get('download_utc')
             rec['acquisition_slot'] = log.get('scheduled_slot')
             rec['acquisition_status'] = log.get('status')
+            rec['acquisition_classification'] = (
+                'STUDIO_STORICO_DA_ARCHIVIO'
+                if rec['acquisition_slot'] == '30 13 * * 1-5' else
+                'UFFICIALE' if rec['acquisition_slot'] in (
+                    '30 7 * * 1-5', '50 15 * * 1-5', '30 20 * * 1-5')
+                else 'NON CLASSIFICATO'
+            )
             rec['cboe_spot_spx'] = snap['data'].get('current_price')
             rec['cboe_prev_close_spx'] = snap['data'].get('prev_day_close')
             rec['status'], rec['quality_counts'] = _quality(snap)
@@ -236,7 +243,7 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
         report['warnings'].append('Differenziale ES–SPX assente: strike_es=null; usare soltanto strike SPX.')
     report['warnings'].append('Le concentrazioni e le variazioni sono descrittive, non dimostrano acquisti/vendite reali di opzioni.')
     # Contesto indipendente: non modifica la formula NET GAMMA.
-    report['schema_version'] = 'serafini_spx_ai_report_v8'
+    report['schema_version'] = 'serafini_spx_ai_report_v9'
     report['market_context'] = {'vix_curve': {'status': 'NON DISPONIBILE'},
                                 'asia_session': {'status': 'NON DISPONIBILE'}}
     # Identico motore di volatilita del quadro operativo: VX + range Daily ES.
@@ -395,6 +402,9 @@ def _acquisition_label(rec):
     raw = str(rec.get('acquisition_slot') or '').strip()
     fixed = {
         '30 7 * * 1-5': 'Mattina 07:30',
+        '50 15 * * 1-5': 'Pomeriggio 15:50',
+        '30 20 * * 1-5': 'Sera 20:30',
+        '30 13 * * 1-5': '13:30 (studio storico)',
         '46 15 * * 1-5': 'Pomeriggio 15:46',
         '07:30': 'Mattina 07:30',
         '15:46': 'Pomeriggio 15:46',
@@ -650,7 +660,7 @@ def export_zip(report):
         z.writestr(f'SPX_AI_{day}.json',json_data)
         z.writestr(f'SPX_Report_{day}.pdf',pdf_data)
         z.writestr('LEGGIMI.txt', 'Report derivato dagli snapshot Cboe archiviati in Supabase.\n'
-                   'Il JSON contiene 50 strike per profilo ufficiale e Replay disponibili.\n'
+                   'Il JSON contiene 50 strike per profilo di ogni acquisizione completa o Replay disponibile.\n'
                    'Ufficiali e Replay di studio restano separati; cronologia senza slot doppi.\n'
                    'Le chain Cboe originali complete non sono incluse; scarica lo ZIP settimanale.\n'
                    'Valori senza interpretazione dei flussi: NET GAMMA non prova acquisti o vendite reali.\n')
@@ -699,14 +709,14 @@ def render(store, week, snaps, logs):
         st.warning('C1/P1 selezionati nel quadro NET GAMMA non coerenti con riferimento/basis del report: confronto non disponibile.')
     elif not levels:
         st.info('Per includere C1/P1, apri NET GAMMA 0DTE / Weekly e seleziona i livelli per questa data.')
-    st.caption('Include gli snapshot ufficiali e tutti i rilevamenti Replay '
+    st.caption('Include le catene originali archiviate e tutti i rilevamenti Replay '
                'disponibili per questa data. JSON: 50 strike 0DTE e Weekly '
                'per ciascun frame; PDF: sintesi cronologica. '
                'I Replay di studio restano separati dagli originali Cboe.')
     # Firma del formato: impedisce il download del vecchio ZIP v2 salvato
     # nella sessione dopo l'aggiornamento di codice, a parita di parametri.
     report_key = (week, day.isoformat(), ref, offset,
-                  json.dumps(levels, sort_keys=True), 'serafini_spx_ai_report_v8_daily_vx_buffer')
+                  json.dumps(levels, sort_keys=True), 'serafini_spx_ai_report_v9_official_2030')
     if st.button('Prepara report per analisi AI',key=f'ai_build_{week}',type='primary'):
         try:
             with st.spinner('Lettura snapshot Cboe e preparazione report...'):
@@ -721,7 +731,7 @@ def render(store, week, snaps, logs):
             st.error(f'Impossibile preparare il report: {type(exc).__name__}: {str(exc)[:180]}')
     ready=st.session_state.get('ai_report_ready')
     if ready and ready['key']==report_key:
-        st.success(f"Report pronto: {ready['valid']} snapshot ufficiali validi "
+        st.success(f"Report pronto: {ready['valid']} snapshot completi validi "
                    f"su {ready['total']} · {ready['timeline']} rilevamenti "
                    f"nella cronologia · {ready['study']} Replay di studio.")
         st.download_button('Scarica report JSON + PDF (ZIP)',data=ready['data'],
