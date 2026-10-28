@@ -88,7 +88,6 @@ def _plot(e, serafini_rows, candles, shift, bounds):
 @st.fragment(run_every="5m")
 def show(week, store, logs=None):
     with st.expander("GEX EDGE — CONFRONTO",expanded=False):
-        st.caption("Tre pannelli affiancati con scala ES condivisa; i motori restano indipendenti.")
         st.caption("Candele ES=F: controllo automatico ogni 5 minuti mentre la pagina resta aperta. GEX e Serafini restano riferiti alla fotografia indicata.")
         if st.button(
             "Aggiorna analisi · ultima fotografia",
@@ -152,8 +151,15 @@ def show(week, store, logs=None):
                 e=result_from_snapshot(raw,float(ctx["offset"]))
                 from gamma_section import _snapshot_download_clock
                 download_clock=_snapshot_download_clock(store,week,logs or [],selected_name)
-                acquisition=f"download Roma {download_clock}" if download_clock else "orario download non verificato"
-                st.caption(f"Rilevamento: {reading} · {day_for_choice:%d/%m/%Y} · {acquisition} · file {selected_name} · Serafini ed Edge sulla stessa fotografia.")
+                acquisition=(f"{download_clock} Roma" if download_clock
+                             else "ORARIO NON VERIFICATO")
+                st.markdown(
+                    f"### GEX EDGE e SERAFINI — rilevamento {day_for_choice:%d/%m/%Y} · {acquisition}"
+                )
+                st.caption(
+                    f"{reading} · fotografia Cboe identica per entrambi i profili · "
+                    f"file {selected_name}"
+                )
             except Exception as err:
                 st.error("Calcolo Edge automatico non disponibile: "+str(err))
                 st.info("È ancora possibile caricare il report JSON Edge selezionando la modalità alternativa.")
@@ -167,6 +173,9 @@ def show(week, store, logs=None):
                 e=read_report(file.getvalue())
             except (ValueError,KeyError,TypeError) as err:
                 st.error(str(err));return
+            st.markdown("### GEX EDGE — report JSON caricato")
+            st.caption("Orario di acquisizione non verificato in questa schermata: "
+                       "il file deve essere confrontato con una fotografia Serafini identica.")
         if not ctx:
             st.warning("Apri prima NET GAMMA 0DTE/Weekly e scegli la fotografia e il riferimento Serafini.")
             return
@@ -217,7 +226,6 @@ def show(week, store, logs=None):
             "**Call Wall** (tratteggio verde) · **Put Wall** (tratteggio rosso) · "
             "**Gamma Flip** (tratteggio giallo)."
         )
-        st.caption("ES=F Yahoo può differire dal future specifico e dal prezzo ES equivalente. Le linee GEX sono riferimenti Edge, non segnali Serafini.")
         with st.expander("Curva teorica GEX",expanded=False):
             curve=e.get("curve",[])
             if curve:
