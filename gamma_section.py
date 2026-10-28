@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from datetime import datetime
 import streamlit as st
 from net_gamma import profile, profile_csv, read_snapshot
+from feed_quality import timestamp_state
 from volatility_levels import weekly_expiry
 from gamma_compare import compare_profiles
 from volume_audit import compare_volume_profiles, inspect_raw_expiry, raw_transition_diagnostic
@@ -20,6 +21,13 @@ from asia_range import download_asia_range
 from es_spx_basis import download_and_calculate
 from decimal import Decimal, ROUND_HALF_UP
 from html import escape
+
+
+@st.cache_data(ttl=300, max_entries=90, show_spinner=False)
+def _snapshot_cboe_stamp(week, file_name, _store):
+    """Un solo timestamp storico aggiuntivo, cache 5 minuti, solo lettura."""
+    item = read_snapshot(_store.download(f"{week}/snapshots/{file_name}"))
+    return item.get("timestamp")
 
 
 def _has_usable_gamma(snapshot):
@@ -583,10 +591,32 @@ def render(store, week, snaps, logs):
     except Exception as exc:
         st.error(f'Impossibile leggere lo snapshot: {type(exc).__name__}')
         return
-    timestamp = str(snap.get('timestamp', ''))
+    timestamp = str(snap.get('timestamp') or '')
     acquisition_label = _acquisition_label(store, week, logs, choice)
     download_clock = _snapshot_download_clock(store, week, logs, choice)
-    st.caption(f'Rilevamento selezionato: {acquisition_label} · Timestamp Cboe: {timestamp} · file {choice}')
+    # Confronto soltanto con il file precedente della STESSA giornata;
+    # non interpreta il fuso del timestamp Cboe e non blocca il profilo.
+    day_prefix = choice[:len('SPX_CBOE_') + 8]
+    same_day_names = [name for name in names if name.startswith(day_prefix)]
+    position = same_day_names.index(choice)
+    preceding = same_day_names[position + 1] if position + 1 < len(same_day_names) else None
+    if preceding is None:
+        quality = timestamp_state(timestamp)
+    else:
+        try:
+            previous_stamp = _snapshot_cboe_stamp(week, preceding, store)
+            quality = timestamp_state(timestamp, previous_stamp, has_previous=True)
+        except Exception:
+            quality = "NON VERIFICABILE"
+    quality_label = {
+        "PRIMO RILEVAMENTO": "primo rilevamento",
+        "DIVERSO": "timestamp diverso",
+        "RIPETUTO": "timestamp ripetuto",
+        "NON VERIFICABILE": "non verificabile",
+    }[quality]
+    st.caption(f'Rilevamento selezionato: {acquisition_label} · '
+               f'Timestamp Cboe: {timestamp or "n.d."} · '
+               f'Cboe: {quality_label} · file {choice}')
     # Si usa la data dello snapshot per gli esempi e per impedire look-ahead.
     try:
         day = date.fromisoformat(choice.split('SPX_CBOE_')[1][:8][:4] + '-' + choice.split('SPX_CBOE_')[1][4:6] + '-' + choice.split('SPX_CBOE_')[1][6:8])
