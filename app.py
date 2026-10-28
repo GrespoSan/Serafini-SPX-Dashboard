@@ -224,11 +224,9 @@ with st.expander('1. ANALISI DEL CONTESTO — News · Volatilità · Trend Daily
     from macro_calendar import render as render_macro_calendar
     render_macro_calendar()
     st.divider()
-    st.markdown('#### Volatilità e regime VIX')
+    st.markdown(f'#### Volatilità e VIX — {context_day:%d/%m/%Y}' if context_day else '#### Volatilità e VIX')
     from vix_regime import render as render_vix_context
     if context_day is not None:
-        st.caption(f'Data del rilevamento NET GAMMA selezionato: {context_day:%d/%m/%Y}. '
-                   'Il modulo VIX utilizza la medesima data, senza modificare i suoi calcoli.')
         try:
             render_vix_context(context_day)
         except Exception:
