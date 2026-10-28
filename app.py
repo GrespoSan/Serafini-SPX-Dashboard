@@ -244,55 +244,6 @@ with st.expander('ANALISI DEL CONTESTO — News · Volatilità · Trend Daily', 
 with st.expander('ANALISI NET GAMMA', expanded=False):
     from gamma_section import render
     render(store, week, snaps, logs)
-    st.divider()
-    if st.checkbox(f'RILEVAMENTI CBOE — {len(snaps)} snapshot · {len(logs)} registri',
-                   value=False, key=f'cb_show_records_{week}'):
-        col_snapshots, col_logs = st.columns([1, 1], gap='medium')
-        col_snapshots.metric('Snapshot distinti', len(snaps))
-        col_logs.metric('Registri', len(logs))
-
-        if logs:
-            rows = []
-            for obj in logs:
-                try:
-                    value = json.loads(store.download(f"{week}/logs/{obj['name']}"))
-                    rows.append({
-                        'Download (ora di Roma)': format_download_rome(value.get('download_utc')),
-                        'Acquisizione': (
-                            'Test manuale'
-                            if str(value.get('scheduled_slot') or '') == '30 13 * * 1-5'
-                            and str(value.get('download_rome') or '').startswith('2026-10-22T17:57:')
-                            else describe_slot(value.get('scheduled_slot'))
-                        ),
-                        'Stato': value.get('status', ''),
-                        'Qualità dati': describe_quality(value, store),
-                        'Timestamp Cboe (originale)': value.get('cboe_timestamp', ''),
-                        'SPX': value.get('spot_spx', ''),
-                        'Contratti': value.get('contracts', ''),
-                        'File originale': value.get('file', ''),
-                    })
-                except Exception:
-                    rows.append({'Stato': 'Impossibile leggere un registro', 'Qualità dati': 'DA VERIFICARE'})
-            st.caption('Gli orari di download sono convertiti in Europe/Rome. Il timestamp Cboe rimane come nella fonte, senza attribuirgli un fuso non dichiarato. I vecchi registri etichettati “automatico” non identificano necessariamente lo slot.')
-            # La colorazione riguarda solo la qualita', non la colonna Stato (NUOVO/INVARIATO).
-            import pandas as pd
-            frame = pd.DataFrame(rows)
-            def quality_color(series):
-                return [
-                    'color: #FF4B4B; font-weight: 700' if str(value).startswith('NON VALIDO')
-                    else 'color: #28C76F; font-weight: 600' if str(value) == 'VALIDO'
-                    else 'color: #EAB308' for value in series
-                ]
-            st.dataframe(frame.style.apply(quality_color, subset=['Qualità dati']),
-                         use_container_width=True, hide_index=True)
-        else:
-            st.info('Non sono presenti registri per questa settimana.')
-
-        # Acquisizione manuale nello stesso pannello, senza un secondo expander.
-        from manual_acquisition import render as render_manual_acquisition
-        if role == 'admin':
-            st.divider()
-            render_manual_acquisition(role, week, store, embedded=True)
 
 
 # Edge is a read-only, self-contained comparison panel.
@@ -323,7 +274,57 @@ with st.expander('REPORT GIORNALIERO AI', expanded=False):
 
 # Archivio settimanale e amministrazione riservati all'amministratore.
 if role == 'admin':
-    col_zip, col_admin = st.columns([1, 1], gap='medium')
+    col_records, col_zip, col_admin = st.columns([1, 1, 1], gap='medium')
+    with col_records:
+        if st.checkbox(f'RILEVAMENTI CBOE — {len(snaps)} snapshot · {len(logs)} registri',
+                       value=False, key=f'cb_show_records_{week}'):
+            col_snapshots, col_logs = st.columns([1, 1], gap='medium')
+            col_snapshots.metric('Snapshot distinti', len(snaps))
+            col_logs.metric('Registri', len(logs))
+
+            if logs:
+                rows = []
+                for obj in logs:
+                    try:
+                        value = json.loads(store.download(f"{week}/logs/{obj['name']}"))
+                        rows.append({
+                            'Download (ora di Roma)': format_download_rome(value.get('download_utc')),
+                            'Acquisizione': (
+                                'Test manuale'
+                                if str(value.get('scheduled_slot') or '') == '30 13 * * 1-5'
+                                and str(value.get('download_rome') or '').startswith('2026-10-22T17:57:')
+                                else describe_slot(value.get('scheduled_slot'))
+                            ),
+                            'Stato': value.get('status', ''),
+                            'Qualità dati': describe_quality(value, store),
+                            'Timestamp Cboe (originale)': value.get('cboe_timestamp', ''),
+                            'SPX': value.get('spot_spx', ''),
+                            'Contratti': value.get('contracts', ''),
+                            'File originale': value.get('file', ''),
+                        })
+                    except Exception:
+                        rows.append({'Stato': 'Impossibile leggere un registro', 'Qualità dati': 'DA VERIFICARE'})
+                st.caption('Gli orari di download sono convertiti in Europe/Rome. Il timestamp Cboe rimane come nella fonte, senza attribuirgli un fuso non dichiarato. I vecchi registri etichettati “automatico” non identificano necessariamente lo slot.')
+                # La colorazione riguarda solo la qualita', non la colonna Stato (NUOVO/INVARIATO).
+                import pandas as pd
+                frame = pd.DataFrame(rows)
+                def quality_color(series):
+                    return [
+                        'color: #FF4B4B; font-weight: 700' if str(value).startswith('NON VALIDO')
+                        else 'color: #28C76F; font-weight: 600' if str(value) == 'VALIDO'
+                        else 'color: #EAB308' for value in series
+                    ]
+                st.dataframe(frame.style.apply(quality_color, subset=['Qualità dati']),
+                             use_container_width=True, hide_index=True)
+            else:
+                st.info('Non sono presenti registri per questa settimana.')
+
+            # Acquisizione manuale nello stesso pannello, senza un secondo expander.
+            from manual_acquisition import render as render_manual_acquisition
+            if role == 'admin':
+                st.divider()
+                render_manual_acquisition(role, week, store, embedded=True)
+
     with col_zip:
         # Il file ZIP non contiene trasformazioni sui dati originali.
         if st.button('Prepara ZIP dati Cboe della settimana', disabled=not (snaps or logs)):
