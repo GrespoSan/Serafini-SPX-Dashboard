@@ -811,6 +811,9 @@ def render(store, week, snaps, logs):
         st.caption(f'Rilevamento selezionato: {acquisition_label} · '
                    f'Timestamp Cboe: {timestamp or "n.d."} · '
                    f'Cboe: {quality_label} · file {choice}')
+    st.markdown('**Priorità operativa alle 0DTE:** Serafini richiama un peso numerico del '
+                '**60% per le 0DTE** e del **23% per le Weekly** e, in caso di dubbio, '
+                'privilegia i livelli 0DTE più marcati.')
     independent_scale = st.checkbox(
         'Ingrandisci ogni profilo con scala indipendente', value=False,
         key='gamma_independent_scale_v1',
@@ -823,9 +826,6 @@ def render(store, week, snaps, logs):
                'La scala può cambiare tra rilevamenti.')
     st.caption('Tooltip: componente Call positiva, componente Put negativa e saldo netto '
                'della formula Serafini (OI + Volume) × Gamma; non valori monetari delle posizioni.')
-    st.markdown('**Priorità operativa alle 0DTE:** Serafini richiama un peso numerico del '
-                '**60% per le 0DTE** e del **23% per le Weekly** e, in caso di dubbio, '
-                'privilegia i livelli 0DTE più marcati.')
     # Deviazioni Serafini cash M15, indipendenti dal riferimento SPX e dal
     # differenziale ES-SPX: prezzi di riferimento del future ES=F.
     # Un solo tentativo con cache; nessuna deviazione stimata se mancano M15.
