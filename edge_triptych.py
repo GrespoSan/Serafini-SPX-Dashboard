@@ -233,7 +233,7 @@ def show(week, store, logs=None):
                     )
                     f=go.Figure(go.Scatter(x=[p[0] for p in valid_points],
                                            y=[p[1] for p in valid_points],mode="lines"))
-                    f.add_hline(y=0,line_dash="dot")
+                    f.add_hline(y=0, line_dash="dash", line_color="#f4c95d", line_width=2.5)
                     st.plotly_chart(f,use_container_width=True)
                 else:
                     st.markdown(f"**{curve_title}**")
