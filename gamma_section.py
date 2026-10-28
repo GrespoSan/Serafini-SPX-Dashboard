@@ -400,6 +400,11 @@ def render_comparison(store, week, snaps, logs):
                     ordered = sorted(comparisons, key=lambda r: float(r['Strike SPX']))
                     if len(ordered) > 50:
                         raise ValueError('Confronto oltre i 50 strike previsti dal metodo Serafini.')
+                    def _price_label(rec):
+                        return (f"{rec['Prezzo ES']:,.0f}".replace(',', '.')
+                                if rec['Prezzo ES'] is not None
+                                else f"{rec['Strike SPX']:g} SPX")
+
                     def _comparison_label(rec):
                         a = float(rec['NET mattina'])
                         b = float(rec['NET pomeriggio'])
