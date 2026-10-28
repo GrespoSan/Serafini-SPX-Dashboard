@@ -237,7 +237,7 @@ with st.expander('1. ANALISI DEL CONTESTO — News · Volatilità · Trend Daily
         st.info('Seleziona una settimana con snapshot Cboe validi per analizzare il VIX.')
     st.divider()
     from trend_daily_section import render as render_trend_daily
-    render_trend_daily()
+    render_trend_daily(reference_day=context_day)
 
 col_snapshots, col_logs = st.columns([1, 1], gap='medium')
 col_snapshots.metric('Snapshot distinti', len(snaps))
