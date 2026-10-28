@@ -43,6 +43,11 @@ def build_feed(store, day, basis_result):
             downloaded = datetime.fromisoformat(f'{day.isoformat()}T{clock}').replace(tzinfo=ROME)
         except ValueError:
             continue
+        # Stessa esclusione del Replay online per 0DTE post-scadenza:
+        # 16:00 New York, con DST effettivo; nessuna stima di prezzi.
+        ny_download = downloaded.astimezone(ZoneInfo('America/New_York'))
+        if ny_download.hour >= 16:
+            continue
         if downloaded <= datetime.now(ROME):
             candidates.append((downloaded, slot, frame))
     if not candidates:
