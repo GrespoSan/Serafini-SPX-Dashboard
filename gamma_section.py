@@ -16,6 +16,7 @@ from pine_export import make_pine
 from pine_compare import make_pine_comparison
 from pine_sources import load_export_profiles
 from gamma_scale import profile_gamma_bounds, gamma_components
+from serafini_sigma import serafini_cash_levels, add_sigma_markers
 from operational_levels import find_candidates, proposed_levels, candidate_csv
 from option_structure import build_structure
 from payoff_charts import render_payoff_charts
@@ -762,6 +763,15 @@ def render(store, week, snaps, logs):
     st.markdown('**Priorità operativa alle 0DTE:** Serafini richiama un peso numerico del '
                 '**60% per le 0DTE** e del **23% per le Weekly** e, in caso di dubbio, '
                 'privilegia i livelli 0DTE più marcati.')
+    # Deviazioni Serafini cash M15, indipendenti dal riferimento SPX e dal
+    # differenziale ES-SPX: prezzi di riferimento del future ES=F.
+    # Un solo tentativo con cache; nessuna deviazione stimata se mancano M15.
+    try:
+        sigma_levels = serafini_cash_levels(day) if offset is not None else None
+        sigma_error = None
+    except Exception as exc:
+        sigma_levels = None
+        sigma_error = f'{type(exc).__name__}: {str(exc)[:115]}'
     profile_cols = st.columns(2, gap='small')
     for (title, expiry), profile_col in zip(
             [('0DTE', day), ('Weekly', weekly_exp)], profile_cols):
@@ -856,7 +866,25 @@ def render(store, week, snaps, logs):
                     font=dict(color='#f0cc65', size=11),
                     bgcolor='rgba(13,17,23,0.85)', borderpad=2,
                 )
+            # SOLO 0DTE: 3 piccoli segmenti sul bordo sinistro, non estesi.
+            if title == '0DTE' and sigma_levels is not None:
+                _, clipped_sigma = add_sigma_markers(fig, sigma_levels, y)
+            else:
+                clipped_sigma = []
             st.plotly_chart(fig, use_container_width=True, key=f'gamma_net_{title}_{choice}')
+            if title == '0DTE':
+                if sigma_error:
+                    st.caption('Deviazione Serafini M15 non disponibile: ' + sigma_error)
+                elif offset is None:
+                    st.caption('Deviazione Serafini ES M15: richiede differenziale ES-SPX per allineare il grafico.')
+                elif sigma_levels and sigma_levels.get('status') == 'VALIDO':
+                    st.caption('σ cash ES=F M15 (Chicago 08:30–15:00), rif. close precedente 15:15: '
+                               f"L90 {sigma_levels['L90']:.2f} · "
+                               f"L350 {sigma_levels['L350']:.2f} · "
+                               f"S350 {sigma_levels['S350']:.2f}."
+                               + (' Fuori dai 50 strike: ' + ', '.join(clipped_sigma) + '.'
+                                  if clipped_sigma else '')
+                               + ' Feed Yahoo: confrontare con Pine ES1! su TradingView.')
             with st.expander(f'Dettaglio numerico {title} (50 strike)', expanded=False):
                 st.dataframe(frame, use_container_width=True, hide_index=True)
             st.download_button(f'Scarica calcolo CSV {title}', profile_csv(result, offset),
