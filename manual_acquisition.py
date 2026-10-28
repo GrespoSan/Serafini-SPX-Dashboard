@@ -127,10 +127,14 @@ def _pending_monitor(store, week: str):
             'Non aggiornare la pagina. Attendo il risultato da GitHub/Supabase…')
 
 
-def render(role: str, week: str, store) -> None:
+def render(role: str, week: str, store, embedded: bool = False) -> None:
     if role != 'admin':
         return
-    with st.expander('Acquisizione Cboe supplementare', expanded=False):
+    from contextlib import nullcontext
+    section = nullcontext() if embedded else st.expander('Acquisizione Cboe supplementare', expanded=False)
+    with section:
+        if embedded:
+            st.markdown('**Acquisizione Cboe supplementare**')
         st.caption('Nuova acquisizione manuale. I rilevamenti automatici delle 07:30 e 15:46 restano invariati.')
         rome = datetime.now(ZoneInfo('Europe/Rome'))
         iso = rome.isocalendar()
