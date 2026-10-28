@@ -113,30 +113,178 @@ def breakout_buffer_points(contango_pct):
     return 15 if pct < 0 else 10
 
 
-def render(target_day):
-    """Mostra regime e buffer affiancati, senza modificare NET GAMMA."""
-    try:
-        auto = previous_vix_curve(target_day)
-        pct = auto["contango_pct"]
-    except Exception:
-        pct = None
+def combined_breakout_buffer(contango_pct=None, daily_range_pct=None):
+    """Buffer STANDARD: 15 se backwardation O range Daily >=1%; altrimenti 10.
 
-    if pct is None:
-        regime, buffer = "Non disponibile", "Non determinato"
-    elif pct < 0:
-        regime, buffer = f"Backwardation {pct:+.2f}%", f"{breakout_buffer_points(pct)} punti"
+    Se manca una fonte, 15 e' comunque determinabile dalla condizione
+    disponibile di alta volatilita'; 10 richiede entrambe le fonti.
+    Questa non e' una regola di ingresso né gestisce eccezioni discrezionali.
+    """
+    def finite_or_none(value):
+        if value is None:
+            return None
+        number = float(value)
+        if not math.isfinite(number):
+            raise ValueError("Dato di volatilita non finito")
+        return number
+
+    pct = finite_or_none(contango_pct)
+    daily = finite_or_none(daily_range_pct)
+    if daily is not None and daily < 0:
+        raise ValueError("Range Daily negativo")
+    reasons = []
+    if pct is not None and pct < 0:
+        reasons.append("Backwardation VX")
+    if daily is not None and daily >= 1.0:
+        reasons.append("Range Daily precedente >= 1%")
+    if reasons:
+        buffer = 15
+        status = "DETERMINATO"
+    elif pct is not None and daily is not None:
+        buffer, status = 10, "DETERMINATO"
+        reasons.append("Contango VX e range Daily precedente < 1%")
     else:
-        regime, buffer = f"Contango {pct:+.2f}%", f"{breakout_buffer_points(pct)} punti"
+        buffer, status = None, "NON DETERMINABILE"
+        reasons.append("Dati insufficienti per confermare la bassa volatilita")
 
-    col_regime, col_buffer = st.columns(2, gap="medium")
-    with col_regime:
-        if pct is not None and pct < 0:
-            st.markdown(f'**Regime VIX:** <span style="color:#e53935;font-weight:700">Backwardation</span> {pct:+.2f}%', unsafe_allow_html=True)
-        else:
-            st.markdown(f"**Regime VIX:** {regime}")
-    with col_buffer:
-        if buffer == "15 punti":
-            st.markdown('**Buffer breakout:** <span style="color:#e53935;font-weight:700">15 punti</span>', unsafe_allow_html=True)
-        else:
-            st.markdown(f"**Buffer breakout:** {buffer}")
+    return {
+        "status": status,
+        "buffer_es_points": buffer,
+        "reason": "; ".join(reasons),
+        "rule": "15 se VX in backwardation o High-Low Daily >=1% del Close; altrimenti 10",
+        "inputs": {"vx_contango_pct": pct, "previous_es_daily_range_pct": daily},
+        "note": ("Buffer di copertura standard indicativo; Serafini puo' "
+                 "contestualizzare livelli e distanze in modo discrezionale."),
+    }
+
+
+def volatility_context(target_day):
+    """Unica fonte per widget e report: non alterare i calcoli NET GAMMA."""
+    from daily_volatility import previous_es_daily_range
+
+    vx = {"status": "NON DISPONIBILE"}
+    daily = {"status": "NON DISPONIBILE"}
+    pct = daily_pct = None
+    try:
+        observed = previous_vix_curve(target_day)
+        pct = float(observed["contango_pct"])
+        vx = {**observed, "status": "VALIDO",
+              "regime": "BACKWARDATION" if pct < 0 else "CONTANGO",
+              "note": "Cboe futures VX mensili: settlement precedente; non VIX spot."}
+    except Exception as exc:
+        vx["reason"] = type(exc).__name__
+    try:
+        daily = previous_es_daily_range(target_day)
+        daily_pct = daily["range_pct"]
+    except Exception as exc:
+        daily = {"status": "NON DISPONIBILE", "reason": type(exc).__name__,
+                 "source": "Yahoo Finance ES=F Daily"}
+    decision = combined_breakout_buffer(pct, daily_pct)
+    vx["breakout_buffer_es_points"] = decision["buffer_es_points"]
+    return {"vix_curve": vx, "previous_daily_range": daily,
+            "breakout_buffer": decision}
+
+
+def render(target_day):
+    """Riquadro compatto come riferimento grafico condiviso, VX+Daily."""
+    from html import escape
+
+    ctx = volatility_context(target_day)
+    vx, daily, decision = (ctx["vix_curve"], ctx["previous_daily_range"],
+                           ctx["breakout_buffer"])
+    vx_ok = vx.get("status") == "VALIDO"
+    daily_ok = daily.get("status") == "VALIDO"
+    pct = vx.get("contango_pct") if vx_ok else None
+    if daily_ok:
+        range_value = (f"{daily['range_points']:,.2f}".replace(",", "X")
+                       .replace(".", ",").replace("X", "."))
+        range_pct = f"{daily['range_pct']:.2f}".replace(".", ",")
+        daily_value = f"{range_value} pt · {range_pct}%"
+        daily_date = daily["day"]
+    else:
+        daily_value, daily_date = "Non disponibile", "—"
+    if vx_ok:
+        regime = vx["regime"].capitalize()
+        vx_value = f"{regime} ({pct:+.2f}%)".replace(".", ",")
+        vx_date = vx.get("day", "—")
+    else:
+        vx_value, vx_date = "Non disponibile", "—"
+
+    points = decision["buffer_es_points"]
+    is_high = points == 15
+    value = f"{points} punti" if points is not None else "Da determinare"
+    highlight = "#ff676d" if is_high else ("#56d49e" if points == 10 else "#e5b65c")
+    detail = escape(decision["reason"])
+    card = f"""
+<style>
+.spx-vol-card {{
+    border:1px solid #34363c; border-radius:18px; padding:24px 26px;
+    background:#090a0c; color:#f4f5f6; margin:12px 0 8px;
+    font-family:inherit;
+}}
+.spx-vol-card .spx-vol-title {{
+    font-size:1.15rem; font-weight:750; letter-spacing:.015em;
+    margin:0 0 18px;
+}}
+.spx-vol-card .spx-vol-row {{
+    display:flex; justify-content:space-between; align-items:baseline;
+    gap:15px; border-top:1px solid #292b30; padding:15px 0;
+}}
+.spx-vol-card .spx-vol-label {{font-size:.96rem; color:#c3c6cc;}}
+.spx-vol-card .spx-vol-value {{font-size:1.02rem; font-weight:620; text-align:right;}}
+.spx-vol-card .spx-vol-bottom {{
+    display:flex; justify-content:space-between; gap:20px; align-items:end;
+    border-top:1px solid #292b30; padding-top:18px;
+}}
+.spx-vol-card .spx-vol-big {{
+    font-size:2rem; font-weight:750; color:{highlight}; line-height:1.15;
+    margin-top:7px;
+}}
+.spx-vol-card .spx-vol-reason {{
+    color:#c3c6cc; max-width:58%; font-size:.94rem; text-align:right;
+}}
+.spx-vol-card .spx-vol-foot {{
+    color:#8c929d; font-size:.76rem; margin-top:16px; line-height:1.5;
+}}
+@media(max-width:640px) {{
+    .spx-vol-card {{padding:17px;}}
+    .spx-vol-card .spx-vol-row,.spx-vol-card .spx-vol-bottom {{
+        gap:8px; flex-wrap:wrap;
+    }}
+    .spx-vol-card .spx-vol-reason {{max-width:100%; text-align:left;}}
+}}
+</style>
+<div class="spx-vol-card">
+  <div class="spx-vol-title">VOLATILITÀ E BUFFER OPERATIVO</div>
+  <div class="spx-vol-row">
+    <span class="spx-vol-label">Range Daily precedente</span>
+    <span class="spx-vol-value">{escape(daily_value)}</span>
+  </div>
+  <div class="spx-vol-row">
+    <span class="spx-vol-label">Regime VX precedente</span>
+    <span class="spx-vol-value">{escape(vx_value)}</span>
+  </div>
+  <div class="spx-vol-bottom">
+    <div>
+      <div class="spx-vol-label">Buffer standard</div>
+      <div class="spx-vol-big">{escape(value)}</div>
+    </div>
+    <div class="spx-vol-reason">{detail}</div>
+  </div>
+  <div class="spx-vol-foot">
+    Daily ES=F Yahoo: {escape(daily_date)} · VX Cboe: {escape(vx_date)}.
+    High−Low / Close della seduta precedente; soglia 1%.
+    Fonti indipendenti, nessun dato della seduta analizzata.
+    Il Daily Yahoo può differire dal grafico ES1! su TradingView.
+  </div>
+</div>"""
+    st.markdown(card, unsafe_allow_html=True)
+    if not vx_ok or not daily_ok:
+        unavailable = []
+        if not daily_ok:
+            unavailable.append(f"Daily ES ({daily.get('reason', 'fonte indisponibile')})")
+        if not vx_ok:
+            unavailable.append(f"VX ({vx.get('reason', 'fonte indisponibile')})")
+        st.caption("Fonte non disponibile: " + ", ".join(unavailable) +
+                   ". Il buffer non viene forzato a 10 punti.")
     return pct
