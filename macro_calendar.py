@@ -276,9 +276,11 @@ def render():
         )
 
     if urgent:
-        st.warning(f"ATTENZIONE — Oggi {len(urgent)} event"
-                   f"{'o' if len(urgent) == 1 else 'i'} macro USA prioritari "
-                   "da monitorare anche durante la sessione americana.")
+        st.warning(
+            f"ATTENZIONE — Oggi {len(urgent)} "
+            f"{'evento macro USA prioritario' if len(urgent) == 1 else 'eventi macro USA prioritari'} "
+            "da monitorare anche durante la sessione americana."
+        )
         for item in urgent:
             event_line(item)
     else:
