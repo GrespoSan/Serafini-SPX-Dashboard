@@ -25,6 +25,7 @@ def append_news(script, events):
         'showMacroNews = input.bool(true, "News macro · linee verticali")',
         'var array<line> macroNewsLines = array.new_line()',
         'var array<label> macroNewsLabels = array.new_label()',
+        'float macroTop = ta.highest(high, 300) + ta.atr(14) * 7.0',
         'if barstate.islast',
         '    for ln in macroNewsLines',
         '        line.delete(ln)',
@@ -40,11 +41,14 @@ def append_news(script, events):
         names = names.replace("\\\\", "/").replace('"', "'")[:95]
         major = any(row.get("priority") == "ALTA" for row in rows)
         news_color = "color.red" if major else "color.orange"
+        short = "FOMC" if "FOMC" in names else ("FED" if "Conferenza" in names else names[:12].replace(" ", ""))
+        vertical = "\\n".join(short.upper())
+        label_text = f"{hh:02d}:{mm:02d}\\n{vertical}"
         lines.extend([
             f'        int newsTime{index} = timestamp("Europe/Rome", {y}, {mo}, {d}, {hh}, {mm})',
             f'        line newsLine{index} = line.new(newsTime{index}, low, newsTime{index}, high, xloc=xloc.bar_time, extend=extend.both, color={news_color}, style=line.style_dashed, width=1)',
             f'        array.push(macroNewsLines, newsLine{index})',
-            f'        label newsLabel{index} = label.new(newsTime{index}, high, "{hh:02d}:{mm:02d} Roma · {names}", xloc=xloc.bar_time, yloc=yloc.price, style=label.style_label_down, color={news_color}, textcolor=color.white, size=size.tiny)',
+            f'        label newsLabel{index} = label.new(newsTime{index}, macroTop, "{label_text}", xloc=xloc.bar_time, yloc=yloc.price, style=label.style_label_down, color={news_color}, textcolor=color.white, size=size.normal)',
             f'        array.push(macroNewsLabels, newsLabel{index})',
         ])
     return script + "\n" + "\n".join(lines) + "\n"
