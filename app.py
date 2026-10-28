@@ -304,8 +304,7 @@ show_edge_triptych(week, store, logs)
 with st.expander('REPLAY E CONFRONTO', expanded=False):
     mode = st.radio(
         'Modalità di analisi',
-        ('Replay con candele ES',
-         'Replay intraday — evoluzione delle barre',
+        ('Replay con candele',
          'Confronto diretto tra due rilevamenti'),
         index=0,
         key='gamma_analysis_mode',
@@ -315,9 +314,7 @@ with st.expander('REPLAY E CONFRONTO', expanded=False):
         render_comparison(store, week, snaps, logs)
     else:
         from gamma_replay import render as render_gamma_replay
-        replay_view = ('Candele ES + NET GAMMA'
-                       if mode == 'Replay con candele ES' else 'Solo NET GAMMA')
-        render_gamma_replay(store, week, logs, view_mode=replay_view)
+        render_gamma_replay(store, week, logs, view_mode='Candele ES + NET GAMMA')
 
 # Report descrittivo e riproducibile per analisi AI (nessuna chiamata a servizi AI).
 with st.expander('REPORT GIORNALIERO AI', expanded=False):
