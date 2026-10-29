@@ -62,7 +62,7 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
           "\nvar array<float> prevValues = " +
           _pine_array(previous_odte["rows"], "net_gamma") +
           "\nvar array<float> odteLevels = ")
-    patch("if barstate.islast\n",
+    patch("if barstate.islast and validTicker\n",
           "// Calcola SOLO il minimo SUGGERITO per separare le barre adiacenti.\n"
           "// Non cambia mai la scala manuale inserita dall'utente.\n"
           "requiredGapScale(array<float> leftGamma, array<float> rightGamma, int leftCenter, int rightCenter) =>\n"
@@ -74,7 +74,7 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
           "        neg := math.max(neg, -g)\n"
           "    float room = float(rightCenter - leftCenter - 12)\n"
           "    room > 0 ? (pos + neg) / room : 1000000.0\n\n"
-          "if barstate.islast\n")
+          "if barstate.islast and validTicker\n")
 
     anchor = "    float actualScale = gammaPerCandle\n"
     if code.count(anchor) != 1:
