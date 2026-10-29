@@ -26,20 +26,20 @@ from decimal import Decimal, ROUND_HALF_UP
 from html import escape
 
 
-@st.cache_data(ttl=180, max_entries=8, show_spinner=False)
+@st.cache_data(ttl=86400, max_entries=24, show_spinner=False)
 def _selected_snapshot(week, file_name, _store):
     """Snapshot immutabile: evita nuovi download e parsing sul semplice rerun UI."""
     return read_snapshot(_store.download(f'{week}/snapshots/{file_name}'))
 
 
-@st.cache_data(ttl=300, max_entries=90, show_spinner=False)
+@st.cache_data(ttl=86400, max_entries=90, show_spinner=False)
 def _snapshot_cboe_stamp(week, file_name, _store):
     """Un solo timestamp storico aggiuntivo, cache 5 minuti, solo lettura."""
     item = read_snapshot(_store.download(f"{week}/snapshots/{file_name}"))
     return item.get("timestamp")
 
 
-@st.cache_data(ttl=180, max_entries=50, show_spinner=False)
+@st.cache_data(ttl=3600, max_entries=50, show_spinner=False)
 def _pine_export_data(week, day, logs_count, _store, _logs):
     """Cache breve per non riscaricare i 3 snapshot raw a ogni rerun."""
     return load_export_profiles(_store, week, day, _logs)
@@ -107,7 +107,7 @@ def _transition_summary(rows, direction):
     return 'Nessun cambio di segno nella zona.'
 
 
-@st.cache_data(ttl=120, max_entries=36, show_spinner=False)
+@st.cache_data(ttl=3600, max_entries=36, show_spinner=False)
 def _snapshot_log_index(week, log_names, _store):
     """Un solo passaggio sui log Supabase per TUTTE le fotografie.
 
