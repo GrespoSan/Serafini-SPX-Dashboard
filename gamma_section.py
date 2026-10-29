@@ -26,6 +26,12 @@ from decimal import Decimal, ROUND_HALF_UP
 from html import escape
 
 
+@st.cache_data(ttl=180, max_entries=8, show_spinner=False)
+def _selected_snapshot(week, file_name, _store):
+    """Snapshot immutabile: evita nuovi download e parsing sul semplice rerun UI."""
+    return read_snapshot(_store.download(f'{week}/snapshots/{file_name}'))
+
+
 @st.cache_data(ttl=300, max_entries=90, show_spinner=False)
 def _snapshot_cboe_stamp(week, file_name, _store):
     """Un solo timestamp storico aggiuntivo, cache 5 minuti, solo lettura."""
@@ -653,9 +659,8 @@ def render(store, week, snaps, logs):
     # La selezione resta nello stato della sessione; il controllo viene mostrato
     # immediatamente prima delle opzioni di scala dei profili.
     choice = st.session_state[selection_key]
-    path = f'{week}/snapshots/{choice}'
     try:
-        snap = read_snapshot(store.download(path))
+        snap = _selected_snapshot(week, choice, store)
     except Exception as exc:
         st.error(f'Impossibile leggere lo snapshot: {type(exc).__name__}')
         return
