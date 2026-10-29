@@ -72,6 +72,8 @@ offsetWeekly = input.int(160, "Distanza Weekly da ultima candela", minval=55, ma
 positiveColor = input.color(color.rgb(0, 230, 117), "NET GAMMA positivo")
 negativeColor = input.color(color.rgb(242, 54, 69), "NET GAMMA negativo")
 showTitles = input.bool(true, "Mostra intestazioni")
+// Nessun livello SPX su sottostanti estranei: solo futures ES/MES.
+validTicker = syminfo.type == "futures" and (syminfo.root == "ES" or syminfo.root == "MES")
 
 var array<line> drawnLines = array.new_line()
 var array<label> drawnLabels = array.new_label()
@@ -117,7 +119,7 @@ renderProfile(array<float> levels, array<float> gamma, int center, string headin
             label t = label.new(center, top + spacing, heading, xloc=xloc.bar_index, yloc=yloc.price, color=color.new(color.black, 50), textcolor=color.white, style=label.style_label_down, size=size.normal)
             array.push(drawnLabels, t)
 
-if barstate.islast
+if barstate.islast and validTicker
     for segment in drawnLines
         line.delete(segment)
     array.clear(drawnLines)
