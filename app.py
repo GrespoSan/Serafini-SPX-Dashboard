@@ -84,9 +84,9 @@ def describe_slot(slot):
     if name == '46 15 * * 1-5':
         return 'Pomeriggio 15:46'
     if name == '50 15 * * 1-5':
-        return 'Pomeriggio 15:50'
+        return 'Pomeriggio · 08:50 Chicago'
     if name == '30 20 * * 1-5':
-        return 'Sera 20:30'
+        return 'Sera · 13:30 Chicago'
     if name == '45 7 * * 1-5':
         return 'Recupero mattina 07:45'
     if name == '45 15 * * 1-5':
