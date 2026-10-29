@@ -109,6 +109,92 @@ def _recover_yahoo_5m_from_1m(target, bars, missing):
         return bars, []
 
 
+def _complete_higher_timeframe(target, five_minutes):
+    """Certifica gli estremi Asia con barre Yahoo reali 15m, poi 30m.
+
+    Usata soltanto quando manca almeno una 5m. Ogni barra deve essere presente
+    e chiusa, compresa quella che termina alle 09:00 Roma. Verifica anche che
+    massimo/minimo/close siano coerenti con le 5m effettivamente disponibili.
+    Non ricostruisce le candele 5m mancanti, né la cronologia C1/P1.
+    """
+    import yfinance as yf
+
+    start = datetime.combine(target, time(0, 0), ROME)
+    end = datetime.combine(target, time(9, 0), ROME)
+    observed_hi = pd.to_numeric(_column(five_minutes, "High"), errors="coerce")
+    observed_lo = pd.to_numeric(_column(five_minutes, "Low"), errors="coerce")
+    # La 5m delle 08:55 e' l'ultima barra, con close effettivo ore 09:00.
+    last_five = start + timedelta(hours=8, minutes=55)
+    observed_close = None
+    if last_five in five_minutes.index:
+        observed_close = float(pd.to_numeric(
+            _column(five_minutes, "Close"), errors="coerce").loc[last_five])
+
+    for interval, minutes in (("15m", 15), ("30m", 30)):
+        try:
+            raw = yf.download(
+                "ES=F", start=(target - timedelta(days=1)).isoformat(),
+                end=(target + timedelta(days=1)).isoformat(),
+                interval=interval, auto_adjust=False, progress=False,
+                threads=False, prepost=True,
+            )
+            if raw is None or raw.empty or raw.index.tz is None:
+                continue
+            raw = raw.copy()
+            raw.index = raw.index.tz_convert(ROME)
+            if raw.index.has_duplicates:
+                continue
+            expected = pd.date_range(start=start, end=end,
+                                     freq=f"{minutes}min", inclusive="left")
+            frame = pd.DataFrame({
+                field: pd.to_numeric(_column(raw, field), errors="coerce")
+                for field in ("Open", "High", "Low", "Close")
+            }, index=raw.index)
+            session = frame.loc[(frame.index >= start) & (frame.index < end)]
+            # Il timestamp di Yahoo e' l'APERTURA della barra: per certificare
+            # la chiusura delle 09:00 deve esserci anche l'ultima 08:45/08:30.
+            if not session.index.equals(expected):
+                continue
+            if session.isna().any().any() or not all(
+                math.isfinite(float(v)) and float(v) > 0
+                for v in session.to_numpy().flat
+            ):
+                continue
+            if ((session["High"] < session["Low"]) |
+                (session["Open"] > session["High"]) |
+                (session["Open"] < session["Low"]) |
+                (session["Close"] > session["High"]) |
+                (session["Close"] < session["Low"])).any():
+                continue
+            hi, lo, closing = (
+                float(session["High"].max()),
+                float(session["Low"].min()),
+                float(session["Close"].iloc[-1]),
+            )
+            if not observed_hi.empty and observed_hi.notna().all():
+                if hi < float(observed_hi.max()) - 0.25:
+                    continue
+            if not observed_lo.empty and observed_lo.notna().all():
+                if lo > float(observed_lo.min()) + 0.25:
+                    continue
+            if observed_close is not None and (
+                not math.isfinite(observed_close) or
+                abs(closing - observed_close) > 0.25
+            ):
+                continue
+            return {
+                "high": hi, "low": lo, "close": closing,
+                "bars": len(session), "expected": len(expected),
+                "source": (f"Yahoo Finance ES=F · {minutes} minuti "
+                           "· 00:00–09:00 Roma (copertura completa)"),
+                "resolution": f"{minutes}m",
+            }
+        except Exception:
+            # Se Yahoo non fornisce una catena 15m affidabile, prova 30m.
+            continue
+    return None
+
+
 @st.cache_data(ttl=120, max_entries=90, show_spinner=False)
 def asian_session(target: date):
     """Barre 5m [00:00,09:00) Roma; verifica integrita' e OHLC."""
@@ -138,14 +224,18 @@ def asian_session(target: date):
     missing = expected.difference(bars.index)
     extra = bars.index.difference(expected)
     original_missing = [t.strftime("%H:%M") for t in missing]
+    # Gli estremi non richiedono le singole 5m: prima verifica un aggregato
+    # COMPLETO 15m o 30m, solo se la cronologia 5m presenta una lacuna.
+    higher_range = (_complete_higher_timeframe(target, bars)
+                    if len(missing) and not len(extra) else None)
     yahoo_1m_recovered = []
-    if len(missing) and not len(extra):
+    if len(missing) and not len(extra) and higher_range is None:
         bars, yahoo_1m_recovered = _recover_yahoo_5m_from_1m(
             target, bars, missing)
         missing = expected.difference(bars.index)
         extra = bars.index.difference(expected)
-    # Una candela assente rimane assente se Yahoo 1m non la conferma.
-    # Nessun secondo feed non ufficiale o con dati ritardati.
+    # Una candela 5m assente NON viene mai inventata: la cronologia
+    # degli attraversamenti continua ad avere la lacuna effettiva.
     source = "Yahoo Finance ES=F · 5 minuti (integrazione 1m validata se disponibile)"
     recovered_times = list(yahoo_1m_recovered)
     # Fino a 3 lacune: rendi gli estremi PROVVISORI, non bloccare anche la chiusura.
@@ -154,7 +244,7 @@ def asian_session(target: date):
             f"Sessione incompleta: {len(bars)}/{len(expected)} barre; "
             f"{len(missing)} mancanti, {len(extra)} fuori griglia."
         )
-    if expected[-1] not in bars.index:
+    if expected[-1] not in bars.index and higher_range is None:
         raise ValueError("Manca la barra conclusiva 08:55–09:00: chiusura non verificabile.")
     # Le barre mancanti non consentono di certificare gli estremi di tutta la sessione.
     high = pd.to_numeric(_column(bars, "High"), errors="coerce")
@@ -168,10 +258,20 @@ def asian_session(target: date):
     if (high < low).any() or (close > high).any() or (close < low).any():
         raise ValueError("Barre OHLC incoerenti.")
     hi, lo, last = float(high.max()), float(low.min()), float(close.iloc[-1])
+    if higher_range is not None:
+        # Il range e' verificato dal timeframe completo. La cronologia delle
+        # chiusure C1/P1 resta invece a 5m, con lacune esplicitamente segnalate.
+        hi, lo, last = (higher_range[k] for k in ("high", "low", "close"))
+        source = higher_range["source"]
     return {
         "high": hi, "low": lo, "close": last,
-        "bars": len(bars), "expected": len(expected),
-        "missing_times": [t.strftime("%H:%M") for t in missing],
+        "bars": higher_range["bars"] if higher_range else len(bars),
+        "expected": higher_range["expected"] if higher_range else len(expected),
+        "missing_times": ([] if higher_range else
+                          [t.strftime("%H:%M") for t in missing]),
+        "timeline_missing_times": [t.strftime("%H:%M") for t in missing],
+        "timeline_bars": len(bars),
+        "timeline_expected": len(expected),
         "original_missing_times_yahoo": original_missing,
         "yahoo_1m_recovered_times": yahoo_1m_recovered,
         "recovered_times": recovered_times,
@@ -247,7 +347,7 @@ def level_events(result, level, name):
         elif a >= 0 > b:
             events.append(f"{name} perso al ribasso: chiusura {clock}")
     touched = any(row["low"] <= level <= row["high"] for row in rows)
-    recovered = rows[-1]["close"] > level
+    recovered = float(result["close"]) > level
     return events, touched, recovered
 
 
@@ -279,6 +379,12 @@ def render(target: date, c1_es, p1_es, level_context=None):
         )
     else:
         st.caption(f"{result['source']} · {result['bars']}/{result['expected']} barre verificate.")
+    if result.get("timeline_missing_times"):
+        st.caption("Cronologia attraversamenti a 5 minuti incompleta: "
+                   "manca la barra delle "
+                   + ", ".join(result["timeline_missing_times"])
+                   + ". Massimo, minimo e chiusura Asia restano verificati "
+                     "se il timeframe 15/30 minuti è completo.")
     if result.get("yahoo_1m_recovered_times"):
         st.caption(
             "Yahoo ES=F: candele 5m mancanti recuperate da cinque barre "
@@ -346,7 +452,7 @@ def render(target: date, c1_es, p1_es, level_context=None):
 
     st.markdown(f"**Posizione alle 09:00:** {zone}")
     st.markdown(f"**Andamento della sessione:** {behavior}" +
-                (" (provvisorio: barra mancante)" if result["missing_times"] else ""))
+                (" (cronologia 5m incompleta)" if result.get("timeline_missing_times") else ""))
     p1_events, _, _ = level_events(result, p1_es, "P1")
     c1_events, _, _ = level_events(result, c1_es, "C1")
     if price < p1_es:
@@ -387,15 +493,16 @@ def render(target: date, c1_es, p1_es, level_context=None):
         else:
             st.caption("Tra P1 e C1 si identifica soltanto una fascia di prezzo, "
                        "non il Gamma Flip matematico dei dealer.")
-        if result["missing_times"]:
-            st.caption("Massimo/minimo provvisori: le barre assenti possono "
-                       "modificare la lettura del percorso, non la chiusura delle 09:00.")
+        if result.get("timeline_missing_times"):
+            st.caption("La cronologia a 5 minuti potrebbe essere incompleta "
+                       "vicino alle barre mancanti; gli estremi Asia rimangono "
+                       "verificati soltanto se è completo il timeframe di riferimento.")
     if relevant:
         st.caption("Ultimo attraversamento confermato (chiusure 5m): " +
                    relevant[-1] + ".")
-    if result["missing_times"]:
-        st.caption("La posizione delle 09:00 è confermata dalla barra finale; "
-                   "la cronologia può essere incompleta per la barra mancante.")
+    if result.get("timeline_missing_times"):
+        st.caption("La posizione delle 09:00 è confermata dal timeframe completo; "
+                   "gli attraversamenti vicini alle barre 5m mancanti non sono verificabili.")
     with st.expander("Cronologia attraversamenti C1 / P1 (chiusure 5 minuti)", expanded=False):
         for name, level in (("P1", p1_es), ("C1", c1_es)):
             events, touched, recovered = level_events(result, level, name)
@@ -410,7 +517,7 @@ def render(target: date, c1_es, p1_es, level_context=None):
                            "confermato dalle chiusure consecutive.")
             st.caption("Alle 09:00: " + ("sopra il livello (recuperato/tenuto)" if recovered
                                        else "al livello o sotto il livello") +
-                       ". Le transizioni vicine a eventuali barre mancanti non sono verificabili.")
+                       ". Le transizioni vicine a eventuali barre 5m mancanti non sono verificabili.")
     st.caption("Confronto con candidati C1/P1 sperimentali: "
                "non è una misura diretta del gamma dei dealer.")
 
