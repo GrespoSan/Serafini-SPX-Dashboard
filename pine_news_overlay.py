@@ -33,7 +33,7 @@ def append_news(script, events):
         '    for lb in macroNewsLabels',
         '        label.delete(lb)',
         '    array.clear(macroNewsLabels)',
-        '    if showMacroNews and timeframe.isintraday',
+        '    if showMacroNews and validTicker and timeframe.isintraday',
     ]
     for index, (key, rows) in enumerate(sorted(unique.items())[:12]):
         y, mo, d, hh, mm = key
