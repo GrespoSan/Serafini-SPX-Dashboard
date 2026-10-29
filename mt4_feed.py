@@ -23,7 +23,10 @@ from es_spx_basis import download_and_calculate
 ROME = ZoneInfo('Europe/Rome')
 
 
-def build_feed(store, day, basis_result):
+def build_feed(store, day, basis_result, mode="Replay"):
+    """Replay predefinito: ultimo frame disponibile; Ufficiale: soli 07:30/15:50/20:30."""
+    if mode not in ("Replay", "Ufficiale"):
+        raise ValueError(f"Modalita feed MT4 sconosciuta: {mode}")
     basis_raw = float(basis_result['basis'])
     if not math.isfinite(basis_raw):
         raise ValueError('Differenziale automatico ES-SPX non valido')
@@ -33,9 +36,15 @@ def build_feed(store, day, basis_result):
     iso = day.isocalendar()
     week = f'{iso.year}-W{iso.week:02d}'
     logs = store.list(f'{week}/logs/')
-    frames = _study_frames(store, week, day)
-    # Official frames take precedence for the same slot, exactly as in REPLAY.
-    frames.update(_official_frames(store, week, day, logs))
+    official = _official_frames(store, week, day, logs)
+    if mode == "Ufficiale":
+        # Solo i rilevamenti ufficiali come il Pine della Dashboard.
+        frames = official
+    else:
+        # Comportamento preesistente: ultimo Replay, incluse le acquisizioni ufficiali.
+        frames = _study_frames(store, week, day)
+        # Official frames take precedence for the same slot, exactly as in REPLAY.
+        frames.update(official)
     candidates = []
     for slot, frame in frames.items():
         clock = frame.get('clock', '')
@@ -51,12 +60,13 @@ def build_feed(store, day, basis_result):
         if downloaded <= datetime.now(ROME):
             candidates.append((downloaded, slot, frame))
     if not candidates:
-        raise ValueError('Nessun frame REPLAY valido disponibile per oggi')
+        raise ValueError(f'Nessun frame {mode} valido disponibile per oggi')
     _, slot, frame = max(candidates, key=lambda t: t[0])
     writer_io = io.StringIO(newline='')
     out = csv.writer(writer_io, lineterminator='\n')
     meta = [
         ('schema', 'serafini_mt4_v3'),
+        ('mode', mode),
         ('date_rome', day.isoformat()),
         ('slot_rome', slot),
         ('download_clock_rome', frame['clock']),
@@ -87,8 +97,10 @@ def build_feed(store, day, basis_result):
     return writer_io.getvalue().encode('utf-8')
 
 
-def publish_levels(data, url, secret, bucket='spx-snapshots'):
-    endpoint = f"{url.rstrip('/')}/storage/v1/object/{quote(bucket,safe='')}/mt4/latest.csv"
+def publish_levels(data, url, secret, bucket='spx-snapshots', target='mt4/latest.csv'):
+    if target not in ('mt4/latest.csv', 'mt4/official.csv'):
+        raise ValueError('Destinazione MT4 non consentita')
+    endpoint = f"{url.rstrip('/')}/storage/v1/object/{quote(bucket,safe='')}/{target}"
     headers = {'apikey': secret, 'Authorization': f'Bearer {secret}',
                'Content-Type': 'text/csv', 'x-upsert': 'true',
                'cache-control': 'no-store'}
@@ -109,10 +121,17 @@ def main():
     store = Store(url, key, os.environ.get('SUPABASE_BUCKET', 'spx-snapshots'))
     # The exact existing automatic ES-SPX function, not a parallel conversion.
     basis_result = download_and_calculate(day)
-    data = build_feed(store, day, basis_result)
-    sha = publish_levels(data, url, key,
-                         os.environ.get('SUPABASE_BUCKET', 'spx-snapshots'))
-    print(f'MT4 feed published for {day}: SHA256={sha[:12]}')
+    bucket = os.environ.get('SUPABASE_BUCKET', 'spx-snapshots')
+    # Replay resta il feed di default e conserva ESATTAMENTE l'URL precedente.
+    data_replay = build_feed(store, day, basis_result, mode='Replay')
+    sha_replay = publish_levels(data_replay, url, key, bucket,
+                                target='mt4/latest.csv')
+    print(f'MT4 Replay (DEFAULT) for {day}: SHA256={sha_replay[:12]}')
+    # Secondo feed indipendente; la sua assenza non sostituisce il Replay.
+    data_official = build_feed(store, day, basis_result, mode='Ufficiale')
+    sha_official = publish_levels(data_official, url, key, bucket,
+                                  target='mt4/official.csv')
+    print(f'MT4 Ufficiale for {day}: SHA256={sha_official[:12]}')
 
 
 if __name__ == '__main__':
