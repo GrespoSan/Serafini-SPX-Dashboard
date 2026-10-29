@@ -380,12 +380,6 @@ def render(target: date, c1_es, p1_es, level_context=None):
         )
     else:
         st.caption(f"{result['source']} · {result['bars']}/{result['expected']} barre verificate.")
-    if result.get("timeline_missing_times"):
-        st.caption("Cronologia attraversamenti a 5 minuti incompleta: "
-                   "manca la barra delle "
-                   + ", ".join(result["timeline_missing_times"])
-                   + ". Gli attraversamenti vicini alla lacuna non sono "
-                     "confermabili con precisione a 5 minuti.")
     if result.get("yahoo_1m_recovered_times"):
         st.caption(
             "Yahoo ES=F: candele 5m mancanti recuperate da cinque barre "
