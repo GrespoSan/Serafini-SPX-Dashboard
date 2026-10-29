@@ -101,78 +101,73 @@ def _transition_summary(rows, direction):
     return 'Nessun cambio di segno nella zona.'
 
 
-def _acquisition_label(store, week, logs, file_name):
-    """L'etichetta usa esclusivamente il registro del download, NON il timestamp Cboe.
+@st.cache_data(ttl=120, max_entries=36, show_spinner=False)
+def _snapshot_log_index(week, log_names, _store):
+    """Un solo passaggio sui log Supabase per TUTTE le fotografie.
 
-    Nessun orario viene inferito dal timestamp sorgente, che non dichiara il fuso.
+    Prima, le due funzioni di etichetta scaricavano ogni log per ogni
+    fotografia (O(snapshot * log)). Ora i log sono letti una sola volta;
+    la cache si invalida se appare un nuovo log e dopo massimo 120 s.
+    Le regole di scelta dell'ora (primo download valido) restano identiche.
     """
-    path = f'{week}/snapshots/{file_name}'
-    matching = []
-    for entry in logs:
+    rome=ZoneInfo('Europe/Rome')
+    earliest={}
+    for log_name in log_names:
         try:
-            item = json.loads(store.download(f"{week}/logs/{entry['name']}"))
-            if item.get('file') != path or item.get('status') not in ('NUOVO', 'INVARIATO'):
+            item=json.loads(_store.download(f'{week}/logs/{log_name}'))
+            if item.get('status') not in ('NUOVO','INVARIATO'):
                 continue
-            downloaded = item.get('download_rome') or item.get('download_utc')
-            if not downloaded:
+            file_path=str(item.get('file') or '')
+            if not file_path.startswith(f'{week}/snapshots/'):
                 continue
-            dt = datetime.fromisoformat(str(downloaded).replace('Z', '+00:00'))
+            raw=item.get('download_rome') or item.get('download_utc')
+            if not raw:
+                continue
+            dt=datetime.fromisoformat(str(raw).replace('Z','+00:00'))
             if dt.tzinfo is None:
                 continue
-            dt = dt.astimezone(ZoneInfo('Europe/Rome'))
-            slot = str(item.get('scheduled_slot', '')).strip()
-            if slot == '30 7 * * 1-5':
-                label = 'Mattina 07:30'
-            elif slot == '46 15 * * 1-5':
-                label = 'Pomeriggio 15:46'
-            elif slot == '50 15 * * 1-5':
-                label = 'Pomeriggio · 08:50 Chicago'
-            elif slot == '30 20 * * 1-5':
-                label = 'Sera · 13:30 Chicago'
-            elif slot == '30 13 * * 1-5':
-                label = '13:30 (studio storico)'
-            elif slot == '30 15 * * 1-5':
-                label = 'Pomeriggio 15:30 (storico)'
-            elif slot == '45 7 * * 1-5':
-                label = 'Recupero mattina 07:45'
-            elif slot == '45 15 * * 1-5':
-                label = 'Recupero pomeriggio 15:45'
-            elif slot.lower() in ('', 'manuale', 'manual', 'test', 'workflow_dispatch'):
-                label = f'Manuale {dt:%H:%M}'
-            else:
-                label = f'Download {dt:%H:%M}'
-            matching.append((dt, label))
+            dt=dt.astimezone(rome)
+            if file_path not in earliest or dt < earliest[file_path][0]:
+                earliest[file_path]=(dt, str(item.get('scheduled_slot','')).strip())
         except (KeyError, TypeError, ValueError, OverflowError, OSError, RuntimeError):
             continue
-    if not matching:
-        return 'Rilevamento non identificato'
-    # Quando lo stesso file appare in più log, preferire il primo download effettivo.
-    return min(matching, key=lambda r: r[0])[1]
+    result={}
+    for path, (dt,slot) in earliest.items():
+        if slot == '30 7 * * 1-5':
+            label='Mattina 07:30'
+        elif slot == '46 15 * * 1-5':
+            label='Pomeriggio 15:46'
+        elif slot == '50 15 * * 1-5':
+            label='Pomeriggio · 08:50 Chicago'
+        elif slot == '30 20 * * 1-5':
+            label='Sera · 13:30 Chicago'
+        elif slot == '30 13 * * 1-5':
+            label='13:30 (studio storico)'
+        elif slot == '30 15 * * 1-5':
+            label='Pomeriggio 15:30 (storico)'
+        elif slot == '45 7 * * 1-5':
+            label='Recupero mattina 07:45'
+        elif slot == '45 15 * * 1-5':
+            label='Recupero pomeriggio 15:45'
+        elif slot.lower() in ('','manuale','manual','test','workflow_dispatch'):
+            label=f'Manuale {dt:%H:%M}'
+        else:
+            label=f'Download {dt:%H:%M}'
+        result[path]=(label,dt.strftime('%H:%M'))
+    return result
 
+
+def _acquisition_label(store, week, logs, file_name):
+    """Etichetta dal PRIMO registro valido, mai dal timestamp Cboe."""
+    idx=_snapshot_log_index(week,tuple(x['name'] for x in logs),store)
+    return idx.get(f'{week}/snapshots/{file_name}',
+                   ('Rilevamento non identificato',None))[0]
 
 
 def _snapshot_download_clock(store, week, logs, file_name):
-    """Ora effettiva di download a Roma dai log; NON dal timestamp Cboe.
-
-    Restituisce None se il file non ha registri attendibili.
-    """
-    expected_path = f'{week}/snapshots/{file_name}'
-    clock_times = []
-    for entry in logs:
-        try:
-            item = json.loads(store.download(f"{week}/logs/{entry['name']}"))
-            if item.get('file') != expected_path or item.get('status') not in ('NUOVO', 'INVARIATO'):
-                continue
-            raw = item.get('download_rome') or item.get('download_utc')
-            if not raw:
-                continue
-            stamp = datetime.fromisoformat(str(raw).replace('Z', '+00:00'))
-            if stamp.tzinfo is None:
-                continue
-            clock_times.append(stamp.astimezone(ZoneInfo('Europe/Rome')))
-        except (ValueError, TypeError, KeyError, OverflowError, OSError, RuntimeError):
-            continue
-    return min(clock_times).strftime('%H:%M') if clock_times else None
+    """Orario di download a Roma; stessa cache per tutta la settimana."""
+    idx=_snapshot_log_index(week,tuple(x['name'] for x in logs),store)
+    return idx.get(f'{week}/snapshots/{file_name}',(None,None))[1]
 
 
 @st.cache_data(ttl=300, show_spinner=False, max_entries=32)
