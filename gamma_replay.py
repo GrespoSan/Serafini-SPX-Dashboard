@@ -137,7 +137,7 @@ def _study_frames(store, week, day):
 
 def render(store, week, logs, view_mode=None):
     st.subheader("Replay / History — evoluzione NET GAMMA")
-    st.caption("Ufficiali: 07:30, 15:50 e 20:30 Roma. "
+    st.caption("Ufficiali: 07:30 Roma; 08:50 e 13:30 Chicago (ora Roma indicata per ogni frame). "
                "13:30 e altri orari: studio intraday compatto (circa 30 giorni). "
                "Le vecchie catene complete delle 13:30 restano leggibili come storico.")
     iso_year, iso_week = map(int, week.split("-W"))
