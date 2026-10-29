@@ -197,7 +197,7 @@ def _complete_higher_timeframe(target, five_minutes):
 
 @st.cache_data(ttl=120, max_entries=90, show_spinner=False)
 def asian_session(target: date):
-    """Barre 5m [00:00,09:00) Roma; verifica integrita' e OHLC."""
+    """5m per cronologia C1/P1; 15m/30m completi certificano gli estremi se manca una 5m."""
     import yfinance as yf
 
     now = datetime.now(ROME)
@@ -239,7 +239,8 @@ def asian_session(target: date):
     source = "Yahoo Finance ES=F · 5 minuti (integrazione 1m validata se disponibile)"
     recovered_times = list(yahoo_1m_recovered)
     # Fino a 3 lacune: rendi gli estremi PROVVISORI, non bloccare anche la chiusura.
-    if len(extra) or len(missing) > 3 or len(bars) < len(expected) - 3:
+    if len(extra) or (higher_range is None and
+                      (len(missing) > 3 or len(bars) < len(expected) - 3)):
         raise ValueError(
             f"Sessione incompleta: {len(bars)}/{len(expected)} barre; "
             f"{len(missing)} mancanti, {len(extra)} fuori griglia."
@@ -383,8 +384,8 @@ def render(target: date, c1_es, p1_es, level_context=None):
         st.caption("Cronologia attraversamenti a 5 minuti incompleta: "
                    "manca la barra delle "
                    + ", ".join(result["timeline_missing_times"])
-                   + ". Massimo, minimo e chiusura Asia restano verificati "
-                     "se il timeframe 15/30 minuti è completo.")
+                   + ". Gli attraversamenti vicini alla lacuna non sono "
+                     "confermabili con precisione a 5 minuti.")
     if result.get("yahoo_1m_recovered_times"):
         st.caption(
             "Yahoo ES=F: candele 5m mancanti recuperate da cinque barre "
@@ -495,14 +496,15 @@ def render(target: date, c1_es, p1_es, level_context=None):
                        "non il Gamma Flip matematico dei dealer.")
         if result.get("timeline_missing_times"):
             st.caption("La cronologia a 5 minuti potrebbe essere incompleta "
-                       "vicino alle barre mancanti; gli estremi Asia rimangono "
-                       "verificati soltanto se è completo il timeframe di riferimento.")
+                       "vicino alle barre mancanti; questo non cambia la "
+                       "verifica autonoma di massimo e minimo Asia.")
     if relevant:
         st.caption("Ultimo attraversamento confermato (chiusure 5m): " +
                    relevant[-1] + ".")
     if result.get("timeline_missing_times"):
-        st.caption("La posizione delle 09:00 è confermata dal timeframe completo; "
-                   "gli attraversamenti vicini alle barre 5m mancanti non sono verificabili.")
+        st.caption("La posizione delle 09:00 è ricavata dalla barra finale "
+                   "verificata; gli attraversamenti vicini alle barre 5m "
+                   "mancanti non sono verificabili.")
     with st.expander("Cronologia attraversamenti C1 / P1 (chiusure 5 minuti)", expanded=False):
         for name, level in (("P1", p1_es), ("C1", c1_es)):
             events, touched, recovered = level_events(result, level, name)
