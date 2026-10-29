@@ -126,9 +126,9 @@ def _acquisition_label(store, week, logs, file_name):
             elif slot == '46 15 * * 1-5':
                 label = 'Pomeriggio 15:46'
             elif slot == '50 15 * * 1-5':
-                label = 'Pomeriggio 15:50'
+                label = 'Pomeriggio · 08:50 Chicago'
             elif slot == '30 20 * * 1-5':
-                label = 'Sera 20:30'
+                label = 'Sera · 13:30 Chicago'
             elif slot == '30 13 * * 1-5':
                 label = '13:30 (studio storico)'
             elif slot == '30 15 * * 1-5':
