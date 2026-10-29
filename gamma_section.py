@@ -1210,6 +1210,7 @@ def render(store, week, snaps, logs):
                 disabled=script is None,
                 help=description if script else export_issues.get(
                     slot, 'Necessario il differenziale ES-SPX'),
+                on_click="ignore",
             )
             st.caption(description)
     if scripts:
