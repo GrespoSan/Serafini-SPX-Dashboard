@@ -185,6 +185,8 @@ def show(week, store, logs=None):
                 return
         except Exception as err:
             st.error("Impossibile verificare la fotografia Serafini: "+str(err));return
+        st.markdown(f"**Fotografia Cboe ore {reading_clock} Roma**" if reading_clock else
+                    "**Fotografia Cboe — orario del download non disponibile**")
         price=float(e["spot_spx"])+shift
         p=st.columns(5)
         p[0].metric("Spot ES equivalente",f"{price:,.2f}")
