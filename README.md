@@ -19,6 +19,37 @@ FRIENDS_PASSWORD = "PASSWORD_FORTE_DIVERSA_PER_GLI_AMICI"
 **Non inviare le password o le chiavi nella chat.** I Secrets di Streamlit sono distinti dai Secrets di GitHub Actions: vanno configurati entrambi nei rispettivi servizi.
 5. Deploy. Verifica l'accesso lettore e amministratore: entrambi possono consultare RILEVAMENTI CBOE; soltanto l'amministratore puo' richiedere acquisizioni supplementari.
 
+## Massive Futures · range e andamento della seduta precedente
+
+**Solo due dati** usano ora Massive: il Range Daily High−Low e la
+variazione Close/Close del future ES. Entrambi vengono ricavati dalle
+stesse barre `1session` per il contratto reale scelto, usando il campo
+`close` dell'ultimo trade, **non `settlement_price`**.
+
+La scheda ha il titolo **Andamento e volatilità — seduta precedente**,
+con una riga chiaramente etichettata "Variazione chiusura della seduta
+(Close/Close)" verde/rossa. Il Range Daily percentuale rimane neutro.
+La curva VX e i dati Cboe delle opzioni SPX non cambiano; i grafici
+e le strategie NET GAMMA rimangono invariati.
+
+Aggiungere ai **Secrets Streamlit della Serafini SPX**:
+
+```toml
+MASSIVE_API_KEY = "CHIAVE_API_PERSONALE_DA_MASSIVE"
+MASSIVE_ES_CONTRACT = "ESZ6"
+```
+
+`ESZ6` è un esempio per ottobre 2026: aggiornare il contratto alla
+scadenza realmente visualizzata su TradingView ES1! al cambio di
+contratto. Senza chiave e contratto la scheda Daily indica N/D e non
+ripiega silenziosamente su Yahoo. I dati VX e la gestione delle
+fotografie SPX restano indipendenti.
+
+La connessione Massive in ChatGPT non trasmette automaticamente
+una API key alla tua app Streamlit. La tua API key dev'essere
+abilitata agli **aggregati Futures**. Non pubblicarla su GitHub,
+nel codice o in chat.
+
 ## Sicurezza (leggere)
 - Il repository dell'interfaccia è **pubblico**, ma gli snapshot restano in un bucket Supabase **privato**. I Secrets sono lato server.
 - Password condivise NON identificano individualmente gli amici. La protezione da tentativi ripetuti è **solo basilare** e non efficace contro attacchi distribuiti; per un gruppo ampio o dati sensibili preferire Supabase Auth/login individuali.
