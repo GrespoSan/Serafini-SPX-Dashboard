@@ -19,6 +19,21 @@ FRIENDS_PASSWORD = "PASSWORD_FORTE_DIVERSA_PER_GLI_AMICI"
 **Non inviare le password o le chiavi nella chat.** I Secrets di Streamlit sono distinti dai Secrets di GitHub Actions: vanno configurati entrambi nei rispettivi servizi.
 5. Deploy. Verifica l'accesso lettore e amministratore: entrambi possono consultare RILEVAMENTI CBOE; soltanto l'amministratore puo' richiedere acquisizioni supplementari.
 
+## Regime di volatilità · chiarimento Serafini 30/10/2026
+
+La condizione di alta volatilità da ribasso è una variazione **Close/Close
+strettamente inferiore a −1%** della seduta precedente. Il buffer indicativo
+della SPX è 15 punti se questa condizione è vera **oppure** il VX mensile è
+in backwardation; se entrambe le fonti sono presenti e nessuna delle due
+condizioni è vera, è 10 punti. Con dati insufficienti, il buffer rimane N/D.
+
+Il **Range Daily** non determina più il buffer. Serve a osservare
+l'**ESPANSIONE / COMPRESSIONE** confrontando (High−Low)/Close della seduta
+precedente con la stessa misura della seduta ancora precedente, usando
+lo stesso ES Massive. L'etichetta della scheda mostra sia il Range Daily
+attuale sia il confronto. La variazione Close/Close negativa e la misura
+del range sono indipendenti.
+
 ## Massive Futures · range e andamento della seduta precedente
 
 **Solo due dati** usano ora Massive: il Range Daily High−Low e la
