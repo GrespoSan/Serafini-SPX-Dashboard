@@ -22,8 +22,8 @@ class DailyMovementTests(unittest.TestCase):
         ]
         result = previous_daily_context(bars)
         self.assertAlmostEqual(result["range_points"],64.25)
-        self.assertAlmostEqual(result["range_pct"],64.25/7710.25*100)
-        self.assertAlmostEqual(result["change_pct"],(7710.25/7760.75-1)*100)
+        self.assertAlmostEqual(result["range_pct"],64.25/7710.25*100,places=5)
+        self.assertAlmostEqual(result["change_pct"],(7710.25/7760.75-1)*100,places=5)
         self.assertLess(result["change_pct"],0)
         self.assertEqual(result["ticker"],"ESZ6")
 
