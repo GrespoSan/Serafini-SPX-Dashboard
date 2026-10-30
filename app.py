@@ -228,17 +228,33 @@ with st.expander('ANALISI DEL CONTESTO — News · Volatilità · Trend Daily',
     render_macro_calendar()
     st.divider()
     from vix_regime import render as render_vix_context
+    # One Massive source/session feeds both the volatility card and Trend Daily.
+    trend_day = context_day or datetime.now(ZoneInfo('Europe/Rome')).date()
+    es_daily_context = None
+    daily_error = None
     if context_day is not None:
         try:
-            render_vix_context(context_day)
+            context_data = render_vix_context(context_day, return_context=True)
+            es_daily_context = context_data.get('previous_daily_range')
         except Exception:
             st.info('Il quadro VIX non è disponibile per la giornata selezionata.')
+            daily_error = 'Quadro giornaliero SPX temporaneamente non disponibile.'
     else:
-        st.markdown('#### Volatilità — seduta precedente (N/D)')
+        st.markdown('#### Andamento e volatilità — seduta precedente (N/D)')
         st.info('Seleziona una settimana con snapshot Cboe validi per analizzare il VIX.')
+        # The Trend Daily remains accessible even without a Cboe snapshot.
+        try:
+            from daily_volatility import previous_es_daily_range
+            es_daily_context = previous_es_daily_range(trend_day)
+        except Exception:
+            daily_error = 'Massive ES non disponibile: verificare Secrets e contratto.'
     st.divider()
     from trend_daily_section import render as render_trend_daily
-    render_trend_daily(reference_day=context_day)
+    es_daily_context = es_daily_context or {}
+    render_trend_daily(reference_day=trend_day,
+                       daily_bars=es_daily_context.get('daily_bars'),
+                       contract=es_daily_context.get('ticker'),
+                       daily_error=daily_error)
 
 
 # Calcolo di sola lettura, anche per il ruolo amici. Nessuna cancellazione qui.
