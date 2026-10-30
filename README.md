@@ -17,7 +17,7 @@ FRIENDS_PASSWORD = "PASSWORD_FORTE_DIVERSA_PER_GLI_AMICI"
 ```
 
 **Non inviare le password o le chiavi nella chat.** I Secrets di Streamlit sono distinti dai Secrets di GitHub Actions: vanno configurati entrambi nei rispettivi servizi.
-5. Deploy. Verifica l'accesso lettore e amministratore; i rilevamenti Cboe e l'acquisizione supplementare sono visibili soltanto all'amministratore.
+5. Deploy. Verifica l'accesso lettore e amministratore: entrambi possono consultare RILEVAMENTI CBOE; soltanto l'amministratore puo' richiedere acquisizioni supplementari.
 
 ## Sicurezza (leggere)
 - Il repository dell'interfaccia è **pubblico**, ma gli snapshot restano in un bucket Supabase **privato**. I Secrets sono lato server.
@@ -29,7 +29,7 @@ FRIENDS_PASSWORD = "PASSWORD_FORTE_DIVERSA_PER_GLI_AMICI"
 
 ## Aggiornamento v3 — NET GAMMA in verifica
 
-La dashboard conserva il login amministratore/amici, i grafici NET GAMMA 0DTE/Weekly, il confronto GEX, il Replay e il report AI. Il pannello **RILEVAMENTI CBOE** si trova **all'interno di ANALISI NET GAMMA**: è chiuso inizialmente, riservato all'amministratore e non scarica i registri finché non viene aperto.
+La dashboard conserva il login amministratore/amici, i grafici NET GAMMA 0DTE/Weekly, il confronto GEX, il Replay e il report AI. Il pannello **RILEVAMENTI CBOE** si trova **all'interno di ANALISI NET GAMMA**: è chiuso inizialmente, accessibile sia all'amministratore sia al lettore, e non scarica i registri finché non viene aperto. Il pulsante per avviare acquisizioni manuali resta riservato all'amministratore.
 
 * `net_gamma.py`: parsing SPX/SPXW OCC, formula slide 132: `(OI_CALL + VOL_CALL)*GAMMA_CALL - (OI_PUT + VOL_PUT)*GAMMA_PUT` per strike.
 * `gamma_section.py`: scelta dello snapshot, riferimento alla chiusura SPX precedente, differenziale ES−SPX manuale facoltativo, profili 0DTE e venerdì settimanale separati, tabella e CSV.
