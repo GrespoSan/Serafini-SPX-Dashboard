@@ -68,7 +68,7 @@ indicator("Serafini SPX NET GAMMA | {date_text}{tag}", overlay=true, max_lines_c
 
 gammaPerCandle = input.float({default_scale:.1f}, "Scala MANUALE · Gamma/barra", minval=0.1, step=0.1, tooltip="Sempre applicata esattamente come impostata. Se troppo bassa, il grafico segnala di aumentarla: nessuna modifica automatica.")
 offsetOdte = input.int(60, "Distanza 0DTE da ultima candela", minval=45, maxval=170)
-offsetWeekly = input.int(160, "Distanza Weekly da ultima candela", minval=55, maxval=300)
+offsetWeekly = input.int(100, "Distanza Weekly dalle 0DTE", minval=20, maxval=300)
 positiveColor = input.color(color.rgb(0, 230, 117), "NET GAMMA positivo")
 negativeColor = input.color(color.rgb(242, 54, 69), "NET GAMMA negativo")
 showTitles = input.bool(true, "Mostra intestazioni")
@@ -128,11 +128,12 @@ if barstate.islast and validTicker
     array.clear(drawnLabels)
     float actualScale = gammaPerCandle
     bool adjusted = false
-    float minimumSafe = math.max(requiredScale(odteValues, offsetOdte), requiredScale(weeklyValues, offsetWeekly))
+    int weeklyCenter = offsetOdte + offsetWeekly
+    float minimumSafe = math.max(requiredScale(odteValues, offsetOdte), requiredScale(weeklyValues, weeklyCenter))
     if actualScale + 0.000001 < minimumSafe
         label warningLabel = label.new(bar_index + 10, close, "Scala manuale troppo piccola per TradingView. Imposta almeno " + str.tostring(math.ceil(minimumSafe * 10) / 10.0, "#.0") + " G/bar", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.new(color.orange, 15), textcolor=color.black, size=size.small)
         array.push(drawnLabels, warningLabel)
     else
         renderProfile(odteLevels, odteValues, bar_index + offsetOdte, "0DTE 07:30", actualScale, adjusted)
-        renderProfile(weeklyLevels, weeklyValues, bar_index + offsetWeekly, "Weekly 07:30", actualScale, adjusted)
+        renderProfile(weeklyLevels, weeklyValues, bar_index + weeklyCenter, "Weekly 07:30", actualScale, adjusted)
 '''
