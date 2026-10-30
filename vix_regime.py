@@ -185,25 +185,6 @@ def volatility_context(target_day):
             "breakout_buffer": decision}
 
 
-def range_percentage_html(pct):
-    """Color only the Daily range percentage; retain the original calculation.
-
-    High-Low/Close is ordinarily nonnegative, so a red value cannot express
-    a bearish trading day. A negative input is colored red defensively.
-    """
-    from html import escape
-    if pct is None:
-        return '<span class="range-percent-neutral">Non disponibile</span>'
-    pct = float(pct)
-    import math
-    if not math.isfinite(pct):
-        return '<span class="range-percent-neutral">Non disponibile</span>'
-    cls = ("range-percent-positive" if pct > 0 else
-           "range-percent-negative" if pct < 0 else "range-percent-neutral")
-    displayed = f"{pct:.2f}".replace(".", ",")
-    return f'<span class="{cls}">{escape(displayed)}%</span>'
-
-
 def render(target_day):
     """Riquadro compatto come riferimento grafico condiviso, VX+Daily."""
     from html import escape
@@ -220,14 +201,11 @@ def render(target_day):
             f"{int(round(raw_range))}" if abs(raw_range - round(raw_range)) < 0.005
             else f"{raw_range:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         )
-        # Keep High−Low/Close unchanged. Color only the percent portion.
-        daily_value_html = (
-            f"{escape(range_value)} pt · "
-            f"{range_percentage_html(daily['range_pct'])}"
-        )
+        range_pct = f"{daily['range_pct']:.2f}".replace(".", ",")
+        daily_value = f"{range_value} pt · {range_pct}%"
         daily_date = daily["day"]
     else:
-        daily_value_html, daily_date = "Non disponibile", "—"
+        daily_value, daily_date = "Non disponibile", "—"
     if vx_ok:
         regime = vx["regime"].capitalize()
         vx_value = f"{regime} ({pct:+.2f}%)".replace(".", ",")
@@ -254,9 +232,6 @@ def render(target_day):
 .spx-vol-kpi:first-child {{padding-left:0; border-left:0;}}
 .spx-vol-kpi .label {{font-size:.82rem; color:#b6bcc5; margin-bottom:5px;}}
 .spx-vol-kpi .number {{font-size:1.15rem; font-weight:740; overflow-wrap:anywhere;}}
-.spx-vol-kpi .range-percent-positive {{color:#56d49e;}}
-.spx-vol-kpi .range-percent-negative {{color:#ff676d;}}
-.spx-vol-kpi .range-percent-neutral {{color:#f4f5f6;}}
 .spx-vol-kpi .buffer {{color:{highlight}; font-size:1.3rem;}}
 .spx-vol-foot {{
   border-top:1px solid #292b30; padding-top:9px; margin-top:12px;
@@ -272,7 +247,7 @@ def render(target_day):
   <div class="spx-vol-grid">
     <div class="spx-vol-kpi">
       <div class="label">Range Daily precedente</div>
-      <div class="number">{daily_value_html}</div>
+      <div class="number">{escape(daily_value)}</div>
     </div>
     <div class="spx-vol-kpi">
       <div class="label">Regime VX precedente</div>
