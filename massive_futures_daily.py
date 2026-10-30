@@ -43,11 +43,15 @@ def parse_session(raw, ticker):
         raise MassiveSourceError("Barra sessione Massive incompleta.") from exc
     if high < low or close > high or close < low:
         raise MassiveSourceError("OHLC fuori range: impossibile validare.")
-    return {"day": trading_date, "hi": high, "lo": low, "close": close,
-            "ticker": ticker, "settlement_price": raw.get("settlement_price")}
+    opening = None if raw.get("open") is None else _value(raw["open"])
+    if opening is not None and not low <= opening <= high:
+        raise MassiveSourceError("Open futures fuori dal range di sessione.")
+    return {"day": trading_date, "open": opening, "hi": high, "lo": low,
+            "close": close, "ticker": ticker,
+            "settlement_price": raw.get("settlement_price")}
 
 
-def previous_sessions(ticker, target_day, api_key, *, get=None):
+def previous_sessions(ticker, target_day, api_key, *, get=None, history_days=19):
     """Return chronological 1session bars before target_day, on SAME contract.
 
     Two most recent eligible trading dates are needed for change%. They
@@ -61,7 +65,9 @@ def previous_sessions(ticker, target_day, api_key, *, get=None):
         raise MassiveSourceError("Specificare un contratto reale (es. CLZ6), non CL1!.")
     if not str(api_key or "").strip():
         raise MassiveSourceError("MASSIVE_API_KEY non configurata in Streamlit Secrets.")
-    begin = target_day - timedelta(days=19)
+    if not isinstance(history_days, int) or not 14 <= history_days <= 180:
+        raise MassiveSourceError("Finestra storica non valida (14–180 giorni).")
+    begin = target_day - timedelta(days=history_days)
     end = target_day - timedelta(days=1)
     requester = get or requests.get
     try:
@@ -70,7 +76,7 @@ def previous_sessions(ticker, target_day, api_key, *, get=None):
             params={"resolution": "1session",
                     "window_start.gte": begin.isoformat(),
                     "window_start.lte": end.isoformat(),
-                    "sort": "window_start.asc", "limit": 50},
+                    "sort": "window_start.asc", "limit": 250},
             headers={"Authorization": "Bearer " + api_key,
                      "Accept": "application/json"},
             timeout=(6, 18),
