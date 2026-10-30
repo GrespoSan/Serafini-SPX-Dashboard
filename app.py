@@ -227,7 +227,6 @@ with st.expander('ANALISI DEL CONTESTO — News · Volatilità · Trend Daily',
     from macro_calendar import render as render_macro_calendar
     render_macro_calendar()
     st.divider()
-    st.markdown('#### Volatilità — seduta precedente')
     from vix_regime import render as render_vix_context
     if context_day is not None:
         try:
@@ -235,6 +234,7 @@ with st.expander('ANALISI DEL CONTESTO — News · Volatilità · Trend Daily',
         except Exception:
             st.info('Il quadro VIX non è disponibile per la giornata selezionata.')
     else:
+        st.markdown('#### Volatilità — seduta precedente (N/D)')
         st.info('Seleziona una settimana con snapshot Cboe validi per analizzare il VIX.')
     st.divider()
     from trend_daily_section import render as render_trend_daily
