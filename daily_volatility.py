@@ -16,7 +16,11 @@ from massive_futures_daily import (
 
 @st.cache_data(ttl=3600, max_entries=80, show_spinner=False)
 def _fetch_massive_es(target_day: date, ticker: str, key: str):
-    return previous_daily_context(previous_sessions(ticker, target_day, key))
+    """Single Massive request for both Range/Close context and Trend Daily."""
+    bars = previous_sessions(ticker, target_day, key, history_days=75)
+    context = previous_daily_context(bars)
+    context["daily_bars"] = bars
+    return context
 
 
 def previous_es_daily_range(target_day: date):
