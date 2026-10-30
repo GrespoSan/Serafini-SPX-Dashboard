@@ -115,6 +115,14 @@ def previous_daily_context(bars):
         raise MassiveSourceError("Date delle sessioni non crescenti.")
     amount = yesterday["hi"] - yesterday["lo"]
     pct_range = 100.0 * amount / yesterday["close"]
+    previous_amount = before["hi"] - before["lo"]
+    previous_pct_range = 100.0 * previous_amount / before["close"]
+    # Percent-normalized daily ranges allow meaningful comparison across
+    # adjacent sessions even when price levels have moved.
+    if math.isclose(pct_range, previous_pct_range, abs_tol=1e-9, rel_tol=0):
+        range_trend = "INVARIATO"
+    else:
+        range_trend = "ESPANSIONE" if pct_range > previous_pct_range else "COMPRESSIONE"
     change = 100.0 * (yesterday["close"] / before["close"] - 1.0)
     return {
         "status": "VALIDO", "day": yesterday["day"].isoformat(),
@@ -124,6 +132,9 @@ def previous_daily_context(bars):
         "close": yesterday["close"], "previous_close": before["close"],
         "previous_close_day": before["day"].isoformat(),
         "range_points": round(amount, 6), "range_pct": round(pct_range, 6),
+        "previous_range_points": round(previous_amount, 6),
+        "previous_range_pct": round(previous_pct_range, 6),
+        "range_trend": range_trend,
         "change_pct": round(change, 6),
         "formula": "(High-Low) / Close * 100",
         "change_formula": "(Close / previous Close - 1) * 100",
