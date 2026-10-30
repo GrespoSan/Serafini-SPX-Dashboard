@@ -202,7 +202,7 @@ def signed_daily_heading(change_pct):
     )
 
 
-def render(target_day):
+def render(target_day, return_context=False):
     """Riquadro compatto come riferimento grafico condiviso, VX+Daily."""
     from html import escape
 
@@ -235,14 +235,6 @@ def render(target_day):
     close_change = daily.get("change_pct") if daily_ok else None
     # Both figures come from one Massive bar set; no second source or call.
     st.markdown(signed_daily_heading(close_change), unsafe_allow_html=True)
-    if daily_ok and daily.get("previous_close") and daily.get("previous_close_day"):
-        st.caption(
-            f"Massive Futures {daily['ticker']} · 1session · "
-            f"chiusura {daily['day']}: {daily['close']:,.2f} / "
-            f"chiusura {daily['previous_close_day']}: {daily['previous_close']:,.2f}. "
-            "È Close/Close sullo stesso contratto, NON settlement/settlement. "
-            "Verificare l'allineamento della scadenza a ES1!."
-        )
     if vx_ok:
         regime = vx["regime"].capitalize()
         vx_value = f"{regime} ({pct:+.2f}%)".replace(".", ",")
@@ -298,16 +290,26 @@ def render(target_day):
     </div>
   </div>
   <div class="spx-vol-foot">
-    {detail} · Daily ES Massive {escape(daily.get('ticker','N/D'))}:
-    {escape(daily_date)} · VX Cboe: {escape(vx_date)}.
-    Range Daily: (High−Low)/trade Close della sessione precedente; soglia 1%.
-    Buffer 15 punti se ES Close/Close &lt; −1% o VX in backwardation; altrimenti 10 se entrambe le fonti sono valide.
-    Range Daily: espansione/compressione rispetto alla sessione ancora precedente, senza influenzare il buffer.
-    Non è il settlement. La scadenza ES deve corrispondere a quella del grafico ES1!.
-    Nessun dato della seduta analizzata.
+    {detail} · ES Massive {escape(daily.get('ticker', 'N/D'))} ·
+    seduta {escape(daily_date)} · VX Cboe {escape(vx_date)}.
+    Range Daily = (High−Low)/Close e confronto con la seduta precedente;
+    Buffer ES = 15 se Close/Close &lt; −1% oppure VX in backwardation.
   </div>
 </div>"""
     st.markdown(card, unsafe_allow_html=True)
+    with st.expander("Dettaglio fonti e formule", expanded=False):
+        if daily_ok and daily.get("previous_close") and daily.get("previous_close_day"):
+            st.caption(
+                f"Massive Futures {daily['ticker']} · 1session · "
+                f"chiusura {daily['day']}: {daily['close']:,.2f} / "
+                f"chiusura {daily['previous_close_day']}: {daily['previous_close']:,.2f}. "
+                "Close/Close sul medesimo contratto, non settlement. "
+                "Verificare la scadenza rispetto a ES1!."
+            )
+        st.caption("Fonte VX: settlement futures mensili Cboe; "
+                   "la backwardation influenza il buffer standard SPX. "
+                   "Il Range Daily contribuisce solo a espansione/compressione, "
+                   "non alla scelta del buffer.")
     if not vx_ok or not daily_ok:
         unavailable = []
         if not daily_ok:
@@ -316,4 +318,4 @@ def render(target_day):
             unavailable.append(f"VX ({vx.get('reason', 'fonte indisponibile')})")
         st.caption("Fonte non disponibile: " + ", ".join(unavailable) +
                    ". Il buffer non viene forzato a 10 punti.")
-    return pct
+    return ctx if return_context else pct
