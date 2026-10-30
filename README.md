@@ -1,6 +1,6 @@
 # Serafini SPX Dashboard v2 — repository PUBBLICO, dati PRIVATI
 
-Questa cartella è **solo** l'interfaccia di consultazione/esportazione per `spx-snapshots`. Non contiene downloader, GitHub Actions, password o chiavi. Non modificare il repository **privato** `Serafini-SPX-Cloud`: continua a eseguire la raccolta SPX 07:30 e 15:30 (ora Roma).
+Questa cartella è **solo** l'interfaccia di consultazione/esportazione per `spx-snapshots`. Non contiene downloader, GitHub Actions, password o chiavi. Il repository privato `Serafini-SPX-Cloud` gestisce separatamente le acquisizioni e la pulizia automatica dello storico alle 23:30 Europe/Rome.
 
 ## Pubblicazione gratuita
 1. Crea un nuovo repository GitHub **PUBBLICO** chiamato `Serafini-SPX-Dashboard` (distinto da `Serafini-SPX-Cloud`).
@@ -17,23 +17,23 @@ FRIENDS_PASSWORD = "PASSWORD_FORTE_DIVERSA_PER_GLI_AMICI"
 ```
 
 **Non inviare le password o le chiavi nella chat.** I Secrets di Streamlit sono distinti dai Secrets di GitHub Actions: vanno configurati entrambi nei rispettivi servizi.
-5. Deploy. Alla prima apertura prova la password amici: ZIP sì, cancellazione assente. Esci e prova la password admin: ZIP e (solo dopo conferma/hash) cancellazione.
+5. Deploy. Verifica l'accesso lettore e amministratore; i rilevamenti Cboe e l'acquisizione supplementare sono visibili soltanto all'amministratore.
 
 ## Sicurezza (leggere)
 - Il repository dell'interfaccia è **pubblico**, ma gli snapshot restano in un bucket Supabase **privato**. I Secrets sono lato server.
 - Password condivise NON identificano individualmente gli amici. La protezione da tentativi ripetuti è **solo basilare** e non efficace contro attacchi distribuiti; per un gruppo ampio o dati sensibili preferire Supabase Auth/login individuali.
 - La chiave Supabase `sb_secret_...` è ad alto privilegio. Conservarla **solo** nei Secrets del server; mai in browser, codice, repository o screenshot. Una vulnerabilità nell'app potrebbe compromettere il progetto: usare un progetto Supabase dedicato (già creato) ed evitare dati sensibili nello stesso progetto.
-- I download ZIP sono generati in RAM; l'app Free può avere limiti di memoria. Le due password devono essere diverse.
-- Non possiamo garantire che il file sia stato salvato sul PC: la cancellazione richiede conferma manuale, hash e controllo che i file cloud non siano cambiati. Non elimina automaticamente.
+- La Dashboard non include più la preparazione ZIP dell'archivio né pulsanti di cancellazione manuale. La retention dei dati storici è gestita separatamente nel repository Cloud, conservando l'ultima giornata disponibile e i feed MT4.
+- I due ruoli usano password differenti.
 - La lettura di snapshot SPX da Cboe, la programmazione e il metodo GEX restano invariati.
 
 ## Aggiornamento v3 — NET GAMMA in verifica
 
-La dashboard conserva login amministratore/amici, elenco snapshot, ZIP e cancellazione con conferma. Aggiunge in fondo il pannello **NET GAMMA 0DTE / Weekly — modulo in verifica**.
+La dashboard conserva il login amministratore/amici, i grafici NET GAMMA 0DTE/Weekly, il confronto GEX, il Replay e il report AI. Il pannello **RILEVAMENTI CBOE** si trova immediatamente dopo **ANALISI NET GAMMA**: è chiuso inizialmente, riservato all'amministratore e non scarica i registri finché non viene aperto.
 
 * `net_gamma.py`: parsing SPX/SPXW OCC, formula slide 132: `(OI_CALL + VOL_CALL)*GAMMA_CALL - (OI_PUT + VOL_PUT)*GAMMA_PUT` per strike.
 * `gamma_section.py`: scelta dello snapshot, riferimento alla chiusura SPX precedente, differenziale ES−SPX manuale facoltativo, profili 0DTE e venerdì settimanale separati, tabella e CSV.
-* Lo snapshot Cboe originale non viene modificato, il modulo fa SOLO lettura e NON cambia GitHub Actions, bucket, password o permessi di cancellazione.
+* Lo snapshot Cboe originale non viene modificato dai calcoli. La Dashboard non espone azioni di cancellazione; le fotografie storiche vengono gestite dal workflow Cloud indipendente.
 
 ### Importante: metodo Serafini
 
