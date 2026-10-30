@@ -134,7 +134,7 @@ def combined_breakout_buffer(contango_pct=None, daily_change_pct=None):
     reasons = []
     if pct is not None and pct < 0:
         reasons.append("Backwardation VX")
-    if daily is not None and daily < -1.0:
+    if daily is not None and round(daily, 6) < -1.0:
         reasons.append("Ribasso Close/Close seduta precedente oltre -1%")
     if reasons:
         buffer, status = 15, "DETERMINATO"
