@@ -58,6 +58,15 @@ def previous_es_daily_range(target_day: date):
 
     point_range = hi - lo
     pct = point_range / close * 100.0
+    # Movimentazione della seduta precedente: Close di ieri rispetto
+    # alla chiusura del giorno di negoziazione ANCORA precedente.
+    # Non coincide con il Range Daily High−Low, che e' sempre >= 0.
+    older = [bar for bar in candidates
+             if bar[0] < session and (session - bar[0]).days <= 7]
+    previous_bar = max(older, key=lambda bar: bar[0]) if older else None
+    older_close = previous_bar[3] if previous_bar else None
+    change_pct = ((close / older_close - 1.0) * 100.0
+                  if older_close and older_close > 0 else None)
     return {
         "status": "VALIDO", "day": session.isoformat(),
         "source": "Yahoo Finance ES=F (Daily, future continuo)",
@@ -65,6 +74,11 @@ def previous_es_daily_range(target_day: date):
         "close": round(close, 4),
         "range_points": round(point_range, 4),
         "range_pct": round(pct, 6),
+        "change_pct": round(change_pct, 6) if change_pct is not None else None,
+        "previous_close": round(older_close, 4) if older_close else None,
+        "previous_close_day": (previous_bar[0].isoformat()
+                               if previous_bar else None),
+        "change_formula": "(Close ultima seduta / Close seduta precedente - 1) * 100",
         "formula": "(High - Low) / Close * 100",
         "note": ("Barra Daily del future ES=F: puo' differire da ES1! "
                  "TradingView e dai dati CME ufficiali."),
