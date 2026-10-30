@@ -19,6 +19,25 @@ FRIENDS_PASSWORD = "PASSWORD_FORTE_DIVERSA_PER_GLI_AMICI"
 **Non inviare le password o le chiavi nella chat.** I Secrets di Streamlit sono distinti dai Secrets di GitHub Actions: vanno configurati entrambi nei rispettivi servizi.
 5. Deploy. Verifica l'accesso lettore e amministratore: entrambi possono consultare RILEVAMENTI CBOE; soltanto l'amministratore puo' richiedere acquisizioni supplementari.
 
+## Trend Daily SPX · allineamento Multi-Market V2
+
+Il pannello Trend Daily non utilizza più `Yahoo ES=F`. Riceve le
+**stesse barre OHLC Massive `ESZ6` (o contratto ES impostato nei Secrets)**
+già lette dal contesto volatilità tramite una sola chiamata cached di
+75 giorni. Le quattro caselle condivise con Multi-Market V2 sono
+**Struttura Daily**, **Chiusura vs baricentro**, **Baricentro Daily**
+e **Barre stesso colore**. Range ed espansione/compressione compaiono
+soltanto nella scheda di volatilità, non sono duplicati nel Trend.
+
+Il precedente criterio di rilevamento della candela di impulso resta
+sperimentale e applicato ora alle medesime candele Massive. Se gli OHLC
+non includono Open o sono disponibili meno di cinque sedute, si indica
+non disponibile senza un fallback implicito a Yahoo.
+
+Restano specifiche SPX: **regime VX in contango/backwardation** e
+**buffer indicativo ES 10/15 punti**, senza applicarlo agli altri futures.
+La sezione NET GAMMA, l'archivio SPX e i moduli Replay/GEX non sono modificati.
+
 ## Regime di volatilità · chiarimento Serafini 30/10/2026
 
 La condizione di alta volatilità da ribasso è una variazione **Close/Close
