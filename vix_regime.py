@@ -113,48 +113,47 @@ def breakout_buffer_points(contango_pct):
     return 15 if pct < 0 else 10
 
 
-def combined_breakout_buffer(contango_pct=None, daily_range_pct=None):
-    """Buffer STANDARD: 15 se backwardation O range Daily >=1%; altrimenti 10.
+def combined_breakout_buffer(contango_pct=None, daily_change_pct=None):
+    """ES breakout buffer from yesterday's signed CLOSE/CLOSE and VX regime.
 
-    Se manca una fonte, 15 e' comunque determinabile dalla condizione
-    disponibile di alta volatilita'; 10 richiede entrambe le fonti.
-    Questa non e' una regola di ingresso né gestisce eccezioni discrezionali.
+    15 punti: previous Daily ES Close/Close strictly below -1%, OR VX
+    backwardation. The nonnegative High-Low range does NOT choose 10/15.
+    With sources incomplete, do not assert low volatility or force 10.
+    The buffer is indicative and contextual, not an entry signal.
     """
     def finite_or_none(value):
         if value is None:
             return None
         number = float(value)
         if not math.isfinite(number):
-            raise ValueError("Dato di volatilita non finito")
+            raise ValueError("Dato di volatilità non finito")
         return number
 
     pct = finite_or_none(contango_pct)
-    daily = finite_or_none(daily_range_pct)
-    if daily is not None and daily < 0:
-        raise ValueError("Range Daily negativo")
+    daily = finite_or_none(daily_change_pct)
     reasons = []
     if pct is not None and pct < 0:
         reasons.append("Backwardation VX")
-    if daily is not None and daily >= 1.0:
-        reasons.append("Range Daily precedente >= 1%")
+    if daily is not None and daily < -1.0:
+        reasons.append("Ribasso Close/Close seduta precedente oltre -1%")
     if reasons:
-        buffer = 15
-        status = "DETERMINATO"
+        buffer, status = 15, "DETERMINATO"
     elif pct is not None and daily is not None:
         buffer, status = 10, "DETERMINATO"
-        reasons.append("Contango VX e range Daily precedente < 1%")
+        reasons.append("VX non in backwardation e Close/Close non sotto -1%")
     else:
         buffer, status = None, "NON DETERMINABILE"
-        reasons.append("Dati insufficienti per confermare la bassa volatilita")
+        reasons.append("Dati insufficienti per escludere le condizioni di alta volatilità")
 
     return {
         "status": status,
         "buffer_es_points": buffer,
         "reason": "; ".join(reasons),
-        "rule": "15 se VX in backwardation o High-Low Daily >=1% del Close; altrimenti 10",
-        "inputs": {"vx_contango_pct": pct, "previous_es_daily_range_pct": daily},
-        "note": ("Buffer di copertura standard indicativo; Serafini puo' "
-                 "contestualizzare livelli e distanze in modo discrezionale."),
+        "rule": "15 se VX in backwardation o ES Close/Close seduta precedente < -1%; altrimenti 10 se entrambi verificati",
+        "inputs": {"vx_contango_pct": pct,
+                   "previous_es_daily_change_pct": daily},
+        "note": ("Buffer standard indicativo basato sulla precisazione del metodo Serafini; "
+                 "non è una regola universale né un segnale di ingresso."),
     }
 
 
@@ -164,7 +163,7 @@ def volatility_context(target_day):
 
     vx = {"status": "NON DISPONIBILE"}
     daily = {"status": "NON DISPONIBILE"}
-    pct = daily_pct = None
+    pct = daily_change = None
     try:
         observed = previous_vix_curve(target_day)
         pct = float(observed["contango_pct"])
@@ -175,11 +174,11 @@ def volatility_context(target_day):
         vx["reason"] = type(exc).__name__
     try:
         daily = previous_es_daily_range(target_day)
-        daily_pct = daily["range_pct"]
+        daily_change = daily["change_pct"]
     except Exception as exc:
         daily = {"status": "NON DISPONIBILE", "reason": type(exc).__name__,
                  "source": "Massive Futures REST · ES 1session"}
-    decision = combined_breakout_buffer(pct, daily_pct)
+    decision = combined_breakout_buffer(pct, daily_change)
     vx["breakout_buffer_es_points"] = decision["buffer_es_points"]
     return {"vix_curve": vx, "previous_daily_range": daily,
             "breakout_buffer": decision}
@@ -293,7 +292,8 @@ def render(target_day):
     {detail} · Daily ES Massive {escape(daily.get('ticker','N/D'))}:
     {escape(daily_date)} · VX Cboe: {escape(vx_date)}.
     Range Daily: (High−Low)/trade Close della sessione precedente; soglia 1%.
-    Variazione: Close/Close di due sessioni successive dello stesso contratto.
+    Buffer 15 punti se ES Close/Close &lt; −1% o VX in backwardation; altrimenti 10 se entrambe le fonti sono valide.
+    Range Daily: espansione/compressione rispetto alla sessione ancora precedente, senza influenzare il buffer.
     Non è il settlement. La scadenza ES deve corrispondere a quella del grafico ES1!.
     Nessun dato della seduta analizzata.
   </div>
