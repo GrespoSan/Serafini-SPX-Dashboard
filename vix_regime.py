@@ -206,6 +206,15 @@ def render(target_day):
         daily_date = daily["day"]
     else:
         daily_value, daily_date = "Non disponibile", "—"
+    # Unlike the nonnegative High−Low range, the close-to-close change
+    # communicates whether the prior ES session ended higher or lower.
+    close_change = daily.get("change_pct") if daily_ok else None
+    if close_change is not None and math.isfinite(float(close_change)):
+        change_class = ("up" if close_change > 0 else
+                        "down" if close_change < 0 else "flat")
+        change_text = f"{close_change:+.2f}%".replace(".", ",")
+    else:
+        change_class, change_text = "flat", "N/D"
     if vx_ok:
         regime = vx["regime"].capitalize()
         vx_value = f"{regime} ({pct:+.2f}%)".replace(".", ",")
@@ -232,6 +241,10 @@ def render(target_day):
 .spx-vol-kpi:first-child {{padding-left:0; border-left:0;}}
 .spx-vol-kpi .label {{font-size:.82rem; color:#b6bcc5; margin-bottom:5px;}}
 .spx-vol-kpi .number {{font-size:1.15rem; font-weight:740; overflow-wrap:anywhere;}}
+.spx-daily-change {{font-size:.82rem;color:#adb6c2;margin-top:7px;line-height:1.5;}}
+.spx-daily-change .up {{color:#56d49e;font-weight:750;}}
+.spx-daily-change .down {{color:#ff676d;font-weight:750;}}
+.spx-daily-change .flat {{color:#b6bcc5;font-weight:750;}}
 .spx-vol-kpi .buffer {{color:{highlight}; font-size:1.3rem;}}
 .spx-vol-foot {{
   border-top:1px solid #292b30; padding-top:9px; margin-top:12px;
@@ -248,6 +261,9 @@ def render(target_day):
     <div class="spx-vol-kpi">
       <div class="label">Range Daily precedente</div>
       <div class="number">{escape(daily_value)}</div>
+      <div class="spx-daily-change">Variazione ieri (Close/Close):
+        <span class="{change_class}">{escape(change_text)}</span>
+      </div>
     </div>
     <div class="spx-vol-kpi">
       <div class="label">Regime VX precedente</div>
@@ -261,6 +277,7 @@ def render(target_day):
   <div class="spx-vol-foot">
     {detail} · Daily ES=F Yahoo: {escape(daily_date)} · VX Cboe: {escape(vx_date)}.
     High−Low / Close della seduta precedente; soglia 1%.
+    Variazione ieri = (Close ultima seduta / Close seduta ancora precedente − 1) × 100.
     Fonti indipendenti, nessun dato della seduta analizzata.
     Il Daily Yahoo può differire dal grafico ES1! su TradingView.
   </div>
