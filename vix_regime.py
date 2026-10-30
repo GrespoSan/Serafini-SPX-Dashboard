@@ -185,6 +185,19 @@ def volatility_context(target_day):
             "breakout_buffer": decision}
 
 
+def signed_daily_heading(change_pct):
+    """SPX heading with the prior session CLOSE/CLOSE movement, not range."""
+    base = "Volatilità — seduta precedente"
+    if change_pct is None:
+        return f'<h4 style="font-size:1.4rem;font-weight:700">{base} (N/D)</h4>'
+    pct = float(change_pct)
+    if not math.isfinite(pct):
+        return f'<h4 style="font-size:1.4rem;font-weight:700">{base} (N/D)</h4>'
+    color = "#56d49e" if pct > 0 else "#ff676d" if pct < 0 else "#b6bcc5"
+    return (f'<h4 style="font-size:1.4rem;font-weight:700">{base} '
+            f'<span style="color:{color}">({pct:+.2f}%)</span></h4>')
+
+
 def render(target_day):
     """Riquadro compatto come riferimento grafico condiviso, VX+Daily."""
     from html import escape
@@ -209,12 +222,16 @@ def render(target_day):
     # Unlike the nonnegative High−Low range, the close-to-close change
     # communicates whether the prior ES session ended higher or lower.
     close_change = daily.get("change_pct") if daily_ok else None
-    if close_change is not None and math.isfinite(float(close_change)):
-        change_class = ("up" if close_change > 0 else
-                        "down" if close_change < 0 else "flat")
-        change_text = f"{close_change:+.2f}%".replace(".", ",")
-    else:
-        change_class, change_text = "flat", "N/D"
+    # Heading is part of this renderer: avoids a second Yahoo download
+    # in app.py and prevents disagreement between heading and card.
+    st.markdown(signed_daily_heading(close_change), unsafe_allow_html=True)
+    if daily_ok and daily.get("previous_close") and daily.get("previous_close_day"):
+        st.caption(
+            f"Variazione Close/Close · ES=F Yahoo · "
+            f"{daily['day']}: {daily['close']:,.2f} / "
+            f"{daily['previous_close_day']}: {daily['previous_close']:,.2f} · "
+            "dato della seduta precedente, non variazione intraday."
+        )
     if vx_ok:
         regime = vx["regime"].capitalize()
         vx_value = f"{regime} ({pct:+.2f}%)".replace(".", ",")
@@ -241,10 +258,6 @@ def render(target_day):
 .spx-vol-kpi:first-child {{padding-left:0; border-left:0;}}
 .spx-vol-kpi .label {{font-size:.82rem; color:#b6bcc5; margin-bottom:5px;}}
 .spx-vol-kpi .number {{font-size:1.15rem; font-weight:740; overflow-wrap:anywhere;}}
-.spx-daily-change {{font-size:.82rem;color:#adb6c2;margin-top:7px;line-height:1.5;}}
-.spx-daily-change .up {{color:#56d49e;font-weight:750;}}
-.spx-daily-change .down {{color:#ff676d;font-weight:750;}}
-.spx-daily-change .flat {{color:#b6bcc5;font-weight:750;}}
 .spx-vol-kpi .buffer {{color:{highlight}; font-size:1.3rem;}}
 .spx-vol-foot {{
   border-top:1px solid #292b30; padding-top:9px; margin-top:12px;
@@ -261,9 +274,6 @@ def render(target_day):
     <div class="spx-vol-kpi">
       <div class="label">Range Daily precedente</div>
       <div class="number">{escape(daily_value)}</div>
-      <div class="spx-daily-change">Variazione ieri (Close/Close):
-        <span class="{change_class}">{escape(change_text)}</span>
-      </div>
     </div>
     <div class="spx-vol-kpi">
       <div class="label">Regime VX precedente</div>
