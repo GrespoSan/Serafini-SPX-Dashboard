@@ -42,7 +42,7 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
     for group in (odte, weekly):
         if len(group['rows']) > 50:
             raise ValueError('Al massimo 50 livelli per profilo')
-    default_scale = _initial_manual_scale([(odte, 60), (weekly, 160)])
+    default_scale = _initial_manual_scale([(odte, 100), (weekly, 200)])
     same_exp = odte['expiry'] == weekly['expiry']
     origin = re.sub(r'[^0-9T: .-]', '', cboe_stamp)[:72]
     # Usa solo etichette del registro di acquisizione, non presume il fuso del timestamp Cboe.
@@ -67,8 +67,8 @@ indicator("Serafini SPX NET GAMMA | {date_text}{tag}", overlay=true, max_lines_c
 // Non calcola gamma flip e non usa dati opzioni live in TradingView.
 
 gammaPerCandle = input.float({default_scale:.1f}, "Scala MANUALE · Gamma/barra", minval=0.1, step=0.1, tooltip="Sempre applicata esattamente come impostata. Se troppo bassa, il grafico segnala di aumentarla: nessuna modifica automatica.")
-offsetOdte = input.int(60, "Distanza 0DTE da ultima candela", minval=45, maxval=170)
-offsetWeekly = input.int(100, "Distanza Weekly dalle 0DTE", minval=20, maxval=300)
+offsetOdte = input.int(100, "Distanza 0DTE da ultima candela", minval=45, maxval=250)
+offsetWeekly = input.int(100, "Distanza Weekly dalle 0DTE", minval=20, maxval=600)
 positiveColor = input.color(color.rgb(0, 230, 117), "NET GAMMA positivo")
 negativeColor = input.color(color.rgb(242, 54, 69), "NET GAMMA negativo")
 showTitles = input.bool(true, "Mostra intestazioni")
@@ -94,7 +94,7 @@ requiredScale(array<float> gamma, int offsetBars) =>
     for g in gamma
         maxPos := math.max(maxPos, g)
         maxNeg := math.max(maxNeg, -g)
-    float rightCapacity = float(480 - offsetBars)
+    float rightCapacity = float(math.max(1, 480 - offsetBars))
     float leftCapacity = float(9500 + offsetBars)
     math.max(maxPos / rightCapacity, maxNeg / leftCapacity)
 
@@ -129,8 +129,12 @@ if barstate.islast and validTicker
     float actualScale = gammaPerCandle
     bool adjusted = false
     int weeklyCenter = offsetOdte + offsetWeekly
+    bool beyondLimit = offsetOdte >= 480 or weeklyCenter >= 480
     float minimumSafe = math.max(requiredScale(odteValues, offsetOdte), requiredScale(weeklyValues, weeklyCenter))
-    if actualScale + 0.000001 < minimumSafe
+    if beyondLimit
+        label warningLimit = label.new(bar_index + 10, close, "Distanza Weekly/0DTE oltre il limite TradingView (+500 barre): riduci la distanza. Nessun valore modificato automaticamente.", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.new(color.orange, 15), textcolor=color.black, size=size.small)
+        array.push(drawnLabels, warningLimit)
+    else if actualScale + 0.000001 < minimumSafe
         label warningLabel = label.new(bar_index + 10, close, "Scala manuale troppo piccola per TradingView. Imposta almeno " + str.tostring(math.ceil(minimumSafe * 10) / 10.0, "#.0") + " G/bar", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.new(color.orange, 15), textcolor=color.black, size=size.small)
         array.push(drawnLabels, warningLabel)
     else
