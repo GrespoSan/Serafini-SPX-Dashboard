@@ -51,11 +51,14 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
           "// I tre profili usano ESATTAMENTE la stessa scala manuale.")
     patch('offsetOdte = input.int(60, "Distanza 0DTE da ultima candela", minval=45, maxval=170)',
           'showPrevious = input.bool(true, "Mostra 0DTE precedente")\n'
+          'offsetOdte = input.int(60, "Distanza 0DTE da ultima candela", minval=45, maxval=170, active=not showPrevious)\n'
           'offsetPrevious = input.int(70, "1 · Posizione 0DTE precedente", minval=40, maxval=140, active=showPrevious)\n'
           'offsetOdteCompare = input.int(165, "2 · Posizione 0DTE attuale", minval=120, maxval=300, active=showPrevious)\n'
-          'offsetWeeklyCompare = input.int(275, "3 · Posizione Weekly attuale", minval=215, maxval=430, active=showPrevious)')
-    # Con precedente OFF, mantenere due profili semplici alle posizioni 60 e 160.
-    patch('offsetWeekly = input.int(160, "Distanza Weekly da ultima candela", minval=55, maxval=300)\n', '')
+          'offsetWeeklyCompare = input.int(110, "3 · Distanza Weekly dalle 0DTE attuali", minval=20, maxval=170, active=showPrevious)')
+    # Con precedente OFF, due profili semplici alle posizioni iniziali 60 e 160;
+    # entrambi rimangono spostabili, con Weekly sempre relativa alle 0DTE.
+    patch('offsetWeekly = input.int(100, "Distanza Weekly dalle 0DTE", minval=20, maxval=300)',
+          'offsetWeekly = input.int(100, "Distanza Weekly dalle 0DTE", minval=20, maxval=300, active=not showPrevious)')
     patch("var array<float> odteLevels = ",
           "var array<float> prevLevels = " +
           _pine_array(previous_odte["rows"], "strike_spx", float(offset)) +
@@ -85,8 +88,8 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
     code = prefix + f"""    float actualScale = gammaPerCandle
     bool adjusted = false
     int prevCenter = offsetPrevious
-    int currentCenter = showPrevious ? offsetOdteCompare : 60
-    int weeklyCenter = showPrevious ? offsetWeeklyCompare : 160
+    int currentCenter = showPrevious ? offsetOdteCompare : offsetOdte
+    int weeklyCenter = currentCenter + (showPrevious ? offsetWeeklyCompare : offsetWeekly)
     bool validOrder = not showPrevious or (prevCenter < currentCenter and currentCenter < weeklyCenter)
     float minimumSafe = math.max(requiredScale(odteValues, currentCenter), requiredScale(weeklyValues, weeklyCenter))
     if showPrevious
