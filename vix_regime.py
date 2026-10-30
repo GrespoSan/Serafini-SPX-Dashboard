@@ -178,7 +178,7 @@ def volatility_context(target_day):
         daily_pct = daily["range_pct"]
     except Exception as exc:
         daily = {"status": "NON DISPONIBILE", "reason": type(exc).__name__,
-                 "source": "Yahoo Finance ES=F Daily"}
+                 "source": "Massive Futures REST · ES 1session"}
     decision = combined_breakout_buffer(pct, daily_pct)
     vx["breakout_buffer_es_points"] = decision["buffer_es_points"]
     return {"vix_curve": vx, "previous_daily_range": daily,
@@ -186,16 +186,21 @@ def volatility_context(target_day):
 
 
 def signed_daily_heading(change_pct):
-    """SPX heading with the prior session CLOSE/CLOSE movement, not range."""
-    base = "Volatilità — seduta precedente"
-    if change_pct is None:
-        return f'<h4 style="font-size:1.4rem;font-weight:700">{base} (N/D)</h4>'
-    pct = float(change_pct)
-    if not math.isfinite(pct):
-        return f'<h4 style="font-size:1.4rem;font-weight:700">{base} (N/D)</h4>'
-    color = "#56d49e" if pct > 0 else "#ff676d" if pct < 0 else "#b6bcc5"
-    return (f'<h4 style="font-size:1.4rem;font-weight:700">{base} '
-            f'<span style="color:{color}">({pct:+.2f}%)</span></h4>')
+    """Separate clear session performance from its daily range/volatility."""
+    base = "Andamento e volatilità — seduta precedente"
+    if change_pct is None or not math.isfinite(float(change_pct)):
+        value = "N/D"
+        color = "#b6bcc5"
+    else:
+        value = f"{float(change_pct):+.2f}%".replace(".", ",")
+        color = ("#56d49e" if change_pct > 0 else
+                 "#ff676d" if change_pct < 0 else "#b6bcc5")
+    return (
+        f'<h4 style="font-size:1.4rem;font-weight:700">{base}</h4>'
+        '<div style="font-size:1rem;padding:0 0 10px;color:#c3cbd5">'
+        'Variazione chiusura della seduta (Close/Close): '
+        f'<span style="color:{color};font-weight:750">{value}</span></div>'
+    )
 
 
 def render(target_day):
@@ -222,15 +227,15 @@ def render(target_day):
     # Unlike the nonnegative High−Low range, the close-to-close change
     # communicates whether the prior ES session ended higher or lower.
     close_change = daily.get("change_pct") if daily_ok else None
-    # Heading is part of this renderer: avoids a second Yahoo download
-    # in app.py and prevents disagreement between heading and card.
+    # Both figures come from one Massive bar set; no second source or call.
     st.markdown(signed_daily_heading(close_change), unsafe_allow_html=True)
     if daily_ok and daily.get("previous_close") and daily.get("previous_close_day"):
         st.caption(
-            f"Variazione Close/Close · ES=F Yahoo · "
-            f"{daily['day']}: {daily['close']:,.2f} / "
-            f"{daily['previous_close_day']}: {daily['previous_close']:,.2f} · "
-            "dato della seduta precedente, non variazione intraday."
+            f"Massive Futures {daily['ticker']} · 1session · "
+            f"chiusura {daily['day']}: {daily['close']:,.2f} / "
+            f"chiusura {daily['previous_close_day']}: {daily['previous_close']:,.2f}. "
+            "È Close/Close sullo stesso contratto, NON settlement/settlement. "
+            "Verificare l'allineamento della scadenza a ES1!."
         )
     if vx_ok:
         regime = vx["regime"].capitalize()
@@ -285,11 +290,12 @@ def render(target_day):
     </div>
   </div>
   <div class="spx-vol-foot">
-    {detail} · Daily ES=F Yahoo: {escape(daily_date)} · VX Cboe: {escape(vx_date)}.
-    High−Low / Close della seduta precedente; soglia 1%.
-    Variazione ieri = (Close ultima seduta / Close seduta ancora precedente − 1) × 100.
-    Fonti indipendenti, nessun dato della seduta analizzata.
-    Il Daily Yahoo può differire dal grafico ES1! su TradingView.
+    {detail} · Daily ES Massive {escape(daily.get('ticker','N/D'))}:
+    {escape(daily_date)} · VX Cboe: {escape(vx_date)}.
+    Range Daily: (High−Low)/trade Close della sessione precedente; soglia 1%.
+    Variazione: Close/Close di due sessioni successive dello stesso contratto.
+    Non è il settlement. La scadenza ES deve corrispondere a quella del grafico ES1!.
+    Nessun dato della seduta analizzata.
   </div>
 </div>"""
     st.markdown(card, unsafe_allow_html=True)
