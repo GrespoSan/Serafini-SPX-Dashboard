@@ -221,8 +221,15 @@ def render(target_day):
         range_pct = f"{daily['range_pct']:.2f}".replace(".", ",")
         daily_value = f"{range_value} pt · {range_pct}%"
         daily_date = daily["day"]
+        range_trend = str(daily.get("range_trend") or "N/D")
+        previous_range = daily.get("previous_range_pct")
+        range_comparison = (
+            f"{range_trend} · prima {previous_range:.2f}%".replace(".", ",")
+            if previous_range is not None else "Confronto non disponibile"
+        )
     else:
         daily_value, daily_date = "Non disponibile", "—"
+        range_comparison = "Confronto non disponibile"
     # Unlike the nonnegative High−Low range, the close-to-close change
     # communicates whether the prior ES session ended higher or lower.
     close_change = daily.get("change_pct") if daily_ok else None
@@ -262,6 +269,7 @@ def render(target_day):
 .spx-vol-kpi:first-child {{padding-left:0; border-left:0;}}
 .spx-vol-kpi .label {{font-size:.82rem; color:#b6bcc5; margin-bottom:5px;}}
 .spx-vol-kpi .number {{font-size:1.15rem; font-weight:740; overflow-wrap:anywhere;}}
+.spx-vol-kpi .range-direction {{font-size:.79rem;color:#abb6c4;margin-top:8px;line-height:1.5;}}
 .spx-vol-kpi .buffer {{color:{highlight}; font-size:1.3rem;}}
 .spx-vol-foot {{
   border-top:1px solid #292b30; padding-top:9px; margin-top:12px;
@@ -278,6 +286,7 @@ def render(target_day):
     <div class="spx-vol-kpi">
       <div class="label">Range Daily precedente</div>
       <div class="number">{escape(daily_value)}</div>
+      <div class="range-direction">{escape(range_comparison)}</div>
     </div>
     <div class="spx-vol-kpi">
       <div class="label">Regime VX precedente</div>
