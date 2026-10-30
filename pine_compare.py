@@ -28,7 +28,7 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
                      date_text, cboe_stamp, current_slot)
     # Il quarto Pine può avere gamma molto maggiori della rilevazione 15:50.
     # Il default è calcolato dai dati reali, ma resta una scala MANUALE.
-    base_default = _initial_manual_scale([(current_odte, 60), (current_weekly, 160)])
+    base_default = _initial_manual_scale([(current_odte, 100), (current_weekly, 200)])
     comparison_default = _initial_manual_scale([
         (previous_odte, 70), (current_odte, 165), (current_weekly, 275)
     ])
@@ -49,16 +49,16 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
           "// EXPORT REVISION: V53-TV-MANUAL-CLOSE-THREE-COLUMNS")
     patch("// La scala MANUALE e' COMUNE ai profili e non altera i gamma Cboe calcolati.",
           "// I tre profili usano ESATTAMENTE la stessa scala manuale.")
-    patch('offsetOdte = input.int(60, "Distanza 0DTE da ultima candela", minval=45, maxval=170)',
+    patch('offsetOdte = input.int(100, "Distanza 0DTE da ultima candela", minval=45, maxval=250)',
           'showPrevious = input.bool(true, "Mostra 0DTE precedente")\n'
-          'offsetOdte = input.int(60, "Distanza 0DTE da ultima candela", minval=45, maxval=170, active=not showPrevious)\n'
+          'offsetOdte = input.int(100, "Distanza 0DTE da ultima candela", minval=45, maxval=250)\n'
           'offsetPrevious = input.int(70, "1 · Posizione 0DTE precedente", minval=40, maxval=140, active=showPrevious)\n'
-          'offsetOdteCompare = input.int(165, "2 · Posizione 0DTE attuale", minval=120, maxval=300, active=showPrevious)\n'
-          'offsetWeeklyCompare = input.int(110, "3 · Distanza Weekly dalle 0DTE attuali", minval=20, maxval=170, active=showPrevious)')
+          'offsetOdteCompare = input.int(165, "2 · Posizione 0DTE attuale", minval=120, maxval=250, active=showPrevious)\n'
+          'offsetWeeklyCompare = input.int(110, "3 · Distanza Weekly dalle 0DTE attuali", minval=20, maxval=600, active=showPrevious)')
     # Con precedente OFF, due profili semplici alle posizioni iniziali 60 e 160;
     # entrambi rimangono spostabili, con Weekly sempre relativa alle 0DTE.
-    patch('offsetWeekly = input.int(100, "Distanza Weekly dalle 0DTE", minval=20, maxval=300)',
-          'offsetWeekly = input.int(100, "Distanza Weekly dalle 0DTE", minval=20, maxval=300, active=not showPrevious)')
+    patch('offsetWeekly = input.int(100, "Distanza Weekly dalle 0DTE", minval=20, maxval=600)',
+          'offsetWeekly = input.int(100, "Distanza Weekly dalle 0DTE", minval=20, maxval=600)')
     patch("var array<float> odteLevels = ",
           "var array<float> prevLevels = " +
           _pine_array(previous_odte["rows"], "strike_spx", float(offset)) +
@@ -91,6 +91,7 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
     int currentCenter = showPrevious ? offsetOdteCompare : offsetOdte
     int weeklyCenter = currentCenter + (showPrevious ? offsetWeeklyCompare : offsetWeekly)
     bool validOrder = not showPrevious or (prevCenter < currentCenter and currentCenter < weeklyCenter)
+    bool beyondLimit = currentCenter >= 480 or weeklyCenter >= 480 or (showPrevious and prevCenter >= 480)
     float minimumSafe = math.max(requiredScale(odteValues, currentCenter), requiredScale(weeklyValues, weeklyCenter))
     if showPrevious
         minimumSafe := math.max(minimumSafe, requiredScale(prevValues, prevCenter))
@@ -98,6 +99,9 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
     if not validOrder
         label wrongOrder = label.new(bar_index + 10, close, "Posizioni: 0DTE precedente < 0DTE attuale < Weekly", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.orange, textcolor=color.black, size=size.small)
         array.push(drawnLabels, wrongOrder)
+    else if beyondLimit
+        label warningLimit = label.new(bar_index + 10, close, "Distanze oltre il limite TradingView (+500 barre): riduci la distanza Weekly/0DTE.", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.orange, textcolor=color.black, size=size.small)
+        array.push(drawnLabels, warningLimit)
     else if actualScale + 0.000001 < minimumSafe
         label unsafe = label.new(bar_index + 10, close, "Scala manuale insufficiente per limite TradingView +500: aumenta ad almeno " + str.tostring(math.ceil(minimumSafe * 10) / 10.0, "#.0") + " G/bar", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.orange, textcolor=color.black, size=size.small)
         array.push(drawnLabels, unsafe)
