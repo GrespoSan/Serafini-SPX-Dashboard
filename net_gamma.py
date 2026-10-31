@@ -144,7 +144,10 @@ def visual_profile(snapshot: dict, base: dict, expiry: date, reference: float,
         chosen.extend(side[:take])
         available -= take
     final = core + [
-        {"strike_spx": strike, "net_gamma": extra[strike][0] - extra[strike][1]}
+        {"strike_spx": strike,
+         "call_gamma_component": extra[strike][0],
+         "put_gamma_component": extra[strike][1],
+         "net_gamma": extra[strike][0] - extra[strike][1]}
         for strike in chosen
     ]
     final.sort(key=lambda r: float(r["strike_spx"]))
