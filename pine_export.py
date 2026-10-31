@@ -40,9 +40,24 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
     if not odte.get('rows') or not weekly.get('rows'):
         raise ValueError('I due profili devono avere dati')
     for group in (odte, weekly):
-        if len(group['rows']) > 50:
-            raise ValueError('Al massimo 50 livelli per profilo')
-    default_scale = _initial_manual_scale([(odte, 100), (weekly, 200)])
+        if len(group['rows']) != 50:
+            raise ValueError('Il profilo Serafini originale deve restare 25+25')
+        visual = group.get('display_rows') or group['rows']
+        if not 50 <= len(visual) <= 140:
+            raise ValueError('Il Pine visivo ammette 50-140 strike per profilo')
+        core = {float(x['strike_spx']): float(x['net_gamma'])
+                for x in group['rows']}
+        extended = {float(x['strike_spx']): float(x['net_gamma'])
+                    for x in visual}
+        if len(extended) != len(visual) or not all(
+                k in extended and abs(extended[k] - v) < 0.000001
+                for k, v in core.items()):
+            raise ValueError('Gli strike estesi devono contenere i 50 originali invariati')
+    odte_display = odte.get('display_rows') or odte['rows']
+    weekly_display = weekly.get('display_rows') or weekly['rows']
+    default_scale = _initial_manual_scale([
+        ({"rows": odte_display}, 100), ({"rows": weekly_display}, 200)
+    ])
     same_exp = odte['expiry'] == weekly['expiry']
     origin = re.sub(r'[^0-9T: .-]', '', cboe_stamp)[:72]
     # Usa solo etichette del registro di acquisizione, non presume il fuso del timestamp Cboe.
@@ -50,7 +65,7 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
     tag = f' | {clean_label}' if clean_label else ''
     warning = ('// NOTA: 0DTE e Weekly hanno LA STESSA SCADENZA in questa data: i due profili sono identici per definizione.\n' if same_exp else '')
     return f'''//@version=6
-indicator("Serafini SPX NET GAMMA | {date_text}{tag}", overlay=true, max_lines_count=250, max_labels_count=20)
+indicator("Serafini SPX NET GAMMA | {date_text}{tag}", overlay=true, max_lines_count=500, max_labels_count=20)
 // EXPORT REVISION: V53-TV-MANUAL-SCALE
 // Rilevamento selezionato: {clean_label or "Non identificato"}
 // Esportazione STATICA da uno snapshot Cboe; aggiornare ricopiando il Pine generato dalla dashboard.
@@ -58,7 +73,7 @@ indicator("Serafini SPX NET GAMMA | {date_text}{tag}", overlay=true, max_lines_c
 // Data snapshot: {date_text} | 0DTE: {odte['expiry']} | Weekly: {weekly['expiry']}
 // Differenziale ES-SPX GIA' APPLICATO agli strike: {offset:.4f}
 // Formula originale: (OI_CALL+VOL_CALL)*GAMMA_CALL - (OI_PUT+VOL_PUT)*GAMMA_PUT.
-// 25 strike SOPRA e 25 SOTTO la chiusura SPX: regola confermata direttamente da Serafini.
+// Metodo Serafini INVARIATO: 25 strike SOPRA e 25 SOTTO per C1/P1 e analisi.\n// Estensione grafica: strike Cboe veri della stessa fotografia, MAX 140 per profilo; non modifica i 50 originali.
 // Profili graficamente separati come slide 139: 0DTE vicino alle candele, Weekly piu' a destra.
 {warning}// Scala MANUALE, unica per tutti i profili e mai adattata dal codice.
 // Se la scala selezionata supera il limite grafico di TradingView (+500 barre),
@@ -68,7 +83,7 @@ indicator("Serafini SPX NET GAMMA | {date_text}{tag}", overlay=true, max_lines_c
 
 gammaPerCandle = input.float({default_scale:.1f}, "Scala MANUALE · Gamma/barra", minval=0.1, step=0.1, tooltip="Sempre applicata esattamente come impostata. Se troppo bassa, il grafico segnala di aumentarla: nessuna modifica automatica.")
 offsetOdte = input.int(100, "Distanza 0DTE da ultima candela", minval=45, maxval=250)
-offsetWeekly = input.int(100, "Distanza Weekly dalle 0DTE", minval=20, maxval=600)
+offsetWeekly = input.int(100, "Distanza Weekly dalle 0DTE", minval=20, maxval=600)\nshowExtension = input.bool(true, "Estensione automatica NET GAMMA")
 showCurrentOdte = input.bool(true, "Mostra 0DTE corrente")
 showCurrentWeekly = input.bool(true, "Mostra Weekly corrente")
 positiveColor = input.color(color.rgb(0, 230, 117), "NET GAMMA positivo")
@@ -82,10 +97,16 @@ var array<label> drawnLabels = array.new_label()
 
 // I valori sotto sono i NET GAMMA calcolati sullo snapshot selezionato.
 // Il differenziale sposta solo i prezzi, non modifica i valori NET GAMMA.
-var array<float> odteLevels = {_pine_array(odte['rows'], 'strike_spx', offset)}
-var array<float> odteValues = {_pine_array(odte['rows'], 'net_gamma')}
-var array<float> weeklyLevels = {_pine_array(weekly['rows'], 'strike_spx', offset)}
-var array<float> weeklyValues = {_pine_array(weekly['rows'], 'net_gamma')}
+var array<float> odteLevels = {_pine_array(odte_display, 'strike_spx', offset)}
+var array<float> odteValues = {_pine_array(odte_display, 'net_gamma')}
+var array<float> odteCoreValues = {_pine_array(odte['rows'], 'net_gamma')}
+var array<float> weeklyLevels = {_pine_array(weekly_display, 'strike_spx', offset)}
+var array<float> weeklyValues = {_pine_array(weekly_display, 'net_gamma')}
+var array<float> weeklyCoreValues = {_pine_array(weekly['rows'], 'net_gamma')}
+float odteCoreLow = {min(float(r['strike_spx']) for r in odte['rows']) + offset:.8f}
+float odteCoreHigh = {max(float(r['strike_spx']) for r in odte['rows']) + offset:.8f}
+float weeklyCoreLow = {min(float(r['strike_spx']) for r in weekly['rows']) + offset:.8f}
+float weeklyCoreHigh = {max(float(r['strike_spx']) for r in weekly['rows']) + offset:.8f}
 
 // Resta un margine di 20 barre rispetto al limite xloc.bar_index +500.
 // Evita anche di spingersi oltre le 10.000 barre storiche a sinistra.
@@ -100,18 +121,18 @@ requiredScale(array<float> gamma, int offsetBars) =>
     float leftCapacity = float(9500 + offsetBars)
     math.max(maxPos / rightCapacity, maxNeg / leftCapacity)
 
-renderProfile(array<float> levels, array<float> gamma, int center, string heading, float actualScale, bool adjusted) =>
+renderProfile(array<float> levels, array<float> gamma, int center, string heading, float actualScale, bool adjusted, float coreLow, float coreHigh) =>
     int count = array.size(levels)
     if count > 0
-        float bottom = array.get(levels, 0)
-        float top = array.get(levels, count - 1)
+        float bottom = showExtension ? array.get(levels, 0) : coreLow
+        float top = showExtension ? array.get(levels, count - 1) : coreHigh
         line baseline = line.new(center, bottom, center, top, xloc=xloc.bar_index, extend=extend.none, color=color.gray, style=line.style_dotted, width=1)
         array.push(drawnLines, baseline)
         for j = 0 to count - 1
             float level = array.get(levels, j)
             float g = array.get(gamma, j)
             int length = g != 0 ? math.max(1, int(math.round(math.abs(g) / actualScale))) : 0
-            if length > 0
+            if length > 0 and (showExtension or (level >= coreLow and level <= coreHigh))
                 int farX = center + (g > 0 ? length : -length)
                 line segment = line.new(center, level, farX, level, xloc=xloc.bar_index, extend=extend.none, color=g >= 0 ? positiveColor : negativeColor, width=5)
                 array.push(drawnLines, segment)
@@ -132,7 +153,7 @@ if barstate.islast and validTicker
     bool adjusted = false
     int weeklyCenter = offsetOdte + offsetWeekly
     bool beyondLimit = (showCurrentOdte and offsetOdte >= 480) or (showCurrentWeekly and weeklyCenter >= 480)
-    float minimumSafe = math.max(showCurrentOdte ? requiredScale(odteValues, offsetOdte) : 0.0, showCurrentWeekly ? requiredScale(weeklyValues, weeklyCenter) : 0.0)
+    float minimumSafe = math.max(showCurrentOdte ? requiredScale(showExtension ? odteValues : odteCoreValues, offsetOdte) : 0.0, showCurrentWeekly ? requiredScale(showExtension ? weeklyValues : weeklyCoreValues, weeklyCenter) : 0.0)
     if beyondLimit
         label warningLimit = label.new(bar_index + 10, close, "Distanza Weekly/0DTE oltre il limite TradingView (+500 barre): riduci la distanza. Nessun valore modificato automaticamente.", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.new(color.orange, 15), textcolor=color.black, size=size.small)
         array.push(drawnLabels, warningLimit)
@@ -141,7 +162,7 @@ if barstate.islast and validTicker
         array.push(drawnLabels, warningLabel)
     else
         if showCurrentOdte
-            renderProfile(odteLevels, odteValues, bar_index + offsetOdte, "0DTE 07:30", actualScale, adjusted)
+            renderProfile(odteLevels, odteValues, bar_index + offsetOdte, "0DTE 07:30", actualScale, adjusted, odteCoreLow, odteCoreHigh)
         if showCurrentWeekly
-            renderProfile(weeklyLevels, weeklyValues, bar_index + weeklyCenter, "Weekly 07:30", actualScale, adjusted)
+            renderProfile(weeklyLevels, weeklyValues, bar_index + weeklyCenter, "Weekly 07:30", actualScale, adjusted, weeklyCoreLow, weeklyCoreHigh)
 '''
