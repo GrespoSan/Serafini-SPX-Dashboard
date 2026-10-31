@@ -94,7 +94,8 @@ class CboeVisualExtension(unittest.TestCase):
 
     def test_tampered_original_strike_cannot_be_exported(self):
         ext = visual_profile(self.snap, self.core, DAY, REFERENCE, 7610)
-        ext["rows"][0]["net_gamma"] *= -1
+        core_lowest = min(float(r["strike_spx"]) for r in self.core["rows"])
+        next(row for row in ext["rows"] if row["strike_spx"] == core_lowest)["net_gamma"] *= -1
         first = {**self.core, "display_rows": ext["rows"]}
         with self.assertRaises(ValueError):
             make_pine(first, self.other, 36, DAY.isoformat(), "snapshot")
