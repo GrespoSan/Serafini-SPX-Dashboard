@@ -28,11 +28,28 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
                      date_text, cboe_stamp, current_slot)
     # Il quarto Pine può avere gamma molto maggiori della rilevazione 15:50.
     # Il default è calcolato dai dati reali, ma resta una scala MANUALE.
-    base_default = _initial_manual_scale([(current_odte, 100), (current_weekly, 200)])
-    # Primo profilo alla distanza richiesta dall'ultima candela;
-    # corrente e Weekly sono distanze relative dal profilo alla loro sinistra.
+    previous_display = previous_odte.get("display_rows") or previous_odte["rows"]
+    current_display = current_odte.get("display_rows") or current_odte["rows"]
+    weekly_display = current_weekly.get("display_rows") or current_weekly["rows"]
+    if not 50 <= len(previous_display) <= 140:
+        raise ValueError("0DTE precedente: richiesti 50-140 strike reali")
+    original_by_strike = {float(r["strike_spx"]): float(r["net_gamma"])
+                          for r in previous_odte["rows"]}
+    extended_by_strike = {float(r["strike_spx"]): float(r["net_gamma"])
+                          for r in previous_display}
+    if len(extended_by_strike) != len(previous_display) or not all(
+            k in extended_by_strike and abs(v - extended_by_strike[k]) < 0.000001
+            for k, v in original_by_strike.items()):
+        raise ValueError("0DTE precedente: estensione non coerente con i 50 originali")
+    base_default = _initial_manual_scale([
+        ({"rows": current_display}, 100),
+        ({"rows": weekly_display}, 200)
+    ])
+    # Il primo profilo usa l'offset principale, gli altri lo seguono.
     comparison_default = _initial_manual_scale([
-        (previous_odte, 100), (current_odte, 195), (current_weekly, 295)
+        ({"rows": previous_display}, 100),
+        ({"rows": current_display}, 195),
+        ({"rows": weekly_display}, 295)
     ])
     safe_default = max(base_default, comparison_default)
 
@@ -60,9 +77,13 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
           'offsetOdteCompare = input.int(95, "Distanza 0DTE corrente dalle precedenti", minval=20, maxval=300, active=showPrevious)')
     patch("var array<float> odteLevels = ",
           "var array<float> prevLevels = " +
-          _pine_array(previous_odte["rows"], "strike_spx", float(offset)) +
+          _pine_array(previous_display, "strike_spx", float(offset)) +
           "\nvar array<float> prevValues = " +
+          _pine_array(previous_display, "net_gamma") +
+          "\nvar array<float> prevCoreValues = " +
           _pine_array(previous_odte["rows"], "net_gamma") +
+          f"\nfloat prevCoreLow = {min(float(r['strike_spx']) for r in previous_odte['rows']) + offset:.8f}" +
+          f"\nfloat prevCoreHigh = {max(float(r['strike_spx']) for r in previous_odte['rows']) + offset:.8f}" +
           "\nvar array<float> odteLevels = ")
     patch("if barstate.islast and validTicker\n",
           "// Calcola SOLO il minimo SUGGERITO per separare le barre adiacenti.\n"
