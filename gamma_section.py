@@ -6,7 +6,7 @@ from datetime import date, timedelta, time
 from zoneinfo import ZoneInfo
 from datetime import datetime
 import streamlit as st
-from net_gamma import profile, profile_csv, read_snapshot
+from net_gamma import profile, profile_csv, read_snapshot, visual_profile
 from feed_quality import timestamp_state
 from volatility_levels import weekly_expiry
 from gamma_compare import compare_profiles
@@ -838,7 +838,29 @@ def render(store, week, snaps, logs):
     except Exception as exc:
         sigma_levels = None
         sigma_error = f'{type(exc).__name__}: {str(exc)[:115]}'
-    shared_bounds = profile_gamma_bounds(computed_profiles.values())
+    # L'estensione non entra nei 50 strike di calcolo Serafini, C1/P1,
+    # confronti o graduatorie: cambia soltanto la visualizzazione.
+    show_visual_extension = st.checkbox(
+        'Estensione automatica NET GAMMA — solo grafici',
+        value=True, key='gamma_visual_extension_v1',
+        help='Strike esterni autentici della stessa fotografia Cboe, con fascia '
+             'di sicurezza del 2,5% intorno al prezzo SPX acquisito. '
+             'La selezione originale 25+25 e i livelli C1/P1 restano invariati.'
+    )
+    visual_profiles = {}
+    for title, expiry in [('0DTE', day), ('Weekly', weekly_exp)]:
+        if title not in computed_profiles:
+            continue
+        core = computed_profiles[title]
+        if not core.get('rows') or not show_visual_extension:
+            visual_profiles[title] = core
+            continue
+        try:
+            visual_profiles[title] = visual_profile(
+                snap, core, expiry, ref, snap['data'].get('current_price'))
+        except (ValueError, TypeError, KeyError, OverflowError):
+            visual_profiles[title] = core
+    shared_bounds = profile_gamma_bounds(visual_profiles.values())
     st.caption('Tooltip: componente Call positiva, componente Put negativa e saldo netto '
                'della formula Serafini (OI + Volume) × Gamma; non valori monetari delle posizioni.')
     independent_scale = st.checkbox(
@@ -863,8 +885,15 @@ def render(store, week, snaps, logs):
             if not result['rows']:
                 st.warning('Nessun contratto trovato per questa scadenza nello snapshot: nessun risultato inventato.')
                 continue
-            st.caption(f"{result['contracts']} contratti · {result['available_strikes']} strike disponibili · {len(result['rows'])} strike selezionati")
-            records = [{**r, 'strike_es': r['strike_spx'] + offset if offset is not None else None} for r in result['rows']]
+            visual = visual_profiles.get(title, result)
+            extra_count = len(visual.get('rows', [])) - len(result['rows'])
+            st.caption(f"{result['contracts']} contratti · {result['available_strikes']} strike disponibili · "
+                       f"{len(result['rows'])} originali (25+25)"
+                       + (f" + {extra_count} estesi solo per il grafico" if extra_count else ""))
+            if extra_count and visual.get('coverage_complete') is False:
+                st.caption('Estensione parziale: strike esterni non sufficienti '
+                           'nella fotografia Cboe o limite di 140 livelli.')
+            records = [{**r, 'strike_es': r['strike_spx'] + offset if offset is not None else None} for r in visual['rows']]
             import pandas as pd
             frame = pd.DataFrame(records)
             # Slide 144: profilo NET GAMMA, non componenti separate.
@@ -886,16 +915,18 @@ def render(store, week, snaps, logs):
                 ),
             )
             fig.update_layout(
-                height=max(520, len(y) * 15),
+                height=max(520, min(1250, len(y) * 12)),
                 margin=dict(l=15, r=20, t=40, b=30),
                 title=f'{title} | {day:%d/%m/%Y} | {capture_info}<br><sup>NET GAMMA per strike — positivo a destra / negativo a sinistra</sup>',
                 xaxis=dict(title='NET GAMMA (unità della formula Serafini)', zeroline=True,
-                           range=(profile_gamma_bounds([result]) if independent_scale else shared_bounds),
+                           range=(profile_gamma_bounds([visual]) if independent_scale else shared_bounds),
                            fixedrange=not independent_scale,
                            zerolinewidth=1, zerolinecolor='#b7bec8'),
                 yaxis=dict(title='Strike ES' if offset is not None else 'Strike SPX',
-                           tickmode='array', tickvals=y,
-                           ticktext=[f'{v:g}' for v in y], type='linear'),
+                           tickmode='array',
+                           tickvals=y[::max(1, math.ceil(len(y) / 45))],
+                           ticktext=[f'{v:g}' for v in y[::max(1, math.ceil(len(y) / 45))]],
+                           type='linear'),
                 showlegend=False,
                 template='plotly_dark',
             )
