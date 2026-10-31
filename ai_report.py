@@ -651,8 +651,16 @@ def pdf_summary(report):
     return buf.getvalue()
 
 
+def _json_default(value):
+    """Converte date e orari Python in ISO senza alterare i dati del report."""
+    if isinstance(value, (date, datetime, time)):
+        return value.isoformat()
+    raise TypeError(f'Object of type {type(value).__name__} is not JSON serializable')
+
+
 def export_zip(report):
-    json_data=json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False).encode('utf-8')
+    json_data=json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False,
+                         default=_json_default).encode('utf-8')
     pdf_data=pdf_summary(report)
     out=io.BytesIO()
     with zipfile.ZipFile(out,'w',compression=zipfile.ZIP_DEFLATED) as z:
