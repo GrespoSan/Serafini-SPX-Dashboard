@@ -37,11 +37,40 @@ def load_export_profiles(store, week, day: date, logs):
                 break
             if len(raw) != 50 or len({float(r["strike_spx"]) for r in raw}) != 50:
                 break
-            clean[kind] = {"expiry": expected[kind], "rows": [
-                {"strike_spx": float(r["strike_spx"]),
-                 "net_gamma": float(r["net_gamma"])}
-                for r in raw
-            ]}
+            original = [{
+                "strike_spx": float(r["strike_spx"]),
+                "net_gamma": float(r["net_gamma"]),
+            } for r in raw]
+            # L'estensione e' SOLO per il Pine: i 50 originali sono la
+            # fonte autorevole per i calcoli, i livelli e il Replay.
+            visual = p.get("visual_rows") or raw
+            try:
+                display = [{
+                    "strike_spx": float(r["strike_spx"]),
+                    "net_gamma": float(r["net_gamma"]),
+                } for r in visual]
+                original_by_strike = {r["strike_spx"]: r["net_gamma"]
+                                      for r in original}
+                visual_by_strike = {r["strike_spx"]: r["net_gamma"]
+                                    for r in display}
+                valid_visual = (
+                    50 <= len(display) <= 140 and
+                    len(visual_by_strike) == len(display) and
+                    all(strike in visual_by_strike and
+                        abs(visual_by_strike[strike] - gamma) < 0.000001
+                        for strike, gamma in original_by_strike.items())
+                )
+            except (ValueError, TypeError, OverflowError, KeyError):
+                valid_visual = False
+            if not valid_visual:
+                display = original
+            clean[kind] = {
+                "expiry": expected[kind],
+                "rows": original,
+                "display_rows": sorted(display, key=lambda r: r["strike_spx"]),
+                "visual_coverage_complete": (
+                    p.get("visual_coverage_complete") if valid_visual else None),
+            }
         if len(clean) == 2:
             result[slot] = {
                 "origin": frame.get("origin", "NON VERIFICATO"),
