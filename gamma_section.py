@@ -991,7 +991,7 @@ def render(store, week, snaps, logs):
                                f"L90 {sigma_levels['L90']:.2f} · "
                                f"L350 {sigma_levels['L350']:.2f} · "
                                f"S350 {sigma_levels['S350']:.2f}."
-                               + (' Fuori dai 50 strike: ' + ', '.join(clipped_sigma) + '.'
+                               + (' Fuori dal range visualizzato: ' + ', '.join(clipped_sigma) + '.'
                                   if clipped_sigma else '')
                               )
 
