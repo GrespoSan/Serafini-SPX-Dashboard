@@ -29,8 +29,10 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
     # Il quarto Pine può avere gamma molto maggiori della rilevazione 15:50.
     # Il default è calcolato dai dati reali, ma resta una scala MANUALE.
     base_default = _initial_manual_scale([(current_odte, 100), (current_weekly, 200)])
+    # Primo profilo alla distanza richiesta dall'ultima candela;
+    # corrente e Weekly sono distanze relative dal profilo alla loro sinistra.
     comparison_default = _initial_manual_scale([
-        (previous_odte, 70), (current_odte, 165), (current_weekly, 275)
+        (previous_odte, 100), (current_odte, 195), (current_weekly, 295)
     ])
     safe_default = max(base_default, comparison_default)
 
@@ -49,16 +51,13 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
           "// EXPORT REVISION: V53-TV-MANUAL-CLOSE-THREE-COLUMNS")
     patch("// La scala MANUALE e' COMUNE ai profili e non altera i gamma Cboe calcolati.",
           "// I tre profili usano ESATTAMENTE la stessa scala manuale.")
+    # Il parametro offsetOdte fissa SEMPRE il primo profilo 0DTE visibile:
+    # con precedente ON e' quello precedente, con OFF e' quello corrente.
+    # Gli altri due profili seguono automaticamente il primo.
     patch('offsetOdte = input.int(100, "Distanza 0DTE da ultima candela", minval=45, maxval=250)',
           'showPrevious = input.bool(true, "Mostra 0DTE precedente")\n'
           'offsetOdte = input.int(100, "Distanza 0DTE da ultima candela", minval=45, maxval=250)\n'
-          'offsetPrevious = input.int(70, "1 · Posizione 0DTE precedente", minval=40, maxval=140, active=showPrevious)\n'
-          'offsetOdteCompare = input.int(165, "2 · Posizione 0DTE attuale", minval=120, maxval=250, active=showPrevious)\n'
-          'offsetWeeklyCompare = input.int(110, "3 · Distanza Weekly dalle 0DTE attuali", minval=20, maxval=600, active=showPrevious)')
-    # Con precedente OFF, due profili semplici alle posizioni iniziali 60 e 160;
-    # entrambi rimangono spostabili, con Weekly sempre relativa alle 0DTE.
-    patch('offsetWeekly = input.int(100, "Distanza Weekly dalle 0DTE", minval=20, maxval=600)',
-          'offsetWeekly = input.int(100, "Distanza Weekly dalle 0DTE", minval=20, maxval=600)')
+          'offsetOdteCompare = input.int(95, "Distanza 0DTE corrente dalle precedenti", minval=20, maxval=300, active=showPrevious)')
     patch("var array<float> odteLevels = ",
           "var array<float> prevLevels = " +
           _pine_array(previous_odte["rows"], "strike_spx", float(offset)) +
@@ -87,9 +86,12 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
     # entrambi i profili correnti e il precedente vengono da snapshot reali.
     code = prefix + f"""    float actualScale = gammaPerCandle
     bool adjusted = false
-    int prevCenter = offsetPrevious
-    int currentCenter = showPrevious ? offsetOdteCompare : offsetOdte
-    int weeklyCenter = currentCenter + (showPrevious ? offsetWeeklyCompare : offsetWeekly)
+    // La distanza dalla candela vale per le 0DTE precedenti (se visibili),
+    // altrimenti direttamente per le 0DTE correnti.
+    // Spostando offsetOdte si sposta tutto il gruppo: precedente, corrente, Weekly.
+    int prevCenter = offsetOdte
+    int currentCenter = offsetOdte + (showPrevious ? offsetOdteCompare : 0)
+    int weeklyCenter = currentCenter + offsetWeekly
     bool validOrder = not showPrevious or ((not showCurrentOdte or prevCenter < currentCenter) and (not showCurrentWeekly or prevCenter < weeklyCenter) and (not (showCurrentOdte and showCurrentWeekly) or currentCenter < weeklyCenter))
     bool beyondLimit = (showCurrentOdte and currentCenter >= 480) or (showCurrentWeekly and weeklyCenter >= 480) or (showPrevious and prevCenter >= 480)
     float minimumSafe = math.max(showCurrentOdte ? requiredScale(odteValues, currentCenter) : 0.0, showCurrentWeekly ? requiredScale(weeklyValues, weeklyCenter) : 0.0)
