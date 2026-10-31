@@ -111,3 +111,22 @@ Nel repository pubblico `Serafini-SPX-Dashboard` sostituire soltanto `app.py`, `
 ### Test locale effettuato
 
 Snapshot SPX del 15 ottobre 2026: 30.470 contratti nel file; per scadenza 2026-10-15 498 contratti e 249 strike disponibili; per 2026-10-16 2.060 contratti e 545 strike disponibili. Il modulo seleziona 50 strike per ciascuna scadenza se disponibili. Test di struttura e calcolo; nessuna verifica di corrispondenza con il grafico Overcharts/Serafini ancora eseguita.
+
+
+## Estensione automatica NET GAMMA — soltanto grafici e Pine (31/10/2026)
+
+- **Metodo Serafini invariato:** 25 strike sopra e 25 sotto il close SPX precedente
+  per C1/P1, analisi, confronto e CSV numerico originale.
+- **Visualizzazione:** l'app può aggiungere strike reali già presenti nella STESSA
+  fotografia Cboe, per coprire il prezzo SPX fotografato ±2,5% del riferimento,
+  con tetto di 140 strike per profilo e segnalazione di copertura parziale.
+- **TradingView:** i Pine 07:30 e comparativi includono l'opzione «Estensione
+  automatica NET GAMMA» attiva per default; OFF mostra solo gli originali.
+  I tre profili comparativi usano al massimo 423 linee per baselines e Gamma,
+  contro il limite Pine di 500. Non vengono inventati o richiesti dati live.
+- **Replay:** i nuovi file compatti conservano separatamente `rows` 50 e
+  `visual_rows` fino a 140. I Replay vecchi, privi dei livelli aggiuntivi,
+  rimangono a 50; non è possibile recuperarli dal solo JSON compatto.
+- I Pine esportati restano STATICI rispetto al rilevamento: per nuovi strike
+  fuori dalla fascia coperta, selezionare una fotografia più recente e
+  rigenerare il codice. Tutti i prezzi Cboe restano puntuali al download.
