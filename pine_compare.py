@@ -115,16 +115,19 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
     int weeklyCenter = currentCenter + offsetWeekly
     bool validOrder = not showPrevious or ((not showCurrentOdte or prevCenter < currentCenter) and (not showCurrentWeekly or prevCenter < weeklyCenter) and (not (showCurrentOdte and showCurrentWeekly) or currentCenter < weeklyCenter))
     bool beyondLimit = (showCurrentOdte and currentCenter >= 480) or (showCurrentWeekly and weeklyCenter >= 480) or (showPrevious and prevCenter >= 480)
-    float minimumSafe = math.max(showCurrentOdte ? requiredScale(odteValues, currentCenter) : 0.0, showCurrentWeekly ? requiredScale(weeklyValues, weeklyCenter) : 0.0)
+    array<float> activePrevious = showExtension ? prevValues : prevCoreValues
+    array<float> activeCurrent = showExtension ? odteValues : odteCoreValues
+    array<float> activeWeekly = showExtension ? weeklyValues : weeklyCoreValues
+    float minimumSafe = math.max(showCurrentOdte ? requiredScale(activeCurrent, currentCenter) : 0.0, showCurrentWeekly ? requiredScale(activeWeekly, weeklyCenter) : 0.0)
     if showPrevious
-        minimumSafe := math.max(minimumSafe, requiredScale(prevValues, prevCenter))
+        minimumSafe := math.max(minimumSafe, requiredScale(activePrevious, prevCenter))
     float recommendedScale = 0.0
     if showPrevious and showCurrentOdte
-        recommendedScale := math.max(recommendedScale, requiredGapScale(prevValues, odteValues, prevCenter, currentCenter))
+        recommendedScale := math.max(recommendedScale, requiredGapScale(activePrevious, activeCurrent, prevCenter, currentCenter))
     if showCurrentOdte and showCurrentWeekly
-        recommendedScale := math.max(recommendedScale, requiredGapScale(odteValues, weeklyValues, currentCenter, weeklyCenter))
+        recommendedScale := math.max(recommendedScale, requiredGapScale(activeCurrent, activeWeekly, currentCenter, weeklyCenter))
     if showPrevious and showCurrentWeekly and not showCurrentOdte
-        recommendedScale := math.max(recommendedScale, requiredGapScale(prevValues, weeklyValues, prevCenter, weeklyCenter))
+        recommendedScale := math.max(recommendedScale, requiredGapScale(activePrevious, activeWeekly, prevCenter, weeklyCenter))
     if not validOrder
         label wrongOrder = label.new(bar_index + 10, close, "Posizioni: 0DTE precedente < 0DTE attuale < Weekly", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.orange, textcolor=color.black, size=size.small)
         array.push(drawnLabels, wrongOrder)
@@ -145,10 +148,10 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
             label optimal = label.new(bar_index + captionCenter, captionTop + math.max(18.0, (captionTop - captionBottom) / 8), recommendedText, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_down, color=color.new(color.black, 35), textcolor=color.white, size=size.normal)
             array.push(drawnLabels, optimal)
         if showPrevious
-            renderProfile(prevLevels, prevValues, bar_index + prevCenter, "0DTE {previous_slot}", actualScale, adjusted)
+            renderProfile(prevLevels, prevValues, bar_index + prevCenter, "0DTE {previous_slot}", actualScale, adjusted, prevCoreLow, prevCoreHigh)
         if showCurrentOdte
-            renderProfile(odteLevels, odteValues, bar_index + currentCenter, currentTitle, actualScale, adjusted)
+            renderProfile(odteLevels, odteValues, bar_index + currentCenter, currentTitle, actualScale, adjusted, odteCoreLow, odteCoreHigh)
         if showCurrentWeekly
-            renderProfile(weeklyLevels, weeklyValues, bar_index + weeklyCenter, weeklyTitle, actualScale, adjusted)
+            renderProfile(weeklyLevels, weeklyValues, bar_index + weeklyCenter, weeklyTitle, actualScale, adjusted, weeklyCoreLow, weeklyCoreHigh)
 """
     return code
