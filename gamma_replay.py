@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 import plotly.graph_objects as go
 import streamlit as st
 
-from net_gamma import profile, read_snapshot
+from net_gamma import profile, read_snapshot, visual_profile
 from feed_quality import summarize_timeline
 from replay_scale import dynamic_gamma_bounds
 from spx_market_clock import classify_0dte_download, cash_open_rome, spxw_expiry_close_rome
@@ -80,9 +80,19 @@ def _official_frames(store, week, day, logs):
                     calculated = profile(snap, expiry, ref)
                     if not calculated.get("rows"):
                         raise ValueError("Profilo vuoto")
-                    profiles[kind] = {"rows": [
-                        {"strike_spx": r["strike_spx"], "net_gamma": r["net_gamma"]}
-                        for r in calculated["rows"]]}
+                    expanded = visual_profile(
+                        snap, calculated, expiry, ref,
+                        snap["data"].get("current_price"))
+                    profiles[kind] = {
+                        "rows": [
+                            {"strike_spx": r["strike_spx"], "net_gamma": r["net_gamma"]}
+                            for r in calculated["rows"]],
+                        # Profilo extra separato: Replay / C1-P1 leggono sempre rows.
+                        "visual_rows": [
+                            {"strike_spx": r["strike_spx"], "net_gamma": r["net_gamma"]}
+                            for r in expanded["rows"]],
+                        "visual_coverage_complete": expanded["coverage_complete"],
+                    }
                 if not any(abs(r["net_gamma"]) > 0 for r in profiles["0DTE"]["rows"]):
                     continue
                 result[slot] = {
