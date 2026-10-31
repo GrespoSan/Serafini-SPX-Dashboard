@@ -155,8 +155,13 @@ def visual_profile(snapshot: dict, base: dict, expiry: date, reference: float,
     # non affermare che una fascia è coperta quando la catena è insufficiente.
     actual_low = float(final[0]["strike_spx"])
     actual_high = float(final[-1]["strike_spx"])
-    complete = ((not side_low or actual_low <= requested_low) and
-                (not side_high or actual_high >= requested_high))
+    core_ordered = sorted(core_strikes)
+    steps = [b - a for a, b in zip(core_ordered, core_ordered[1:]) if b > a]
+    tolerance = min(steps) if steps else 0.0
+    # Un target tra due strike quotati e' coperto fino allo strike reale
+    # immediatamente vicino: non segnalare un falso limite per 1-5 punti.
+    complete = ((not side_low or actual_low <= requested_low + tolerance) and
+                (not side_high or actual_high >= requested_high - tolerance))
     return {
         "expiry": expiry.isoformat(), "rows": final,
         "core_strikes": len(core), "extra_strikes": len(final) - len(core),
