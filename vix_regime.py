@@ -102,7 +102,7 @@ def previous_vix_curve(target_day):
 
 
 def breakout_buffer_points(contango_pct):
-    """Regola configurata: Backwardation 15, Contango 10 punti.
+    """Solo contributo VX: Backwardation 15, Contango 10 punti.
 
     La percentuale deriva dalla curva futures VX mensili (M2/M1 - 1)*100.
     A zero esatto si segue la classificazione non-negativa della dashboard.
@@ -113,13 +113,13 @@ def breakout_buffer_points(contango_pct):
     return 15 if pct < 0 else 10
 
 
-def combined_breakout_buffer(contango_pct=None, daily_change_pct=None):
-    """ES breakout buffer from yesterday's signed CLOSE/CLOSE and VX regime.
+def combined_breakout_buffer(contango_pct=None, daily_range_pct=None, daily_candle_red=None):
+    """Buffer ES secondo la regola del contesto Serafini.
 
-    15 punti: previous Daily ES Close/Close strictly below -1%, OR VX
-    backwardation. The nonnegative High-Low range does NOT choose 10/15.
-    With sources incomplete, do not assert low volatility or force 10.
-    The buffer is indicative and contextual, not an entry signal.
+    15 punti se VX mensile in backwardation OPPURE se la candela Daily ES
+    precedente e' rossa (Close < Open) e il range (High-Low)/Close supera 1%.
+    Close/Close e' solo una misura descrittiva e non decide il buffer.
+    Se i dati non escludono entrambe le condizioni non forzare 10 punti.
     """
     def finite_or_none(value):
         if value is None:
@@ -130,29 +130,35 @@ def combined_breakout_buffer(contango_pct=None, daily_change_pct=None):
         return number
 
     pct = finite_or_none(contango_pct)
-    daily = finite_or_none(daily_change_pct)
+    daily_range = finite_or_none(daily_range_pct)
+    if daily_range is not None and daily_range < 0:
+        raise ValueError("Range Daily ES negativo")
+    if daily_candle_red is not None and not isinstance(daily_candle_red, bool):
+        raise TypeError("Colore candela Daily ES non valido")
+
     reasons = []
     if pct is not None and pct < 0:
         reasons.append("Backwardation VX")
-    if daily is not None and round(daily, 6) < -1.0:
-        reasons.append("Ribasso Close/Close seduta precedente oltre -1%")
+    if daily_range is not None and daily_candle_red is True and daily_range > 1.0:
+        reasons.append("Candela Daily ES rossa con range High-Low oltre 1%")
     if reasons:
         buffer, status = 15, "DETERMINATO"
-    elif pct is not None and daily is not None:
+    elif pct is not None and daily_range is not None and daily_candle_red is not None:
         buffer, status = 10, "DETERMINATO"
-        reasons.append("VX non in backwardation e Close/Close non sotto -1%")
+        reasons.append("VX non in backwardation e nessuna candela rossa con range oltre 1%")
     else:
         buffer, status = None, "NON DETERMINABILE"
-        reasons.append("Dati insufficienti per escludere le condizioni di alta volatilità")
+        reasons.append("Dati insufficienti per escludere backwardation o candela rossa con range oltre 1%")
 
     return {
         "status": status,
         "buffer_es_points": buffer,
         "reason": "; ".join(reasons),
-        "rule": "15 se VX in backwardation o ES Close/Close seduta precedente < -1%; altrimenti 10 se entrambi verificati",
+        "rule": "15 se VX in backwardation OPPURE candela Daily ES precedente rossa (Close < Open) con (High-Low)/Close > 1%; altrimenti 10 se entrambe le condizioni sono verificabili ed escluse",
         "inputs": {"vx_contango_pct": pct,
-                   "previous_es_daily_change_pct": daily},
-        "note": ("Buffer standard indicativo basato sulla precisazione del metodo Serafini; "
+                   "previous_es_daily_range_pct": daily_range,
+                   "previous_es_daily_candle_red": daily_candle_red},
+        "note": ("Buffer standard indicativo secondo il chiarimento del metodo Serafini; "
                  "non è una regola universale né un segnale di ingresso."),
     }
 
@@ -163,7 +169,8 @@ def volatility_context(target_day):
 
     vx = {"status": "NON DISPONIBILE"}
     daily = {"status": "NON DISPONIBILE"}
-    pct = daily_change = None
+    pct = daily_range = None
+    daily_candle_red = None
     try:
         observed = previous_vix_curve(target_day)
         pct = float(observed["contango_pct"])
@@ -174,11 +181,14 @@ def volatility_context(target_day):
         vx["reason"] = type(exc).__name__
     try:
         daily = previous_es_daily_range(target_day)
-        daily_change = daily["change_pct"]
+        if daily.get("status") == "VALIDO":
+            daily_range = daily.get("range_pct")
+            if daily.get("open") is not None and daily.get("close") is not None:
+                daily_candle_red = float(daily["close"]) < float(daily["open"])
     except Exception as exc:
         daily = {"status": "NON DISPONIBILE", "reason": type(exc).__name__,
                  "source": "Massive Futures REST · ES 1session"}
-    decision = combined_breakout_buffer(pct, daily_change)
+    decision = combined_breakout_buffer(pct, daily_range, daily_candle_red)
     vx["breakout_buffer_es_points"] = decision["buffer_es_points"]
     return {"vix_curve": vx, "previous_daily_range": daily,
             "breakout_buffer": decision}
@@ -293,7 +303,7 @@ def render(target_day, return_context=False):
     {detail} · ES Massive {escape(daily.get('ticker', 'N/D'))} ·
     seduta {escape(daily_date)} · VX Cboe {escape(vx_date)}.
     Range Daily = (High−Low)/Close e confronto con la seduta precedente;
-    Buffer ES = 15 se Close/Close &lt; −1% oppure VX in backwardation.
+    Buffer ES = 15 se VX in backwardation oppure candela ES rossa con range &gt; 1%.
   </div>
 </div>"""
     st.markdown(card, unsafe_allow_html=True)
@@ -303,13 +313,27 @@ def render(target_day, return_context=False):
                 f"Massive Futures {daily['ticker']} · 1session · "
                 f"chiusura {daily['day']}: {daily['close']:,.2f} / "
                 f"chiusura {daily['previous_close_day']}: {daily['previous_close']:,.2f}. "
-                "Close/Close sul medesimo contratto, non settlement. "
+                "Close/Close sul medesimo contratto, non settlement; "
+                "non determina il buffer. "
                 "Verificare la scadenza rispetto a ES1!."
             )
-        st.caption("Fonte VX: settlement futures mensili Cboe; "
-                   "la backwardation influenza il buffer standard SPX. "
-                   "Il Range Daily contribuisce solo a espansione/compressione, "
-                   "non alla scelta del buffer.")
+        if daily_ok:
+            opening = daily.get("open")
+            close = daily.get("close")
+            if opening is not None and close is not None:
+                color = ("ROSSA" if float(close) < float(opening) else
+                         "VERDE" if float(close) > float(opening) else "DOJI")
+                st.caption(
+                    f"Candela Daily ES precedente: Open {float(opening):,.2f}; "
+                    f"Close {float(close):,.2f}; {color}; "
+                    f"range High-Low {float(daily['range_pct']):.2f}%.")
+            else:
+                st.caption("Open/Close ES mancanti: colore della candela non verificabile.")
+        st.caption("Fonte VX: settlement futures mensili Cboe. "
+                   "Buffer ES 15 punti in backwardation oppure con candela ES rossa "
+                   "e range High-Low strettamente maggiore di 1%. "
+                   "In assenza delle condizioni, 10 punti solo con dati verificati. "
+                   "La variazione Close/Close resta informativa.")
     if not vx_ok or not daily_ok:
         unavailable = []
         if not daily_ok:

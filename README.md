@@ -38,27 +38,32 @@ Restano specifiche SPX: **regime VX in contango/backwardation** e
 **buffer indicativo ES 10/15 punti**, senza applicarlo agli altri futures.
 La sezione NET GAMMA, l'archivio SPX e i moduli Replay/GEX non sono modificati.
 
-## Regime di volatilità · chiarimento Serafini 30/10/2026
+## Regime di volatilità · buffer Serafini (precisazione 01/11/2026)
 
-La condizione di alta volatilità da ribasso è una variazione **Close/Close
-strettamente inferiore a −1%** della seduta precedente. Il buffer indicativo
-della SPX è 15 punti se questa condizione è vera **oppure** il VX mensile è
-in backwardation; se entrambe le fonti sono presenti e nessuna delle due
-condizioni è vera, è 10 punti. Con dati insufficienti, il buffer rimane N/D.
+Per il buffer indicativo della SPX si usa la seduta ES Daily precedente.
+Il buffer è **15 punti** se si verifica **almeno una** delle due condizioni:
 
-Il **Range Daily** non determina più il buffer. Serve a osservare
-l'**ESPANSIONE / COMPRESSIONE** confrontando (High−Low)/Close della seduta
-precedente con la stessa misura della seduta ancora precedente, usando
-lo stesso ES Massive. L'etichetta della scheda mostra sia il Range Daily
-attuale sia il confronto. La variazione Close/Close negativa e la misura
-del range sono indipendenti.
+- futures VX mensili in **backwardation**; **oppure**
+- candela Daily ES **rossa** (`Close < Open`) con **range High–Low
+  strettamente superiore all'1%**, calcolato come `(High-Low)/Close × 100`.
+
+Il buffer è **10 punti** soltanto se entrambe le condizioni sono state
+verificate e nessuna è vera. Se mancano i dati necessari per escludere
+entrambe le condizioni (ad esempio Open ES assente e VX in contango),
+il valore rimane **N/D**, senza forzare 10 punti. La backwardation,
+da sola, è sufficiente per 15 punti anche se il Daily non è disponibile.
+
+La variazione `Close/Close` è mostrata nella scheda a scopo descrittivo
+ma **non** determina più il buffer. Il confronto del Range Daily
+percentuale con quello della seduta precedente continua a indicare
+espansione/compressione, indipendentemente dal colore della candela.
 
 ## Massive Futures · range e andamento della seduta precedente
 
-**Solo due dati** usano ora Massive: il Range Daily High−Low e la
-variazione Close/Close del future ES. Entrambi vengono ricavati dalle
-stesse barre `1session` per il contratto reale scelto, usando il campo
-`close` dell'ultimo trade, **non `settlement_price`**.
+**I dati Daily ES** (Open, High, Low e Close) provengono dalle stesse
+barre Massive `1session` del contratto reale scelto. Il range e la
+variazione Close/Close usano il campo `close` dell'ultimo trade,
+**non `settlement_price`**. Open e Close determinano il colore della candela.
 
 La scheda ha il titolo **Andamento e volatilità — seduta precedente**,
 con una riga chiaramente etichettata "Variazione chiusura della seduta
