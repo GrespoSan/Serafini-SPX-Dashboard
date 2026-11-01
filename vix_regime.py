@@ -208,7 +208,7 @@ def signed_daily_heading(change_pct):
         f'<h4 style="font-size:1.4rem;font-weight:700">{base}</h4>'
         '<div style="font-size:1.12rem;line-height:1.5;padding:0 0 12px;'
         'color:#dbe2eb;font-weight:600">'
-        'Variazione chiusura della seduta (Close/Close): '
+        'Variazione chiusura della seduta: '
         f'<span style="color:{color};font-size:1.2rem;font-weight:800">{value}</span></div>'
     )
 
@@ -241,8 +241,19 @@ def render(target_day, return_context=False):
     else:
         daily_value, daily_date = "Non disponibile", "—"
         range_comparison = "Confronto non disponibile"
-    # Unlike the nonnegative High−Low range, the close-to-close change
-    # communicates whether the prior ES session ended higher or lower.
+    # Use the same actual Open/Close as the buffer rule, never the signed
+    # Close/Close movement, to describe the prior candle's colour.
+    candle_label = "N/D"
+    candle_text_color = "#b6bcc5"
+    if daily_ok and daily.get("open") is not None and daily.get("close") is not None:
+        opening, closing = float(daily["open"]), float(daily["close"])
+        if closing < opening:
+            candle_label, candle_text_color = "ROSSA", "#ff676d"
+        elif closing > opening:
+            candle_label, candle_text_color = "VERDE", "#56d49e"
+        else:
+            candle_label = "DOJI"
+    # Close/Close is informational and is NOT used to choose the buffer.
     close_change = daily.get("change_pct") if daily_ok else None
     # Both figures come from one Massive bar set; no second source or call.
     st.markdown(signed_daily_heading(close_change), unsafe_allow_html=True)
@@ -277,6 +288,7 @@ def render(target_day, return_context=False):
 .spx-vol-kpi .label {{font-size:.82rem; color:#b6bcc5; margin-bottom:5px;}}
 .spx-vol-kpi .number {{font-size:1.15rem; font-weight:740; overflow-wrap:anywhere;}}
 .spx-vol-kpi .range-direction {{font-size:.79rem;color:#abb6c4;margin-top:8px;line-height:1.5;}}
+.spx-vol-kpi .candle-direction {{font-size:.84rem;font-weight:700;margin-top:7px;line-height:1.4;color:{candle_text_color};}}
 .spx-vol-kpi .buffer {{color:{highlight}; font-size:1.3rem;}}
 .spx-vol-foot {{
   border-top:1px solid #292b30; padding-top:9px; margin-top:12px;
@@ -294,6 +306,7 @@ def render(target_day, return_context=False):
       <div class="label">Range Daily precedente</div>
       <div class="number">{escape(daily_value)}</div>
       <div class="range-direction">{escape(range_comparison)}</div>
+      <div class="candle-direction">Candela Daily: {escape(candle_label)}</div>
     </div>
     <div class="spx-vol-kpi">
       <div class="label">Regime VX precedente</div>
@@ -305,11 +318,8 @@ def render(target_day, return_context=False):
     </div>
   </div>
   <div class="spx-vol-foot">
-    {detail} · ES Massive {escape(daily.get('ticker', 'N/D'))} ·
-    seduta {escape(daily_date)} · VX Cboe {escape(vx_date)}.
-    Range Daily = (High−Low)/Close e confronto con la seduta precedente;
-    Buffer ES = 15 se VX in backwardation oppure candela ES rossa con range &gt; 1%.
-    Le etichette bassa/alta volatilità descrivono soltanto la classificazione del buffer.
+    Motivo del buffer: {detail}.<span class="spx-vol-source">
+    ES {escape(daily.get('ticker', 'N/D'))} · {escape(daily_date)} · VX Cboe {escape(vx_date)}.</span>
   </div>
 </div>"""
     st.markdown(card, unsafe_allow_html=True)
@@ -327,19 +337,22 @@ def render(target_day, return_context=False):
             opening = daily.get("open")
             close = daily.get("close")
             if opening is not None and close is not None:
-                color = ("ROSSA" if float(close) < float(opening) else
-                         "VERDE" if float(close) > float(opening) else "DOJI")
                 st.caption(
                     f"Candela Daily ES precedente: Open {float(opening):,.2f}; "
-                    f"Close {float(close):,.2f}; {color}; "
+                    f"Close {float(close):,.2f}; {candle_label}; "
                     f"range High-Low {float(daily['range_pct']):.2f}%.")
             else:
                 st.caption("Open/Close ES mancanti: colore della candela non verificabile.")
+        st.caption("Range Daily ES (%) = (High − Low) / Close × 100. "
+                   "Espansione/compressione: confronto con il range percentuale "
+                   "della seduta ancora precedente.")
         st.caption("Fonte VX: settlement futures mensili Cboe. "
                    "Buffer ES 15 punti in backwardation oppure con candela ES rossa "
                    "e range High-Low strettamente maggiore di 1%. "
                    "In assenza delle condizioni, 10 punti solo con dati verificati. "
                    "La variazione Close/Close resta informativa.")
+        st.caption("Bassa/alta volatilità è l'etichetta del buffer standard "
+                   "da 10/15 punti, non una classificazione generale del mercato.")
     if not vx_ok or not daily_ok:
         unavailable = []
         if not daily_ok:
