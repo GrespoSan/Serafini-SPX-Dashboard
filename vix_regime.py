@@ -206,9 +206,10 @@ def signed_daily_heading(change_pct):
                  "#ff676d" if change_pct < 0 else "#b6bcc5")
     return (
         f'<h4 style="font-size:1.4rem;font-weight:700">{base}</h4>'
-        '<div style="font-size:1rem;padding:0 0 10px;color:#c3cbd5">'
+        '<div style="font-size:1.12rem;line-height:1.5;padding:0 0 12px;'
+        'color:#dbe2eb;font-weight:600">'
         'Variazione chiusura della seduta (Close/Close): '
-        f'<span style="color:{color};font-weight:750">{value}</span></div>'
+        f'<span style="color:{color};font-size:1.2rem;font-weight:800">{value}</span></div>'
     )
 
 
@@ -254,7 +255,11 @@ def render(target_day, return_context=False):
 
     points = decision["buffer_es_points"]
     is_high = points == 15
-    value = f"{points} punti" if points is not None else "Da determinare"
+    value = (
+        "10 punti (bassa volatilità)" if points == 10 else
+        "15 punti (alta volatilità)" if points == 15 else
+        "Da determinare"
+    )
     highlight = "#ff676d" if is_high else ("#56d49e" if points == 10 else "#e5b65c")
     detail = escape(decision["reason"])
     card = f"""
@@ -304,6 +309,7 @@ def render(target_day, return_context=False):
     seduta {escape(daily_date)} · VX Cboe {escape(vx_date)}.
     Range Daily = (High−Low)/Close e confronto con la seduta precedente;
     Buffer ES = 15 se VX in backwardation oppure candela ES rossa con range &gt; 1%.
+    Le etichette bassa/alta volatilità descrivono soltanto la classificazione del buffer.
   </div>
 </div>"""
     st.markdown(card, unsafe_allow_html=True)
