@@ -13,8 +13,19 @@ from zoneinfo import ZoneInfo
 
 import streamlit as st
 from storage import Store
+from spx_massive_day_cache import purge_expired
 
 st.set_page_config(page_title='Serafini SPX — Archivio', page_icon='📊', layout='wide')
+
+# Only temporary Massive ES data are purged at the next Rome day. Do not
+# clear global st.cache_data: it also holds unrelated immutable Cboe snapshots.
+try:
+    massive_new_day = purge_expired()
+except OSError:
+    massive_new_day = False
+if massive_new_day:
+    from daily_volatility import _fetch_massive_es
+    _fetch_massive_es.clear()
 
 
 def format_download_rome(value):
@@ -262,37 +273,49 @@ with st.expander('ANALISI NET GAMMA', expanded=True):
             # rimangono nel pannello Contesto come richiesto.
             col_snapshots.metric('Snapshot distinti', len(snaps))
             col_logs.metric('Registri', len(logs))
-            st.markdown('#### News e calendario macroeconomico')
-            from macro_calendar import render as render_macro_calendar
-            render_macro_calendar()
-            st.divider()
+            # A collapsed Streamlit expander is NOT lazy: its contents execute
+            # on every rerun. Preserve week/snapshots/logs for NET GAMMA, but
+            # leave the optional macro/VX/Massive ES analysis truly opt-in.
+            context_enabled = st.checkbox(
+                'Carica analisi del contesto (usa dati esterni e Massive)',
+                value=False, key='spx_context_enabled',
+                help='OFF: nessuna acquisizione Massive ES da questo pannello. '
+                     'La selezione fotografie, NET GAMMA, Replay e Pine restano attivi.')
+            if context_enabled:
+                st.markdown('#### News e calendario macroeconomico')
+                from macro_calendar import render as render_macro_calendar
+                render_macro_calendar()
+                st.divider()
 
-            # Il quadro VX e il Daily usano le proprie fonti CBOE/Massive.
-            # La data corrente italiana non dipende dalla presenza di snapshot
-            # Supabase, dal numero di registri o dal file CBOE selezionato.
-            from vix_regime import render as render_vix_context
-            trend_day = datetime.now(ZoneInfo('Europe/Rome')).date()
-            es_daily_context = None
-            daily_error = None
-            try:
-                context_data = render_vix_context(trend_day, return_context=True)
-                es_daily_context = context_data.get('previous_daily_range')
-            except Exception:
-                st.info('Il quadro volatilità VX non è disponibile per la giornata corrente.')
-                # Il Trend Daily conserva la sua fonte Massive anche se la
-                # lettura dei settlement CBOE fallisce.
+                # Il quadro VX e il Daily usano le proprie fonti CBOE/Massive.
+                # La data corrente italiana non dipende dalla presenza di snapshot
+                # Supabase, dal numero di registri o dal file CBOE selezionato.
+                from vix_regime import render as render_vix_context
+                trend_day = datetime.now(ZoneInfo('Europe/Rome')).date()
+                es_daily_context = None
+                daily_error = None
                 try:
-                    from daily_volatility import previous_es_daily_range
-                    es_daily_context = previous_es_daily_range(trend_day)
+                    context_data = render_vix_context(trend_day, return_context=True)
+                    es_daily_context = context_data.get('previous_daily_range')
                 except Exception:
-                    daily_error = 'Massive ES non disponibile: verificare Secrets e contratto.'
-            st.divider()
-            from trend_daily_section import render as render_trend_daily
-            es_daily_context = es_daily_context or {}
-            render_trend_daily(reference_day=trend_day,
-                               daily_bars=es_daily_context.get('daily_bars'),
-                               contract=es_daily_context.get('ticker'),
-                               daily_error=daily_error)
+                    st.info('Il quadro volatilità VX non è disponibile per la giornata corrente.')
+                    # Il Trend Daily conserva la sua fonte Massive anche se la
+                    # lettura dei settlement CBOE fallisce.
+                    try:
+                        from daily_volatility import previous_es_daily_range
+                        es_daily_context = previous_es_daily_range(trend_day)
+                    except Exception:
+                        daily_error = 'Massive ES non disponibile: verificare Secrets e contratto.'
+                st.divider()
+                from trend_daily_section import render as render_trend_daily
+                es_daily_context = es_daily_context or {}
+                render_trend_daily(reference_day=trend_day,
+                                   daily_bars=es_daily_context.get('daily_bars'),
+                                   contract=es_daily_context.get('ticker'),
+                                   daily_error=daily_error)
+            else:
+                st.caption('Contesto non caricato: nessuna chiamata Massive ES '
+                           'dal pannello. Fotografie, NET GAMMA, Replay e Pine operativi.')
 
     with snapshot_slot:
         from gamma_section import render_snapshot_selector
