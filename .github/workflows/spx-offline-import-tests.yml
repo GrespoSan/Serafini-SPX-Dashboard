@@ -4,7 +4,10 @@ on:
     paths:
       - app.py
       - offline_snapshot.py
+      - gamma_section.py
+      - manual_acquisition.py
       - tests/test_offline_snapshot.py
+      - tests/test_spx_layout_parity.py
       - .github/workflows/spx-offline-import-tests.yml
   workflow_dispatch:
 jobs:
@@ -17,6 +20,8 @@ jobs:
         with:
           python-version: '3.11'
       - name: Compile dashboard and offline importer
-        run: python -m py_compile app.py offline_snapshot.py
+        run: python -m py_compile app.py gamma_section.py manual_acquisition.py offline_snapshot.py
       - name: Test offline import without credentials
         run: python -m unittest discover -s tests -p 'test_offline_snapshot.py' -v
+      - name: Test SPX-only layout and Supabase 402 fallback
+        run: python -m unittest discover -s tests -p 'test_spx_layout_parity.py' -v
