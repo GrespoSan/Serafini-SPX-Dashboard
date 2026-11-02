@@ -66,7 +66,11 @@ class SPXDailyTrendTests(unittest.TestCase):
         vol=(ROOT/"vix_regime.py").read_text()
         trend=(ROOT/"trend_daily_section.py").read_text()
         daily=(ROOT/"daily_volatility.py").read_text()
-        self.assertIn("render_vix_context(context_day, return_context=True)",app)
+        # Il contesto operativo usa la data corrente e resta autonomo da Supabase.
+        self.assertIn("trend_day = datetime.now(ZoneInfo('Europe/Rome')).date()", app)
+        self.assertIn("render_vix_context(trend_day, return_context=True)", app)
+        self.assertNotIn("context_day", app)
+        self.assertIn("snaps, logs = [], []", app)
         self.assertIn("daily_bars=es_daily_context.get('daily_bars')",app)
         self.assertIn('return ctx if return_context else pct',vol)
         self.assertIn("combined_breakout_buffer",vol)
