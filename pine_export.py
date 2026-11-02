@@ -78,7 +78,7 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
         weekly_heading = f'Weekly {source_clock} CBOE'
         clock_note = ('// Orario nelle etichette: ' + source_clock +
                       ' dal timestamp originale CBOE, fuso non dichiarato. ' +
-                      'NON e\\' l\\'ora del download a Roma.\\n')
+                      "NON è l'ora del download a Roma.\n")
     else:
         odte_heading = '0DTE 07:30'
         weekly_heading = 'Weekly 07:30'
