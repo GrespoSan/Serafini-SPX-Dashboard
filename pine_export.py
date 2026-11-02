@@ -87,9 +87,9 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
         clock_note = (
             '// Ora Roma (Europe/Rome, DST automatico): ' + local_clock +
             '; conversione da timestamp CBOE assumendo UTC, ' +
-            'come riscontrato dai download GitHub (fuso non dichiarato nel JSON).\\n'
+            'come riscontrato dai download GitHub (fuso non dichiarato nel JSON).\n'
             '// Timestamp originale CBOE: ' + str(cboe_stamp).strip() +
-            '; non confondere con l\\'ora effettiva del download.\\n'
+            "; non confondere con l'ora effettiva del download.\n"
         )
     else:
         odte_heading = '0DTE 07:30'
