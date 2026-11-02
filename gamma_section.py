@@ -845,15 +845,20 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
         snapshot_menu_labels[snapshot_name] = (
             f'{date_display} · {slot_label}{clock_label} · {snapshot_name}'
         )
-    col_snapshot, col_snapshot_info = st.columns([1.25, 2.75], gap='small', vertical_alignment='bottom')
-    with col_snapshot:
-        if not selector_external:
-            st.selectbox('Snapshot originale Cboe', names, key=selection_key,
-                         format_func=lambda snapshot_name: snapshot_menu_labels.get(snapshot_name, snapshot_name))
-    with col_snapshot_info:
+    if selector_external:
         st.caption(f'Rilevamento selezionato: {acquisition_label} · '
                    f'Timestamp Cboe: {timestamp or "n.d."} · '
                    f'Cboe: {quality_label} · file {choice}')
+    else:
+        col_snapshot, col_snapshot_info = st.columns(
+            [1.25, 2.75], gap='small', vertical_alignment='bottom')
+        with col_snapshot:
+            st.selectbox('Snapshot originale Cboe', names, key=selection_key,
+                         format_func=lambda snapshot_name: snapshot_menu_labels.get(snapshot_name, snapshot_name))
+        with col_snapshot_info:
+            st.caption(f'Rilevamento selezionato: {acquisition_label} · '
+                       f'Timestamp Cboe: {timestamp or "n.d."} · '
+                       f'Cboe: {quality_label} · file {choice}')
     st.markdown('**Priorità operativa alle 0DTE:** Serafini richiama un peso numerico del '
                 '**60% per le 0DTE** e del **23% per le Weekly** e, in caso di dubbio, '
                 'privilegia i livelli 0DTE più marcati.')
