@@ -251,57 +251,36 @@ with st.expander('ANALISI NET GAMMA', expanded=True):
             try:
                 snaps = store.list(f'{week}/snapshots/')
                 logs = store.list(f'{week}/logs/')
-            except Exception as exc:
+            except Exception:
+                # L'archivio può essere temporaneamente non accessibile (es. quota 402).
+                # I contatori restano al loro posto e mostrano zero, senza avvisi
+                # nell'analisi del contesto. I calcoli VX/Daily sono indipendenti.
                 storage_unavailable = True
                 snaps, logs = [], []
-                if "Supabase HTTP 402" in str(exc):
-                    st.warning("Supabase HTTP 402: gli snapshot archiviati non sono accessibili. "
-                               "Usa il caricamento locale nella sezione NET GAMMA.")
-                else:
-                    st.warning("Archivio Supabase non raggiungibile. "
-                               "Puoi comunque importare uno snapshot CBOE in NET GAMMA.")
 
-            # Stessa chiave di selezione usata in gamma_section.render, senza creare
-            # un secondo widget Streamlit con la medesima key.
-            snapshot_names = sorted((obj['name'] for obj in snaps), reverse=True)
-            snapshot_key = f'serafini_selected_snapshot_{week}'
-            selected_name = st.session_state.get(snapshot_key)
-            if selected_name not in snapshot_names:
-                selected_name = snapshot_names[0] if snapshot_names else None
-            # La selezione dello snapshot avviene nel modulo NET GAMMA.
-            # In caso di refresh/latest, usa lo snapshot più recente anche nel contesto.
-            if st.session_state.get(f'spx_refresh_latest_{week}', False) and snapshot_names:
-                selected_name = snapshot_names[0]
-
-            context_day = None
-            if selected_name:
-                try:
-                    stamp = selected_name.split('SPX_CBOE_', 1)[1][:8]
-                    context_day = datetime.strptime(stamp, '%Y%m%d').date()
-                except (IndexError, ValueError):
-                    pass
+            # Questi contatori descrivono soltanto l'archivio selezionato;
+            # rimangono nel pannello Contesto come richiesto.
             col_snapshots.metric('Snapshot distinti', len(snaps))
             col_logs.metric('Registri', len(logs))
             st.markdown('#### News e calendario macroeconomico')
             from macro_calendar import render as render_macro_calendar
             render_macro_calendar()
             st.divider()
+
+            # Il quadro VX e il Daily usano le proprie fonti CBOE/Massive.
+            # La data corrente italiana non dipende dalla presenza di snapshot
+            # Supabase, dal numero di registri o dal file CBOE selezionato.
             from vix_regime import render as render_vix_context
-            # One Massive source/session feeds both the volatility card and Trend Daily.
-            trend_day = context_day or datetime.now(ZoneInfo('Europe/Rome')).date()
+            trend_day = datetime.now(ZoneInfo('Europe/Rome')).date()
             es_daily_context = None
             daily_error = None
-            if context_day is not None:
-                try:
-                    context_data = render_vix_context(context_day, return_context=True)
-                    es_daily_context = context_data.get('previous_daily_range')
-                except Exception:
-                    st.info('Il quadro VIX non è disponibile per la giornata selezionata.')
-                    daily_error = 'Quadro giornaliero SPX temporaneamente non disponibile.'
-            else:
-                st.markdown('#### Andamento e volatilità — seduta precedente (N/D)')
-                st.info('Seleziona una settimana con snapshot Cboe validi per analizzare il VIX.')
-                # The Trend Daily remains accessible even without a Cboe snapshot.
+            try:
+                context_data = render_vix_context(trend_day, return_context=True)
+                es_daily_context = context_data.get('previous_daily_range')
+            except Exception:
+                st.info('Il quadro volatilità VX non è disponibile per la giornata corrente.')
+                # Il Trend Daily conserva la sua fonte Massive anche se la
+                # lettura dei settlement CBOE fallisce.
                 try:
                     from daily_volatility import previous_es_daily_range
                     es_daily_context = previous_es_daily_range(trend_day)
@@ -318,10 +297,6 @@ with st.expander('ANALISI NET GAMMA', expanded=True):
     with snapshot_slot:
         from gamma_section import render_snapshot_selector
         render_snapshot_selector(store, week, snaps, logs)
-    if storage_unavailable:
-        st.warning("Archivio Supabase temporaneamente non disponibile. "
-                   "Apri «Acquisizione manuale / importazione JSON» e carica "
-                   "il file CBOE per calcolare 0DTE e Weekly.")
     from gamma_section import render
     render(store, week, snaps, logs, show_heading=False, selector_external=True)
     # Consultazione rilevamenti Cboe disponibile ad amministratore e lettore.
