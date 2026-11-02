@@ -201,6 +201,18 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 context_slot = st.empty()
+# Strumento manuale autonomo: non accede a Store/Supabase, non modifica
+# la selezione degli snapshot ufficiali né i quattro Pine storici.
+with st.expander('PINE DI EMERGENZA — NET GAMMA CORRENTE', expanded=False):
+    try:
+        from emergency_pine import render as render_emergency_pine
+        render_emergency_pine()
+    except Exception as exc:
+        # La sezione principale SPX deve restare accessibile anche se fallisce
+        # questo strumento facoltativo.
+        st.error('Pine di emergenza temporaneamente non disponibile: '
+                 + type(exc).__name__)
+
 with st.expander('ANALISI NET GAMMA', expanded=True):
     st.header('NET GAMMA · formula Serafini')
     st.subheader('Fotografia opzioni Cboe · SPX')
