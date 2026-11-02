@@ -76,16 +76,20 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
             raise ValueError('Ora CBOE non valida: etichetta Pine non generabile') from exc
         odte_heading = f'0DTE {source_clock} CBOE'
         weekly_heading = f'Weekly {source_clock} CBOE'
+        # Nel solo Pine di emergenza, il titolo mostra l'ora dei DATI,
+        # non l'origine dell'importazione o l'ora del download locale.
+        indicator_title = f'Serafini SPX NET GAMMA | {date_text} {source_clock} CBOE'
         clock_note = ('// Orario nelle etichette: ' + source_clock +
                       ' dal timestamp originale CBOE, fuso non dichiarato. ' +
                       "NON è l'ora del download a Roma.\n")
     else:
         odte_heading = '0DTE 07:30'
         weekly_heading = 'Weekly 07:30'
+        indicator_title = f'Serafini SPX NET GAMMA | {date_text}{tag}'
         clock_note = ''
     warning = ('// NOTA: 0DTE e Weekly hanno LA STESSA SCADENZA in questa data: i due profili sono identici per definizione.\n' if same_exp else '')
     return f'''//@version=6
-indicator("Serafini SPX NET GAMMA | {date_text}{tag}", overlay=true, max_lines_count=500, max_labels_count=20)
+indicator("{indicator_title}", overlay=true, max_lines_count=500, max_labels_count=20)
 // EXPORT REVISION: V53-TV-MANUAL-SCALE
 // Rilevamento selezionato: {clean_label or "Non identificato"}
 // Esportazione STATICA da uno snapshot Cboe; aggiornare ricopiando il Pine generato dalla dashboard.
