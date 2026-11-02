@@ -74,9 +74,18 @@ def load_local_snapshot(filename, payload):
         if (not isinstance(options, list) or len(options) < 100
                 or not all(math.isfinite(v) and v > 0 for v in (previous, spot))):
             raise ValueError("options/prezzo")
-        if not any(math.isfinite(float(item.get("gamma") or 0))
-                   and float(item.get("gamma") or 0) != 0
-                   for item in options if isinstance(item, dict)):
+        usable_gamma = False
+        for item in options:
+            if not isinstance(item, dict):
+                continue
+            try:
+                gamma = float(item.get("gamma") or 0)
+            except (ValueError, TypeError, OverflowError):
+                continue
+            if math.isfinite(gamma) and gamma != 0:
+                usable_gamma = True
+                break
+        if not usable_gamma:
             raise ValueError("gamma")
     except (KeyError, ValueError, TypeError, OverflowError, AttributeError) as exc:
         raise InvalidLocalSnapshot(
