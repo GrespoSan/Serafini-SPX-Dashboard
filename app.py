@@ -185,7 +185,27 @@ with st.sidebar:
     st.caption('Snapshot SPX archiviati in Supabase Storage privato.')
 
 # La connessione al bucket viene creata SOLO DOPO il controllo password.
-store = Store(url, service_key, bucket)
+# Modalita' emergenza: un file caricato rimane nella sola sessione Streamlit.
+# Non e' inviato a Supabase e non modifica gli snapshot storici.
+with st.expander("IMPORTA SNAPSHOT CBOE — funziona anche senza Supabase", expanded=False):
+    st.caption("Carica direttamente lo ZIP GitHub Actions oppure un JSON/JSON.GZ CBOE. "
+               "Formula Serafini e scelta 25+25 strike restano identiche.")
+    uploaded_snapshot = st.file_uploader(
+        "Snapshot SPX del giorno", type=["zip", "gz", "json"],
+        key="serafini_offline_cboe")
+offline = False
+if uploaded_snapshot is not None:
+    from offline_snapshot import InvalidLocalSnapshot, load_local_snapshot
+    try:
+        store = load_local_snapshot(uploaded_snapshot.name, uploaded_snapshot.getvalue())
+    except InvalidLocalSnapshot as exc:
+        st.error(f"Importazione SPX non valida: {exc}")
+        st.stop()
+    offline = True
+    st.success(f"Snapshot SPX caricato localmente · timestamp CBOE {store.timestamp} "
+               "(fuso non dichiarato). Nessun dato inviato a Supabase.")
+else:
+    store = Store(url, service_key, bucket)
 
 # Contesto operativo unico; il selettore della settimana e i contatori sono sulla stessa riga.
 # Apertura iniziale secondo l'ora locale italiana; l'utente può poi aprire/chiudere liberamente.
@@ -194,12 +214,21 @@ with st.expander('ANALISI DEL CONTESTO — News · Volatilità · Trend Daily',
                  expanded=context_open_initially):
     col_week, col_snapshots, col_logs = st.columns([2.2, 1, 1], gap='medium', vertical_alignment='bottom')
     with col_week:
-        week = week_choice()
+        if offline:
+            week = store.week
+            st.text_input("Settimana ISO (AAAA-WNN)", value=week,
+                          disabled=True, key="offline_week")
+        else:
+            week = week_choice()
     try:
         snaps = store.list(f'{week}/snapshots/')
         logs = store.list(f'{week}/logs/')
-    except Exception:
-        st.error('Impossibile elencare gli snapshot. Controlla Secrets e bucket Supabase.')
+    except Exception as exc:
+        if "Supabase HTTP 402" in str(exc):
+            st.error("Supabase bloccato per quota HTTP 402. "
+                     "Apri «IMPORTA SNAPSHOT CBOE» in alto e carica lo ZIP GitHub.")
+        else:
+            st.error("Impossibile elencare gli snapshot. Controlla Secrets e bucket Supabase.")
         st.stop()
 
     # Stessa chiave di selezione usata in gamma_section.render, senza creare
@@ -258,7 +287,7 @@ with st.expander('ANALISI DEL CONTESTO — News · Volatilità · Trend Daily',
 
 
 # Calcolo di sola lettura, anche per il ruolo amici. Nessuna cancellazione qui.
-with st.expander('ANALISI NET GAMMA', expanded=False):
+with st.expander('ANALISI NET GAMMA', expanded=offline):
     from gamma_section import render
     render(store, week, snaps, logs)
 
@@ -316,29 +345,32 @@ with st.expander('ANALISI NET GAMMA', expanded=False):
             render_manual_acquisition(role, week, store, embedded=True)
 
 
-# Edge is a read-only, self-contained comparison panel.
-# Never import its calculation engine or feed its values into Serafini.
-from edge_triptych import show as show_edge_triptych
-show_edge_triptych(week, store, logs)
+# Edge e Replay sono confronti storici: non sono disponibili con un solo
+# file offline e senza registri di acquisizione verificati.
+if not offline:
+    from edge_triptych import show as show_edge_triptych
+    show_edge_triptych(week, store, logs)
 
 # Confronto e Replay condividono la stessa sezione, con calcoli invariati.
-with st.expander('REPLAY E CONFRONTO', expanded=False):
-    mode = st.radio(
-        'Modalità di analisi',
-        ('Confronto diretto tra due rilevamenti',
-         'Replay con candele'),
-        index=0,
-        key='gamma_analysis_mode',
-    )
-    if mode == 'Confronto diretto tra due rilevamenti':
-        from gamma_section import render_comparison
-        render_comparison(store, week, snaps, logs)
-    else:
-        from gamma_replay import render as render_gamma_replay
-        render_gamma_replay(store, week, logs, view_mode='Candele ES + NET GAMMA')
+if not offline:
+    with st.expander('REPLAY E CONFRONTO', expanded=False):
+        mode = st.radio(
+            'Modalità di analisi',
+            ('Confronto diretto tra due rilevamenti',
+             'Replay con candele'),
+            index=0,
+            key='gamma_analysis_mode',
+        )
+        if mode == 'Confronto diretto tra due rilevamenti':
+            from gamma_section import render_comparison
+            render_comparison(store, week, snaps, logs)
+        else:
+            from gamma_replay import render as render_gamma_replay
+            render_gamma_replay(store, week, logs, view_mode='Candele ES + NET GAMMA')
 
-# Report descrittivo e riproducibile per analisi AI (nessuna chiamata a servizi AI).
-with st.expander('REPORT GIORNALIERO AI', expanded=False):
-    from ai_report import render as render_ai_report
-    render_ai_report(store, week, snaps, logs)
+# Report storico disponibile solo per snapshot archiviati in Supabase.
+if not offline:
+    with st.expander('REPORT GIORNALIERO AI', expanded=False):
+        from ai_report import render as render_ai_report
+        render_ai_report(store, week, snaps, logs)
 
