@@ -645,8 +645,35 @@ def render_comparison(store, week, snaps, logs):
 
 
 
-def render(store, week, snaps, logs):
-    st.header('NET GAMMA · formula Serafini')
+
+def render_snapshot_selector(store, week, snaps, logs):
+    """Unico selettore nel pannello superiore, prima dell'importazione manuale."""
+    if not snaps:
+        st.caption("Nessuna fotografia Cboe disponibile: importa uno ZIP/JSON qui sotto.")
+        return
+    names = sorted((o['name'] for o in snaps), reverse=True)
+    selection_key = f'serafini_selected_snapshot_{week}'
+    if st.session_state.pop(f'spx_refresh_latest_{week}', False):
+        st.session_state[selection_key] = names[0]
+    elif st.session_state.get(selection_key) not in names:
+        st.session_state[selection_key] = names[0]
+    labels = {}
+    for name in names:
+        day_code = name[len('SPX_CBOE_'):len('SPX_CBOE_') + 8]
+        readable_date = (f'{day_code[6:8]}/{day_code[4:6]}/{day_code[:4]}'
+                         if len(day_code) == 8 and day_code.isdigit() else 'Data n.d.')
+        if getattr(store, 'object_path', None) == f'{week}/snapshots/{name}':
+            capture = 'Importazione locale'
+        else:
+            capture = _acquisition_label(store, week, logs, name)
+        labels[name] = f'{readable_date} · {capture} · {name}'
+    st.selectbox('Snapshot originale Cboe', names, key=selection_key,
+                 format_func=lambda name: labels.get(name, name))
+
+
+def render(store, week, snaps, logs, *, show_heading=True, selector_external=False):
+    if show_heading:
+        st.header('NET GAMMA · formula Serafini')
     if not snaps:
         st.info('Nessuno snapshot disponibile nella settimana selezionata.')
         return
@@ -820,8 +847,9 @@ def render(store, week, snaps, logs):
         )
     col_snapshot, col_snapshot_info = st.columns([1.25, 2.75], gap='small', vertical_alignment='bottom')
     with col_snapshot:
-        st.selectbox('Snapshot originale Cboe', names, key=selection_key,
-                     format_func=lambda snapshot_name: snapshot_menu_labels.get(snapshot_name, snapshot_name))
+        if not selector_external:
+            st.selectbox('Snapshot originale Cboe', names, key=selection_key,
+                         format_func=lambda snapshot_name: snapshot_menu_labels.get(snapshot_name, snapshot_name))
     with col_snapshot_info:
         st.caption(f'Rilevamento selezionato: {acquisition_label} · '
                    f'Timestamp Cboe: {timestamp or "n.d."} · '
