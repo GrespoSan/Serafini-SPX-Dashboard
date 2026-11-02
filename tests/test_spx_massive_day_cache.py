@@ -112,21 +112,17 @@ class SPXMassiveCacheTests(unittest.TestCase):
         self.assertEqual(len(calls),2)
         self.assertEqual(list(Path(self.temp.name).glob("massive-es-*.sqlite3")),[])
 
-    def test_context_opt_in_preserves_snapshot_listing_and_replay(self):
+    def test_automatic_context_preserves_snapshot_listing_and_replay(self):
         app=(Path(__file__).resolve().parents[1]/"app.py").read_text()
         root=ast.parse(app)
-        gates=[node for node in ast.walk(root) if isinstance(node,ast.If)
-               and isinstance(node.test,ast.Name)
-               and node.test.id=="context_enabled"]
-        self.assertEqual(len(gates),1)
         calls=[node for node in ast.walk(root) if isinstance(node,ast.Call)
                and isinstance(node.func,ast.Name)
                and node.func.id=="render_vix_context"]
         self.assertEqual(len(calls),1)
-        self.assertIn(calls[0],list(ast.walk(gates[0])))
-        self.assertIn("value=False, key='spx_context_enabled'",app)
+        self.assertNotIn("spx_context_enabled", app)
+        self.assertNotIn("if context_enabled:", app)
         self.assertLess(app.index("snaps = store.list("),
-                        app.index("if context_enabled:"))
+                        app.index("context_data = render_vix_context"))
         self.assertIn("render_snapshot_selector(store, week, snaps, logs)",app)
         self.assertIn("show_edge_triptych(week, store, logs)",app)
         self.assertIn("render_gamma_replay(store, week, logs",app)
