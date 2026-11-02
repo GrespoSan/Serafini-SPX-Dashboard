@@ -187,12 +187,22 @@ with st.sidebar:
 # La connessione al bucket viene creata SOLO DOPO il controllo password.
 # Modalita' emergenza: un file caricato rimane nella sola sessione Streamlit.
 # Non e' inviato a Supabase e non modifica gli snapshot storici.
-with st.expander("IMPORTA SNAPSHOT CBOE — funziona anche senza Supabase", expanded=False):
-    st.caption("Carica direttamente lo ZIP GitHub Actions oppure un JSON/JSON.GZ CBOE. "
+with st.expander("ACQUISIZIONE MANUALE / IMPORTA SNAPSHOT CBOE — anche senza Supabase", expanded=False):
+    st.caption("Carica lo ZIP GitHub Actions oppure il JSON CBOE, senza inviare dati a Supabase. "
                "Formula Serafini e scelta 25+25 strike restano identiche.")
     uploaded_snapshot = st.file_uploader(
         "Snapshot SPX del giorno", type=["zip", "gz", "json"],
         key="serafini_offline_cboe")
+    if role == 'admin':
+        st.divider()
+        # Il comando GitHub indipendente resta disponibile anche se
+        # Supabase non risponde. Un solo pulsante, non duplicato in basso.
+        from manual_acquisition import render as render_manual_acquisition
+        now_rome = datetime.now(ZoneInfo('Europe/Rome'))
+        iso_now = now_rome.isocalendar()
+        current_week = f'{iso_now.year}-W{iso_now.week:02d}'
+        render_manual_acquisition(role, current_week,
+                                  Store(url, service_key, bucket), embedded=True)
 offline = False
 if uploaded_snapshot is not None:
     from offline_snapshot import InvalidLocalSnapshot, load_local_snapshot
@@ -226,7 +236,7 @@ with st.expander('ANALISI DEL CONTESTO — News · Volatilità · Trend Daily',
     except Exception as exc:
         if "Supabase HTTP 402" in str(exc):
             st.error("Supabase bloccato per quota HTTP 402. "
-                     "Apri «IMPORTA SNAPSHOT CBOE» in alto e carica lo ZIP GitHub.")
+                     "Apri «ACQUISIZIONE MANUALE / IMPORTA SNAPSHOT CBOE» in alto e carica lo ZIP GitHub.")
         else:
             st.error("Impossibile elencare gli snapshot. Controlla Secrets e bucket Supabase.")
         st.stop()
@@ -337,12 +347,8 @@ with st.expander('ANALISI NET GAMMA', expanded=offline):
         else:
             st.info('Non sono presenti registri per questa settimana.')
 
-        # La consultazione e' per entrambi i ruoli. Solo l'admin puo'
-        # richiedere nuove acquisizioni Cboe.
-        if role == 'admin':
-            from manual_acquisition import render as render_manual_acquisition
-            st.divider()
-            render_manual_acquisition(role, week, store, embedded=True)
+        # Consultazione registri e storico conservata; l'unico comando
+        # supplementare si trova nel pannello superiore.
 
 
 # Edge e Replay sono confronti storici: non sono disponibili con un solo
