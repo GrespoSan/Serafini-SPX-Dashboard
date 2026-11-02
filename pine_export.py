@@ -2,7 +2,8 @@
 Graphical-only translation to TradingView, no recomputation of exposure.
 """
 from math import isfinite, ceil
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 import re
 
 
@@ -64,24 +65,32 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
     # Usa solo etichette del registro di acquisizione, non presume il fuso del timestamp Cboe.
     clean_label = re.sub(r'[^a-zA-Z0-9À-ÿ :()._-]', '', acquisition_label or '')[:50]
     tag = f' | {clean_label}' if clean_label else ''
-    # La sola modalita' Emergency mostra l'orario originale dei dati CBOE.
-    # Il timestamp del feed non dichiara un fuso: non chiamarlo "ora Roma"
-    # e non confonderlo con l'ora di download verificata.
+    # Solo Emergency: i registri CBOE delle 08:28 e 14:49 UTC del
+    # 02/11/2026 coincidono con i download GitHub 08:28 e 14:50 UTC.
+    # Il payload non dichiara il fuso: la base UTC e' una deduzione empirica,
+    # riportata come tale nel Pine. Convertire con Europe/Rome (DST reale).
     if current_only:
         try:
-            source_clock = datetime.strptime(
+            source_utc = datetime.strptime(
                 str(cboe_stamp).strip(), '%Y-%m-%d %H:%M:%S'
-            ).strftime('%H:%M')
+            ).replace(tzinfo=timezone.utc)
+            source_rome = source_utc.astimezone(ZoneInfo('Europe/Rome'))
         except (ValueError, TypeError) as exc:
             raise ValueError('Ora CBOE non valida: etichetta Pine non generabile') from exc
-        odte_heading = f'0DTE {source_clock} CBOE'
-        weekly_heading = f'Weekly {source_clock} CBOE'
-        # Nel solo Pine di emergenza, il titolo mostra l'ora dei DATI,
-        # non l'origine dell'importazione o l'ora del download locale.
-        indicator_title = f'Serafini SPX NET GAMMA | {date_text} {source_clock} CBOE'
-        clock_note = ('// Orario nelle etichette: ' + source_clock +
-                      ' dal timestamp originale CBOE, fuso non dichiarato. ' +
-                      "NON è l'ora del download a Roma.\n")
+        local_clock = source_rome.strftime('%H:%M')
+        odte_heading = f'0DTE {local_clock} Roma'
+        weekly_heading = f'Weekly {local_clock} Roma'
+        indicator_title = (
+            'Serafini SPX NET GAMMA | ' +
+            source_rome.strftime('%Y-%m-%d %H:%M') + ' Roma'
+        )
+        clock_note = (
+            '// Ora Roma (Europe/Rome, DST automatico): ' + local_clock +
+            '; conversione da timestamp CBOE assumendo UTC, ' +
+            'come riscontrato dai download GitHub (fuso non dichiarato nel JSON).\\n'
+            '// Timestamp originale CBOE: ' + str(cboe_stamp).strip() +
+            '; non confondere con l\\'ora effettiva del download.\\n'
+        )
     else:
         odte_heading = '0DTE 07:30'
         weekly_heading = 'Weekly 07:30'
