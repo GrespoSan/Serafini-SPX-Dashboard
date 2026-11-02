@@ -86,8 +86,10 @@ class EmergencyPineTests(unittest.TestCase):
         self.assertIn('renderProfile(odteLevels, odteValues, bar_index + offsetOdte, "0DTE 12:40 CBOE"', code)
         self.assertIn('renderProfile(weeklyLevels, weeklyValues, bar_index + weeklyCenter, "Weekly 12:40 CBOE"', code)
         self.assertIn("fuso non dichiarato", code)
-        self.assertNotIn("0DTE corrente", code)
-        self.assertNotIn("Weekly corrente", code)
+        # I toggle "Mostra 0DTE corrente" restano invariati:
+        # controlliamo soltanto le intestazioni disegnate sul grafico.
+        self.assertNotIn('"0DTE corrente", actualScale', code)
+        self.assertNotIn('"Weekly corrente", actualScale', code)
         self.assertIn("Differenziale ES-SPX GIA' APPLICATO agli strike: 40.0000", code)
         self.assertNotIn("07:30", code)
         self.assertNotIn("13:30", code)
