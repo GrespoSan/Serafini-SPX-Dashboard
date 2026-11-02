@@ -83,6 +83,8 @@ class EmergencyPineTests(unittest.TestCase):
         snap = fixture()
         code, profiles, _, _ = generate_current_pine(
             snap, TODAY, 40.0, snap["timestamp"], "Download manuale Roma")
+        self.assertIn('indicator("Serafini SPX NET GAMMA | 2026-11-02 12:40 CBOE"', code)
+        self.assertNotIn('indicator("Serafini SPX NET GAMMA | 2026-11-02 | Download manuale Roma"', code)
         self.assertIn('renderProfile(odteLevels, odteValues, bar_index + offsetOdte, "0DTE 12:40 CBOE"', code)
         self.assertIn('renderProfile(weeklyLevels, weeklyValues, bar_index + weeklyCenter, "Weekly 12:40 CBOE"', code)
         self.assertIn("fuso non dichiarato", code)
@@ -99,6 +101,7 @@ class EmergencyPineTests(unittest.TestCase):
         official = make_pine(profiles["0DTE"], profiles["Weekly"], 40.0,
                              TODAY.isoformat(), snap["timestamp"],
                              "Mattina 07:30")
+        self.assertIn('indicator("Serafini SPX NET GAMMA | 2026-11-02 | Mattina 07:30"', official)
         self.assertIn("0DTE 07:30", official)
         self.assertIn("Weekly 07:30", official)
 
@@ -108,6 +111,8 @@ class EmergencyPineTests(unittest.TestCase):
         pine, _, _, _ = generate_current_pine(
             snap, TODAY, 40.0, snap["timestamp"],
             "Download manuale 2026-11-02 12:45 Roma")
+        self.assertIn('indicator("Serafini SPX NET GAMMA | 2026-11-02 09:17 CBOE"', pine)
+        self.assertNotIn('indicator("Serafini SPX NET GAMMA | 2026-11-02 | Download manuale', pine)
         self.assertIn('"0DTE 09:17 CBOE"', pine)
         self.assertIn('"Weekly 09:17 CBOE"', pine)
         self.assertNotIn('"0DTE 12:45 CBOE"', pine)
