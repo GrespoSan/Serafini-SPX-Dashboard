@@ -83,11 +83,13 @@ class EmergencyPineTests(unittest.TestCase):
         snap = fixture()
         code, profiles, _, _ = generate_current_pine(
             snap, TODAY, 40.0, snap["timestamp"], "Download manuale Roma")
-        self.assertIn('indicator("Serafini SPX NET GAMMA | 2026-11-02 12:40 CBOE"', code)
+        self.assertIn('indicator("Serafini SPX NET GAMMA | 2026-11-02 13:40 Roma"', code)
         self.assertNotIn('indicator("Serafini SPX NET GAMMA | 2026-11-02 | Download manuale Roma"', code)
-        self.assertIn('renderProfile(odteLevels, odteValues, bar_index + offsetOdte, "0DTE 12:40 CBOE"', code)
-        self.assertIn('renderProfile(weeklyLevels, weeklyValues, bar_index + weeklyCenter, "Weekly 12:40 CBOE"', code)
+        self.assertIn('renderProfile(odteLevels, odteValues, bar_index + offsetOdte, "0DTE 13:40 Roma"', code)
+        self.assertIn('renderProfile(weeklyLevels, weeklyValues, bar_index + weeklyCenter, "Weekly 13:40 Roma"', code)
         self.assertIn("fuso non dichiarato", code)
+        self.assertIn("assumendo UTC", code)
+        self.assertIn("Timestamp originale CBOE", code)
         # I toggle "Mostra 0DTE corrente" restano invariati:
         # controlliamo soltanto le intestazioni disegnate sul grafico.
         self.assertNotIn('"0DTE corrente", actualScale', code)
@@ -111,12 +113,38 @@ class EmergencyPineTests(unittest.TestCase):
         pine, _, _, _ = generate_current_pine(
             snap, TODAY, 40.0, snap["timestamp"],
             "Download manuale 2026-11-02 12:45 Roma")
-        self.assertIn('indicator("Serafini SPX NET GAMMA | 2026-11-02 09:17 CBOE"', pine)
+        self.assertIn('indicator("Serafini SPX NET GAMMA | 2026-11-02 10:17 Roma"', pine)
         self.assertNotIn('indicator("Serafini SPX NET GAMMA | 2026-11-02 | Download manuale', pine)
-        self.assertIn('"0DTE 09:17 CBOE"', pine)
-        self.assertIn('"Weekly 09:17 CBOE"', pine)
-        self.assertNotIn('"0DTE 12:45 CBOE"', pine)
+        self.assertIn('"0DTE 10:17 Roma"', pine)
+        self.assertIn('"Weekly 10:17 Roma"', pine)
+        self.assertNotIn('"0DTE 12:45 Roma"', pine)
         self.assertIn("Download manuale 2026-11-02 12:45 Roma", pine)
+
+    def test_cboe_clock_handles_italian_dst_transition(self):
+        # Prima del 25 ottobre: CEST UTC+2; dopo: CET UTC+1.
+        # L'orario del future USA non influenza la conversione UTC-Roma.
+        cases = [
+            (date(2026, 10, 23), "2026-10-23 14:50:00", "16:50"),
+            (date(2026, 10, 30), "2026-10-30 14:50:00", "15:50"),
+            (date(2026, 11, 2), "2026-11-02 14:49:21", "15:49"),
+            (date(2026, 11, 2), "2026-11-02 08:28:04", "09:28"),
+        ]
+        for day, stamp, expected_clock in cases:
+            with self.subTest(day=day, stamp=stamp):
+                snapshot = fixture(day)
+                snapshot["timestamp"] = stamp
+                pine, _, _, _ = generate_current_pine(
+                    snapshot, day, 40, stamp, "Importazione locale - ora download ignota")
+                self.assertIn(
+                    f'indicator("Serafini SPX NET GAMMA | {day} {expected_clock} Roma"',
+                    pine,
+                )
+                self.assertIn(f'"0DTE {expected_clock} Roma"', pine)
+                self.assertIn(f'"Weekly {expected_clock} Roma"', pine)
+                self.assertNotIn(
+                    f'indicator("Serafini SPX NET GAMMA | {day} | Importazione locale"',
+                    pine,
+                )
 
     def test_malformed_cboe_stamp_never_fabricates_label(self):
         snap = fixture()
