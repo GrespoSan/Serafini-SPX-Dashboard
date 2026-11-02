@@ -2,6 +2,7 @@
 Graphical-only translation to TradingView, no recomputation of exposure.
 """
 from math import isfinite, ceil
+from datetime import datetime
 import re
 
 
@@ -63,10 +64,25 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
     # Usa solo etichette del registro di acquisizione, non presume il fuso del timestamp Cboe.
     clean_label = re.sub(r'[^a-zA-Z0-9À-ÿ :()._-]', '', acquisition_label or '')[:50]
     tag = f' | {clean_label}' if clean_label else ''
-    # Di default l'esportatore ufficiale resta identico (07:30).
-    # Solo il nuovo Pine manuale usa etichette senza orari storici.
-    odte_heading = '0DTE corrente' if current_only else '0DTE 07:30'
-    weekly_heading = 'Weekly corrente' if current_only else 'Weekly 07:30'
+    # La sola modalita' Emergency mostra l'orario originale dei dati CBOE.
+    # Il timestamp del feed non dichiara un fuso: non chiamarlo "ora Roma"
+    # e non confonderlo con l'ora di download verificata.
+    if current_only:
+        try:
+            source_clock = datetime.strptime(
+                str(cboe_stamp).strip(), '%Y-%m-%d %H:%M:%S'
+            ).strftime('%H:%M')
+        except (ValueError, TypeError) as exc:
+            raise ValueError('Ora CBOE non valida: etichetta Pine non generabile') from exc
+        odte_heading = f'0DTE {source_clock} CBOE'
+        weekly_heading = f'Weekly {source_clock} CBOE'
+        clock_note = ('// Orario nelle etichette: ' + source_clock +
+                      ' dal timestamp originale CBOE, fuso non dichiarato. ' +
+                      'NON e\\' l\\'ora del download a Roma.\\n')
+    else:
+        odte_heading = '0DTE 07:30'
+        weekly_heading = 'Weekly 07:30'
+        clock_note = ''
     warning = ('// NOTA: 0DTE e Weekly hanno LA STESSA SCADENZA in questa data: i due profili sono identici per definizione.\n' if same_exp else '')
     return f'''//@version=6
 indicator("Serafini SPX NET GAMMA | {date_text}{tag}", overlay=true, max_lines_count=500, max_labels_count=20)
@@ -74,7 +90,7 @@ indicator("Serafini SPX NET GAMMA | {date_text}{tag}", overlay=true, max_lines_c
 // Rilevamento selezionato: {clean_label or "Non identificato"}
 // Esportazione STATICA da uno snapshot Cboe; aggiornare ricopiando il Pine generato dalla dashboard.
 // Fonte: {origin}
-// Data snapshot: {date_text} | 0DTE: {odte['expiry']} | Weekly: {weekly['expiry']}
+{clock_note}// Data snapshot: {date_text} | 0DTE: {odte['expiry']} | Weekly: {weekly['expiry']}
 // Differenziale ES-SPX GIA' APPLICATO agli strike: {offset:.4f}
 // Formula originale: (OI_CALL+VOL_CALL)*GAMMA_CALL - (OI_PUT+VOL_PUT)*GAMMA_PUT.
 // Metodo Serafini INVARIATO: 25 strike SOPRA e 25 SOTTO per C1/P1 e analisi.\n// Estensione grafica: strike Cboe veri della stessa fotografia, MAX 140 per profilo; non modifica i 50 originali.
