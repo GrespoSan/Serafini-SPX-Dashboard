@@ -184,123 +184,146 @@ with st.sidebar:
         st.rerun()
     st.caption('Snapshot SPX archiviati in Supabase Storage privato.')
 
-# La connessione al bucket viene creata SOLO DOPO il controllo password.
-# Modalita' emergenza: un file caricato rimane nella sola sessione Streamlit.
-# Non e' inviato a Supabase e non modifica gli snapshot storici.
-with st.expander("ACQUISIZIONE MANUALE / IMPORTA SNAPSHOT CBOE — anche senza Supabase", expanded=False):
-    st.caption("Carica lo ZIP GitHub Actions oppure il JSON CBOE, senza inviare dati a Supabase. "
-               "Formula Serafini e scelta 25+25 strike restano identiche.")
-    uploaded_snapshot = st.file_uploader(
-        "Snapshot SPX del giorno", type=["zip", "gz", "json"],
-        key="serafini_offline_cboe")
-    if role == 'admin':
-        st.divider()
-        # Il comando GitHub indipendente resta disponibile anche se
-        # Supabase non risponde. Un solo pulsante, non duplicato in basso.
-        from manual_acquisition import render as render_manual_acquisition
-        now_rome = datetime.now(ZoneInfo('Europe/Rome'))
-        iso_now = now_rome.isocalendar()
-        current_week = f'{iso_now.year}-W{iso_now.week:02d}'
-        render_manual_acquisition(role, current_week,
-                                  Store(url, service_key, bucket), embedded=True)
-offline = False
-if uploaded_snapshot is not None:
-    from offline_snapshot import InvalidLocalSnapshot, load_local_snapshot
-    try:
-        store = load_local_snapshot(uploaded_snapshot.name, uploaded_snapshot.getvalue())
-    except InvalidLocalSnapshot as exc:
-        st.error(f"Importazione SPX non valida: {exc}")
-        st.stop()
-    offline = True
-    st.success(f"Snapshot SPX caricato localmente · timestamp CBOE {store.timestamp} "
-               "(fuso non dichiarato). Nessun dato inviato a Supabase.")
-else:
-    store = Store(url, service_key, bucket)
+# Allineamento al layout Multi-Market: CONTEXTO collassato, NET GAMMA aperto,
+# selettore originale e importazione CBOE nello stesso pannello.
+# Nessun cambiamento ai calcoli o ai flussi Supabase/GitHub.
+st.markdown("""
+<style>
+[data-testid="stMainBlockContainer"],
+[data-testid="stAppViewContainer"] .block-container {
+    max-width: none !important;
+    width: 100% !important;
+    box-sizing: border-box;
+    padding-left: clamp(1rem, 2vw, 3rem);
+    padding-right: clamp(1rem, 2vw, 3rem);
+}
+</style>
+""", unsafe_allow_html=True)
 
-# Contesto operativo unico; il selettore della settimana e i contatori sono sulla stessa riga.
-# Apertura iniziale secondo l'ora locale italiana; l'utente può poi aprire/chiudere liberamente.
-context_open_initially = datetime.now(ZoneInfo('Europe/Rome')).hour < 13
-with st.expander('ANALISI DEL CONTESTO — News · Volatilità · Trend Daily',
-                 expanded=context_open_initially):
-    col_week, col_snapshots, col_logs = st.columns([2.2, 1, 1], gap='medium', vertical_alignment='bottom')
-    with col_week:
-        if offline:
-            week = store.week
-            st.text_input("Settimana ISO (AAAA-WNN)", value=week,
-                          disabled=True, key="offline_week")
-        else:
-            week = week_choice()
-    try:
-        snaps = store.list(f'{week}/snapshots/')
-        logs = store.list(f'{week}/logs/')
-    except Exception as exc:
-        if "Supabase HTTP 402" in str(exc):
-            st.error("Supabase bloccato per quota HTTP 402. "
-                     "Apri «ACQUISIZIONE MANUALE / IMPORTA SNAPSHOT CBOE» in alto e carica lo ZIP GitHub.")
-        else:
-            st.error("Impossibile elencare gli snapshot. Controlla Secrets e bucket Supabase.")
-        st.stop()
+context_slot = st.empty()
+with st.expander('ANALISI NET GAMMA', expanded=True):
+    st.header('NET GAMMA · formula Serafini')
+    st.subheader('Fotografia opzioni Cboe · SPX')
+    snapshot_slot = st.container()
+    with st.expander("Acquisizione manuale / importazione JSON", expanded=False):
+        st.caption("Carica lo ZIP GitHub Actions o un JSON CBOE: nessun upload su Supabase. "
+                   "La formula Serafini resta invariata.")
+        uploaded_snapshot = st.file_uploader(
+            "Carica snapshot SPX (.zip, .json.gz, .json)",
+            type=["zip", "gz", "json"], key="serafini_offline_cboe")
+        if role == 'admin':
+            from manual_acquisition import render as render_manual_acquisition
+            today_rome = datetime.now(ZoneInfo('Europe/Rome'))
+            this_week = today_rome.isocalendar()
+            current_week = f'{this_week.year}-W{this_week.week:02d}'
+            render_manual_acquisition(
+                role, current_week, Store(url, service_key, bucket), embedded=True)
 
-    # Stessa chiave di selezione usata in gamma_section.render, senza creare
-    # un secondo widget Streamlit con la medesima key.
-    snapshot_names = sorted((obj['name'] for obj in snaps), reverse=True)
-    snapshot_key = f'serafini_selected_snapshot_{week}'
-    selected_name = st.session_state.get(snapshot_key)
-    if selected_name not in snapshot_names:
-        selected_name = snapshot_names[0] if snapshot_names else None
-    # La selezione dello snapshot avviene nel modulo NET GAMMA.
-    # In caso di refresh/latest, usa lo snapshot più recente anche nel contesto.
-    if st.session_state.get(f'spx_refresh_latest_{week}', False) and snapshot_names:
-        selected_name = snapshot_names[0]
-
-    context_day = None
-    if selected_name:
+    offline = False
+    storage_unavailable = False
+    if uploaded_snapshot is not None:
+        from offline_snapshot import InvalidLocalSnapshot, load_local_snapshot
         try:
-            stamp = selected_name.split('SPX_CBOE_', 1)[1][:8]
-            context_day = datetime.strptime(stamp, '%Y%m%d').date()
-        except (IndexError, ValueError):
-            pass
-    col_snapshots.metric('Snapshot distinti', len(snaps))
-    col_logs.metric('Registri', len(logs))
-    st.markdown('#### News e calendario macroeconomico')
-    from macro_calendar import render as render_macro_calendar
-    render_macro_calendar()
-    st.divider()
-    from vix_regime import render as render_vix_context
-    # One Massive source/session feeds both the volatility card and Trend Daily.
-    trend_day = context_day or datetime.now(ZoneInfo('Europe/Rome')).date()
-    es_daily_context = None
-    daily_error = None
-    if context_day is not None:
-        try:
-            context_data = render_vix_context(context_day, return_context=True)
-            es_daily_context = context_data.get('previous_daily_range')
-        except Exception:
-            st.info('Il quadro VIX non è disponibile per la giornata selezionata.')
-            daily_error = 'Quadro giornaliero SPX temporaneamente non disponibile.'
+            store = load_local_snapshot(uploaded_snapshot.name, uploaded_snapshot.getvalue())
+        except InvalidLocalSnapshot as exc:
+            st.error(f"Importazione SPX non valida: {exc}")
+            st.stop()
+        offline = True
+        st.success(f"Snapshot SPX caricato localmente · timestamp CBOE {store.timestamp} "
+                   "(fuso non dichiarato). Nessun dato inviato a Supabase.")
     else:
-        st.markdown('#### Andamento e volatilità — seduta precedente (N/D)')
-        st.info('Seleziona una settimana con snapshot Cboe validi per analizzare il VIX.')
-        # The Trend Daily remains accessible even without a Cboe snapshot.
-        try:
-            from daily_volatility import previous_es_daily_range
-            es_daily_context = previous_es_daily_range(trend_day)
-        except Exception:
-            daily_error = 'Massive ES non disponibile: verificare Secrets e contratto.'
-    st.divider()
-    from trend_daily_section import render as render_trend_daily
-    es_daily_context = es_daily_context or {}
-    render_trend_daily(reference_day=trend_day,
-                       daily_bars=es_daily_context.get('daily_bars'),
-                       contract=es_daily_context.get('ticker'),
-                       daily_error=daily_error)
+        store = Store(url, service_key, bucket)
 
+    # Il contesto viene visualizzato PRIMA di NET GAMMA, come nella Multi-Market.
+    # Lo riempiamo dopo l'uploader affinché il fallback locale non dipenda
+    # dalla disponibilità di Supabase, anche in caso di HTTP 402.
+    with context_slot.container():
+        with st.expander('ANALISI DEL CONTESTO — News · Volatilità · Trend Daily',
+                         expanded=False):
+            col_week, col_snapshots, col_logs = st.columns([2.2, 1, 1], gap='medium', vertical_alignment='bottom')
+            with col_week:
+                if offline:
+                    week = store.week
+                    st.text_input("Settimana ISO (AAAA-WNN)", value=week,
+                                  disabled=True, key="offline_week")
+                else:
+                    week = week_choice()
+            try:
+                snaps = store.list(f'{week}/snapshots/')
+                logs = store.list(f'{week}/logs/')
+            except Exception as exc:
+                storage_unavailable = True
+                snaps, logs = [], []
+                if "Supabase HTTP 402" in str(exc):
+                    st.warning("Supabase HTTP 402: gli snapshot archiviati non sono accessibili. "
+                               "Usa il caricamento locale nella sezione NET GAMMA.")
+                else:
+                    st.warning("Archivio Supabase non raggiungibile. "
+                               "Puoi comunque importare uno snapshot CBOE in NET GAMMA.")
 
-# Calcolo di sola lettura, anche per il ruolo amici. Nessuna cancellazione qui.
-with st.expander('ANALISI NET GAMMA', expanded=offline):
+            # Stessa chiave di selezione usata in gamma_section.render, senza creare
+            # un secondo widget Streamlit con la medesima key.
+            snapshot_names = sorted((obj['name'] for obj in snaps), reverse=True)
+            snapshot_key = f'serafini_selected_snapshot_{week}'
+            selected_name = st.session_state.get(snapshot_key)
+            if selected_name not in snapshot_names:
+                selected_name = snapshot_names[0] if snapshot_names else None
+            # La selezione dello snapshot avviene nel modulo NET GAMMA.
+            # In caso di refresh/latest, usa lo snapshot più recente anche nel contesto.
+            if st.session_state.get(f'spx_refresh_latest_{week}', False) and snapshot_names:
+                selected_name = snapshot_names[0]
+
+            context_day = None
+            if selected_name:
+                try:
+                    stamp = selected_name.split('SPX_CBOE_', 1)[1][:8]
+                    context_day = datetime.strptime(stamp, '%Y%m%d').date()
+                except (IndexError, ValueError):
+                    pass
+            col_snapshots.metric('Snapshot distinti', len(snaps))
+            col_logs.metric('Registri', len(logs))
+            st.markdown('#### News e calendario macroeconomico')
+            from macro_calendar import render as render_macro_calendar
+            render_macro_calendar()
+            st.divider()
+            from vix_regime import render as render_vix_context
+            # One Massive source/session feeds both the volatility card and Trend Daily.
+            trend_day = context_day or datetime.now(ZoneInfo('Europe/Rome')).date()
+            es_daily_context = None
+            daily_error = None
+            if context_day is not None:
+                try:
+                    context_data = render_vix_context(context_day, return_context=True)
+                    es_daily_context = context_data.get('previous_daily_range')
+                except Exception:
+                    st.info('Il quadro VIX non è disponibile per la giornata selezionata.')
+                    daily_error = 'Quadro giornaliero SPX temporaneamente non disponibile.'
+            else:
+                st.markdown('#### Andamento e volatilità — seduta precedente (N/D)')
+                st.info('Seleziona una settimana con snapshot Cboe validi per analizzare il VIX.')
+                # The Trend Daily remains accessible even without a Cboe snapshot.
+                try:
+                    from daily_volatility import previous_es_daily_range
+                    es_daily_context = previous_es_daily_range(trend_day)
+                except Exception:
+                    daily_error = 'Massive ES non disponibile: verificare Secrets e contratto.'
+            st.divider()
+            from trend_daily_section import render as render_trend_daily
+            es_daily_context = es_daily_context or {}
+            render_trend_daily(reference_day=trend_day,
+                               daily_bars=es_daily_context.get('daily_bars'),
+                               contract=es_daily_context.get('ticker'),
+                               daily_error=daily_error)
+
+    with snapshot_slot:
+        from gamma_section import render_snapshot_selector
+        render_snapshot_selector(store, week, snaps, logs)
+    if storage_unavailable:
+        st.warning("Archivio Supabase temporaneamente non disponibile. "
+                   "Apri «Acquisizione manuale / importazione JSON» e carica "
+                   "il file CBOE per calcolare 0DTE e Weekly.")
     from gamma_section import render
-    render(store, week, snaps, logs)
-
+    render(store, week, snaps, logs, show_heading=False, selector_external=True)
     # Consultazione rilevamenti Cboe disponibile ad amministratore e lettore.
     # Solo la richiesta di un nuovo download rimane riservata all'admin.
     # I registri sono letti solo quando il pannello viene aperto.
@@ -351,18 +374,16 @@ with st.expander('ANALISI NET GAMMA', expanded=offline):
         else:
             st.info('Non sono presenti registri per questa settimana.')
 
-        # Consultazione registri e storico conservata; l'unico comando
-        # supplementare si trova nel pannello superiore.
-
+        # I registri restano consultabili solo quando l'archivio è disponibile.
 
 # Edge e Replay sono confronti storici: non sono disponibili con un solo
 # file offline e senza registri di acquisizione verificati.
-if not offline:
+if not offline and not storage_unavailable:
     from edge_triptych import show as show_edge_triptych
     show_edge_triptych(week, store, logs)
 
 # Confronto e Replay condividono la stessa sezione, con calcoli invariati.
-if not offline:
+if not offline and not storage_unavailable:
     with st.expander('REPLAY E CONFRONTO', expanded=False):
         mode = st.radio(
             'Modalità di analisi',
@@ -379,7 +400,7 @@ if not offline:
             render_gamma_replay(store, week, logs, view_mode='Candele ES + NET GAMMA')
 
 # Report storico disponibile solo per snapshot archiviati in Supabase.
-if not offline:
+if not offline and not storage_unavailable:
     with st.expander('REPORT GIORNALIERO AI', expanded=False):
         from ai_report import render as render_ai_report
         render_ai_report(store, week, snaps, logs)
