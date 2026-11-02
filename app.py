@@ -304,8 +304,12 @@ with st.expander('ANALISI NET GAMMA', expanded=offline):
     # Consultazione rilevamenti Cboe disponibile ad amministratore e lettore.
     # Solo la richiesta di un nuovo download rimane riservata all'admin.
     # I registri sono letti solo quando il pannello viene aperto.
-    if st.checkbox(f'RILEVAMENTI CBOE — {len(snaps)} snapshot · {len(logs)} registri',
-                   value=False, key=f'cb_show_records_{week}'):
+    # Con file locale non esistono registri Supabase: evita il riquadro
+    # «1 snapshot · 0 registri» in fondo ai grafici e ai quattro export Pine.
+    # Mantieni la consultazione storica per fotografie archiviate e log reali.
+    if not offline and logs and st.checkbox(
+            f'RILEVAMENTI CBOE — {len(snaps)} snapshot · {len(logs)} registri',
+            value=False, key=f'cb_show_records_{week}'):
         col_snapshots, col_logs = st.columns([1, 1], gap='medium')
         col_snapshots.metric('Snapshot distinti', len(snaps))
         col_logs.metric('Registri', len(logs))
