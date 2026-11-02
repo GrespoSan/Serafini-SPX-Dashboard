@@ -70,6 +70,15 @@ class EmergencyPineTests(unittest.TestCase):
                 self.assertGreaterEqual(len(profiles[kind]["display_rows"]), 50)
                 self.assertLessEqual(len(profiles[kind]["display_rows"]), 140)
 
+    def test_optional_visual_extension_cannot_block_valid_50(self):
+        with patch("emergency_pine.visual_profile",
+                   side_effect=ValueError("Estensione non utilizzabile")):
+            profiles, _, _ = calculate_current_profiles(fixture(), TODAY)
+        for kind in ("0DTE", "Weekly"):
+            with self.subTest(kind=kind):
+                self.assertEqual(profiles[kind]["display_rows"], profiles[kind]["rows"])
+                self.assertEqual(len(profiles[kind]["rows"]), 50)
+
     def test_single_current_pine_has_no_historical_slot_labels(self):
         snap = fixture()
         code, profiles, _, _ = generate_current_pine(
