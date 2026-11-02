@@ -11,6 +11,7 @@ import re
 from datetime import date, timedelta
 
 import requests
+from spx_massive_day_cache import fetch_json as fetch_massive_json
 
 API = "https://api.massive.com/futures/v1/aggs/"
 PATTERN = re.compile(r"^(ES|NQ|GC|CL)[FGHJKMNQUVXZ][0-9]{1,2}$")
@@ -69,20 +70,14 @@ def previous_sessions(ticker, target_day, api_key, *, get=None, history_days=19)
         raise MassiveSourceError("Finestra storica non valida (14–180 giorni).")
     begin = target_day - timedelta(days=history_days)
     end = target_day - timedelta(days=1)
-    requester = get or requests.get
     try:
-        response = requester(
+        payload = fetch_massive_json(
             API + ticker,
-            params={"resolution": "1session",
-                    "window_start.gte": begin.isoformat(),
-                    "window_start.lte": end.isoformat(),
-                    "sort": "window_start.asc", "limit": 250},
-            headers={"Authorization": "Bearer " + api_key,
-                     "Accept": "application/json"},
-            timeout=(6, 18),
-        )
-        response.raise_for_status()
-        payload = response.json()
+            {"resolution": "1session",
+             "window_start.gte": begin.isoformat(),
+             "window_start.lte": end.isoformat(),
+             "sort": "window_start.asc", "limit": 250},
+            api_key, get=get)
     except requests.RequestException as exc:
         raise MassiveSourceError("Massive non disponibile o API key/piano Futures senza permessi.") from exc
     except (TypeError, ValueError) as exc:
