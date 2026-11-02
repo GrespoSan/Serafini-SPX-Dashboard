@@ -70,11 +70,19 @@ def calculate_current_profiles(snapshot, day: date):
             raise ValueError(f"{kind}: servono 25 strike sotto e 25 sopra.")
         if not any(float(row["net_gamma"]) != 0 for row in core["rows"]):
             raise ValueError(f"{kind}: NET GAMMA nullo, dati non utilizzabili.")
-        visual = visual_profile(snapshot, core, expiry, reference, spot)
+        try:
+            visual = visual_profile(snapshot, core, expiry, reference, spot)
+            displayed = visual["rows"]
+            coverage = visual["coverage_complete"]
+        except (ValueError, TypeError, KeyError, OverflowError):
+            # Stessa protezione dell'analisi principale: l'estensione
+            # grafica non può impedire l'esportazione dei 50 strike validi.
+            displayed = core["rows"]
+            coverage = None
         profiles[kind] = {
             **core,
-            "display_rows": visual["rows"],
-            "visual_coverage_complete": visual["coverage_complete"],
+            "display_rows": displayed,
+            "visual_coverage_complete": coverage,
         }
     return profiles, reference, spot
 
