@@ -83,8 +83,11 @@ class EmergencyPineTests(unittest.TestCase):
         snap = fixture()
         code, profiles, _, _ = generate_current_pine(
             snap, TODAY, 40.0, snap["timestamp"], "Download manuale Roma")
-        self.assertIn("0DTE corrente", code)
-        self.assertIn("Weekly corrente", code)
+        self.assertIn('renderProfile(odteLevels, odteValues, bar_index + offsetOdte, "0DTE 12:40 CBOE"', code)
+        self.assertIn('renderProfile(weeklyLevels, weeklyValues, bar_index + weeklyCenter, "Weekly 12:40 CBOE"', code)
+        self.assertIn("fuso non dichiarato", code)
+        self.assertNotIn("0DTE corrente", code)
+        self.assertNotIn("Weekly corrente", code)
         self.assertIn("Differenziale ES-SPX GIA' APPLICATO agli strike: 40.0000", code)
         self.assertNotIn("07:30", code)
         self.assertNotIn("13:30", code)
@@ -96,6 +99,22 @@ class EmergencyPineTests(unittest.TestCase):
                              "Mattina 07:30")
         self.assertIn("0DTE 07:30", official)
         self.assertIn("Weekly 07:30", official)
+
+    def test_label_tracks_actual_source_stamp_not_download_clock(self):
+        snap = fixture()
+        snap["timestamp"] = "2026-11-02 09:17:00"
+        pine, _, _, _ = generate_current_pine(
+            snap, TODAY, 40.0, snap["timestamp"],
+            "Download manuale 2026-11-02 12:45 Roma")
+        self.assertIn('"0DTE 09:17 CBOE"', pine)
+        self.assertIn('"Weekly 09:17 CBOE"', pine)
+        self.assertNotIn('"0DTE 12:45 CBOE"', pine)
+        self.assertIn("Download manuale 2026-11-02 12:45 Roma", pine)
+
+    def test_malformed_cboe_stamp_never_fabricates_label(self):
+        snap = fixture()
+        with self.assertRaisesRegex(ValueError, "Ora CBOE non valida"):
+            generate_current_pine(snap, TODAY, 40.0, "2026-11-02 xx:yy:zz", "Manuale")
 
     def test_no_basis_never_silently_becomes_zero(self):
         with self.assertRaises((TypeError, ValueError)):
