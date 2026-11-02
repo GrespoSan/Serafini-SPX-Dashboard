@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "massive_futures_daily.py"
+      - "spx_massive_day_cache.py"
+      - "tests/test_spx_massive_day_cache.py"
       - "daily_volatility.py"
       - "vix_regime.py"
       - "tests/test_previous_es_daily_change.py"
@@ -29,8 +31,9 @@ jobs:
       - name: Install minimal dependencies for the Daily context
         run: python -m pip install "streamlit>=1.42,<2" "requests>=2.31,<3"
       - name: Compile changed Python sources
-        run: python -m py_compile massive_futures_daily.py daily_volatility.py vix_regime.py trend_daily_section.py app.py
+        run: python -m py_compile spx_massive_day_cache.py massive_futures_daily.py daily_volatility.py vix_regime.py trend_daily_section.py app.py
       - name: Test SPX Massive Close/Close, Range and Trend parity
         run: |
           python -m unittest discover -s tests -p "test_previous_es_daily_change.py" -v
           python -m unittest discover -s tests -p "test_spx_massive_trend_daily.py" -v
+          python -m unittest discover -s tests -p "test_spx_massive_day_cache.py" -v
