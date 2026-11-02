@@ -135,8 +135,12 @@ class EmergencyPineTests(unittest.TestCase):
         self.assertIn("render_emergency_pine()", app)
         self.assertLess(app.index("context_slot = st.empty()"),
                         app.index("PINE DI EMERGENZA"))
-        self.assertLess(app.index("PINE DI EMERGENZA"),
-                        app.index("with st.expander('ANALISI NET GAMMA'"))
+        self.assertLess(app.index("with st.expander('ANALISI NET GAMMA'"),
+                        app.index("PINE DI EMERGENZA"))
+        self.assertLess(app.index("with st.expander('REPLAY E CONFRONTO'"),
+                        app.index("PINE DI EMERGENZA"))
+        self.assertLess(app.index("with st.expander('REPORT GIORNALIERO AI'"),
+                        app.index("PINE DI EMERGENZA"))
         self.assertNotIn("from storage import", emg)
         self.assertNotIn("Supabase", emg.replace("senza Supabase", "").replace(
             "Nessun Supabase", ""))  # no backend calls
