@@ -47,6 +47,22 @@ class SPXLayoutParityTests(unittest.TestCase):
         self.assertIn("load_local_snapshot(uploaded_snapshot.name", APP)
         self.assertIn("Nessun dato inviato a Supabase", APP)
 
+    def test_context_independent_of_supabase_and_counters_preserved(self):
+        # The counters are intentionally still inside ANALISI DEL CONTESTO.
+        self.assertIn("col_snapshots.metric('Snapshot distinti', len(snaps))", APP)
+        self.assertIn("col_logs.metric('Registri', len(logs))", APP)
+        # A quota failure only clears archive metadata; it does not stop VX/Daily.
+        self.assertIn("except Exception:\n                # L'archivio", APP)
+        self.assertIn("storage_unavailable = True", APP)
+        self.assertIn("snaps, logs = [], []", APP)
+        self.assertNotIn("Supabase HTTP 402: gli snapshot archiviati", APP)
+        self.assertNotIn("Seleziona una settimana con snapshot Cboe validi per analizzare il VIX", APP)
+        self.assertNotIn("context_day", APP)
+        self.assertIn("trend_day = datetime.now(ZoneInfo('Europe/Rome')).date()", APP)
+        self.assertIn("render_vix_context(trend_day, return_context=True)", APP)
+        self.assertIn("render_trend_daily(reference_day=trend_day", APP)
+        self.assertIn("es_daily_context = previous_es_daily_range(trend_day)", APP)
+
     def test_manual_button_unique_and_pine_preserved(self):
         self.assertEqual(MANUAL.count("if st.button('Scarica nuovo snapshot Cboe'"), 1)
         self.assertEqual(APP.count("render_manual_acquisition("), 1)
