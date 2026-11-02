@@ -34,7 +34,7 @@ def _initial_manual_scale(profiles):
     return ceil(minimum * 10.0 - 1e-8) / 10.0
 
 
-def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stamp: str, acquisition_label: str = '') -> str:
+def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stamp: str, acquisition_label: str = '', *, current_only: bool = False) -> str:
     if not isfinite(offset):
         raise ValueError('Il differenziale non è finito')
     if not odte.get('rows') or not weekly.get('rows'):
@@ -63,6 +63,10 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
     # Usa solo etichette del registro di acquisizione, non presume il fuso del timestamp Cboe.
     clean_label = re.sub(r'[^a-zA-Z0-9À-ÿ :()._-]', '', acquisition_label or '')[:50]
     tag = f' | {clean_label}' if clean_label else ''
+    # Di default l'esportatore ufficiale resta identico (07:30).
+    # Solo il nuovo Pine manuale usa etichette senza orari storici.
+    odte_heading = '0DTE corrente' if current_only else '0DTE 07:30'
+    weekly_heading = 'Weekly corrente' if current_only else 'Weekly 07:30'
     warning = ('// NOTA: 0DTE e Weekly hanno LA STESSA SCADENZA in questa data: i due profili sono identici per definizione.\n' if same_exp else '')
     return f'''//@version=6
 indicator("Serafini SPX NET GAMMA | {date_text}{tag}", overlay=true, max_lines_count=500, max_labels_count=20)
@@ -162,7 +166,7 @@ if barstate.islast and validTicker
         array.push(drawnLabels, warningLabel)
     else
         if showCurrentOdte
-            renderProfile(odteLevels, odteValues, bar_index + offsetOdte, "0DTE 07:30", actualScale, adjusted, odteCoreLow, odteCoreHigh)
+            renderProfile(odteLevels, odteValues, bar_index + offsetOdte, "{odte_heading}", actualScale, adjusted, odteCoreLow, odteCoreHigh)
         if showCurrentWeekly
-            renderProfile(weeklyLevels, weeklyValues, bar_index + weeklyCenter, "Weekly 07:30", actualScale, adjusted, weeklyCoreLow, weeklyCoreHigh)
+            renderProfile(weeklyLevels, weeklyValues, bar_index + weeklyCenter, "{weekly_heading}", actualScale, adjusted, weeklyCoreLow, weeklyCoreHigh)
 '''
