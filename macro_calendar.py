@@ -158,13 +158,19 @@ def _rome_time(event):
 
 
 @st.cache_data(ttl=1800, show_spinner=False, max_entries=10)
-def _fetch(first_day, last_day):
+def _fetch(first_day, last_day, api_key):
+    # FinanceCalendar HTTP 401 richiede una chiave. La chiave proviene
+    # esclusivamente dai Secrets privati di Streamlit, mai dalla URL o dai log.
+    if not api_key:
+        raise ValueError("Chiave FinanceCalendar mancante")
     params = urlencode({
         "from": first_day, "to": last_day, "country": "US",
         "tz": "Europe/Rome", "limit": 500,
     })
     request = Request(API + "?" + params, headers={
-        "Accept": "application/json", "User-Agent": "SerafiniSPXDashboard/1.0",
+        "Accept": "application/json",
+        "User-Agent": "SerafiniSPXDashboard/1.0",
+        "X-API-Key": api_key,
     })
     with urlopen(request, timeout=12) as response:
         data = json.loads(response.read(3_000_001))
@@ -252,8 +258,10 @@ def render():
     try:
         # Includiamo ieri UTC/NY per gestire la finestra di cambiamento DST;
         # date nel UI filtrate invece in Europe/Rome.
+        api_key = str(st.secrets.get("FINANCE_CALENDAR_API_KEY", "")).strip()
         events = _prepare(_fetch((today - timedelta(days=1)).isoformat(),
-                                 (today + timedelta(days=7)).isoformat()), today)
+                                 (today + timedelta(days=7)).isoformat(),
+                                 api_key), today)
     except Exception:
         st.warning("Calendario macro non verificabile in questo momento. "
                    "Non interpretare l'assenza di dati come assenza di pubblicazioni.")
