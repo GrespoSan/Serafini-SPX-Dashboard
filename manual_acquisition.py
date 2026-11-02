@@ -108,7 +108,14 @@ def _pending_monitor(store, week: str):
     elapsed = time.monotonic() - pending['started_monotonic']
     try:
         result = find_manual_result(store, week, requested)
-    except Exception:
+    except Exception as exc:
+        if "Supabase HTTP 402" in str(exc):
+            # Il job GitHub archivia comunque il file per 24 ore; non tenere
+            # un monitor Supabase inutilmente attivo o dichiarare il download
+            # fallito quando e' fallito solo il salvataggio nel bucket.
+            st.session_state["manual_spx_outcome"] = {"status": "VERIFICA_GITHUB"}
+            st.session_state.pop("manual_spx_pending", None)
+            st.rerun()
         result = None
     if result is not None:
         status = result.get('status', '')
@@ -135,7 +142,7 @@ def render(role: str, week: str, store, embedded: bool = False) -> None:
     with section:
         if embedded:
             st.markdown('**Acquisizione Cboe supplementare**')
-        st.caption('Nuova acquisizione manuale. I rilevamenti automatici delle 07:30 e 15:46 restano invariati.')
+        st.caption('Nuova acquisizione manuale. Le acquisizioni ufficiali delle 07:30, 15:50 e 20:30 restano invariate.')
         rome = datetime.now(ZoneInfo('Europe/Rome'))
         iso = rome.isocalendar()
         if rome.weekday() >= 5:
@@ -189,6 +196,12 @@ def render(role: str, week: str, store, embedded: bool = False) -> None:
                 st.warning('Nuovi dati non utilizzabili: ' +
                            (outcome.get('error') or status) +
                            '. L’archivio degli snapshot validi resta invariato.')
+            elif status == 'VERIFICA_GITHUB':
+                st.warning("Supabase HTTP 402: il salvataggio nel bucket non e' verificabile. "
+                           "Il backup GitHub resta indipendente: controlla l'esecuzione "
+                           "e scarica l'artifact SPX della giornata, se creato.")
+                st.link_button("Apri acquisizioni SPX su GitHub",
+                               "https://github.com/GrespoSan/Serafini-SPX-Cloud/actions/workflows/spx.yml")
             elif status == 'ATTESA_SCADUTA':
                 st.warning('Non è arrivata conferma entro circa 2 minuti e mezzo. '
                            'Controlla GitHub Actions o riprova più tardi; non è confermato un nuovo download.')
