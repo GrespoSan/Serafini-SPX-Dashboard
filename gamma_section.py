@@ -517,7 +517,8 @@ def render_comparison(store, week, snaps, logs):
                         if selected_profile == '0DTE':
                             try:
                                 sigma_compare = serafini_cash_levels(day)
-                                add_sigma_markers(fig, sigma_compare, row_y)
+                                add_sigma_markers(fig, sigma_compare, row_y,
+                                                  show_90=bool(st.session_state.get('sigma_show_90_long_v14', False)))
                             except Exception:
                                 st.caption('L90 / L350 / S350 non disponibili per questa giornata.')
                     else:
@@ -862,6 +863,11 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
     st.markdown('**Priorità operativa alle 0DTE:** Serafini richiama un peso numerico del '
                 '**60% per le 0DTE** e del **23% per le Weekly** e, in caso di dubbio, '
                 'privilegia i livelli 0DTE più marcati.')
+    show_sigma_90 = st.checkbox(
+        'Mostra StdDev 90 — solo LONG (Pine v1.4)',
+        value=False, key='sigma_show_90_long_v14',
+        help='Disattivata di default come nel Pine. Le due bande 350 restano sempre visibili.'
+    )
     # Deviazioni Serafini cash M15, indipendenti dal riferimento SPX e dal
     # differenziale ES-SPX: prezzi di riferimento del future ES=F.
     # Un solo tentativo con cache; nessuna deviazione stimata se mancano M15.
@@ -1004,9 +1010,10 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                     font=dict(color='#f0cc65', size=11),
                     bgcolor='rgba(13,17,23,0.85)', borderpad=2,
                 )
-            # SOLO 0DTE: 3 piccoli segmenti sul bordo sinistro, non estesi.
+            # SOLO 0DTE: due segmenti 350, terzo 90 solo quando attivato.
             if title == '0DTE' and sigma_levels is not None:
-                _, clipped_sigma = add_sigma_markers(fig, sigma_levels, y)
+                _, clipped_sigma = add_sigma_markers(
+                    fig, sigma_levels, y, show_90=show_sigma_90)
             else:
                 clipped_sigma = []
             st.plotly_chart(fig, width="stretch", key=f'gamma_net_{title}_{choice}')
@@ -1020,13 +1027,17 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                                str(sigma_levels.get('reason', 'storico insufficiente')) +
                                '. Nessun livello ipotizzato.')
                 elif sigma_levels and sigma_levels.get('status') == 'VALIDO':
-                    st.caption('σ cash ES=F M15 (Chicago 08:30–15:00), rif. close precedente 15:15: '
-                               f"L90 {sigma_levels['L90']:.2f} · "
-                               f"L350 {sigma_levels['L350']:.2f} · "
-                               f"S350 {sigma_levels['S350']:.2f}."
-                               + (' Fuori dal range visualizzato: ' + ', '.join(clipped_sigma) + '.'
-                                  if clipped_sigma else '')
-                              )
+                    st.caption(
+                        'StdDev Serafini v1.4 — ES=F M15 RTH Chicago 08:30–15:15; '
+                        '350/90 chiusure INCLUSA la candela 15:00–15:15, '
+                        'livelli congelati per la seduta successiva. '
+                        + f"L350 {sigma_levels['L350']:.2f} · "
+                        + f"S350 {sigma_levels['S350']:.2f}"
+                        + (f" · L90 LONG {sigma_levels['L90']:.2f}" if show_sigma_90 else " · L90 OFF")
+                        + ('. Fuori dal range visualizzato: ' + ', '.join(clipped_sigma)
+                           if clipped_sigma else '.')
+                        + ' Fonte Yahoo ES=F: differenze possibili rispetto a TV ES1!.'
+                    )
 
     # Dettagli numerici allineati sotto entrambi i grafici.
     detail_cols = st.columns(2, gap='small')

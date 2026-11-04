@@ -1,4 +1,4 @@
-"""Tests deterministici della logica derivata dal Pine Serafini Metodo90 v2."""
+"""Pine Serafini v1.4 RTH: stdev popolazione include la candela finale 15:00-15:15."""
 import unittest
 from datetime import date, datetime, time, timedelta
 
@@ -44,10 +44,11 @@ class SerafiniSigmaCashTest(unittest.TestCase):
                                    "Close"]))
         cash = self.frame.loc[
             (self.frame.index.hour * 60 + self.frame.index.minute >= 510) &
-            (self.frame.index.hour * 60 + self.frame.index.minute < 900),
+            (self.frame.index.hour * 60 + self.frame.index.minute < 915),
             "Close",
         ].iloc[-350:]
         self.assertAlmostEqual(result["sigma90"], cash.iloc[-90:].std(ddof=0))
+        self.assertEqual(result["reference_bar_close_chicago"], "2026-10-27T15:15:00-05:00")
         self.assertAlmostEqual(result["sigma350"], cash.std(ddof=0))
         self.assertAlmostEqual(result["L90"],
                                result["reference_close_es"] + result["sigma90"])
@@ -77,23 +78,40 @@ class SerafiniSigmaCashTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "cash M15 incompleta"):
             compute_cash_levels(dropped, self.day)
 
-    def test_three_short_stubs_only_and_clipped_without_expansion(self):
+    def test_short_stubs_350_default_and_90_optional(self):
         levels = compute_cash_levels(self.frame, self.day)
         fig = go.Figure()
         shown, clipped = add_sigma_markers(fig, levels, [7000., 8000.])
-        self.assertEqual(shown, 3)
+        self.assertEqual(shown, 2)  # Pine default: 90 LONG OFF
         self.assertEqual(clipped, [])
-        self.assertEqual(len(fig.layout.shapes), 3)
+        self.assertEqual(len(fig.layout.shapes), 2)
         self.assertTrue(all(shape.xref == "paper"
                             and shape.yref == "y"
                             and shape.x0 == 0.017 and shape.x1 == 0.067
                             for shape in fig.layout.shapes))
-        self.assertEqual(len(fig.layout.annotations), 3)
-        other = go.Figure()
-        shown, clipped = add_sigma_markers(other, levels, [100., 200.])
+        self.assertEqual(len(fig.layout.annotations), 2)
+        on = go.Figure()
+        shown, clipped = add_sigma_markers(on, levels, [7000., 8000.], show_90=True)
+        self.assertEqual(shown, 3)
+        self.assertEqual(clipped, [])
+        offscreen = go.Figure()
+        shown, clipped = add_sigma_markers(offscreen, levels, [100., 200.], show_90=True)
         self.assertEqual(shown, 0)
         self.assertEqual(len(clipped), 3)
-        self.assertEqual(len(other.layout.shapes), 0)
+        self.assertEqual(len(offscreen.layout.shapes), 0)
+
+    def test_reference_bar_changes_both_sigmas_and_no_silent_roll_back(self):
+        normal = compute_cash_levels(self.frame, self.day)
+        edited = self.frame.copy()
+        edited.loc[datetime(2026,10,27,15,0,tzinfo=CHICAGO),"Close"] += 250
+        changed = compute_cash_levels(edited,self.day)
+        self.assertNotEqual(normal["sigma350"], changed["sigma350"])
+        self.assertNotEqual(normal["sigma90"], changed["sigma90"])
+        self.assertNotEqual(normal["reference_close_es"],changed["reference_close_es"])
+        # Missing 15:00 on latest prior session must not use older day.
+        missing = self.frame.drop(datetime(2026,10,27,15,0,tzinfo=CHICAGO))
+        with self.assertRaisesRegex(ValueError,"sessione RTH M15 incompleta"):
+            compute_cash_levels(missing,self.day)
 
 
 if __name__ == "__main__":
