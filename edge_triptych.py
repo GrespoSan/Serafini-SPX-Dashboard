@@ -188,6 +188,16 @@ def show(week, store, logs=None):
             st.error("Impossibile verificare la fotografia Serafini: "+str(err));return
         st.markdown(f"**Fotografia Cboe ore {reading_clock} Roma**" if reading_clock else
                     "**Fotografia Cboe — orario del download non disponibile**")
+        # The Cboe payload timestamp is not an independently timestamped
+        # underlying quote. Do not claim the spot is live.
+        freshness=e.get("spot_freshness")
+        if freshness:
+            if e.get("spot_basis") == "regular_close":
+                st.warning("Freschezza spot Cboe — " + freshness)
+            else:
+                st.info("Freschezza spot Cboe — " + freshness)
+            st.caption("Timestamp fonte Cboe: " + str(e.get("timestamp", "N/D"))
+                       + " · SHA-256 fotografia: " + str(e.get("sha256", "N/D"))[:16] + "…")
         price=float(e["spot_spx"])+shift
         p=st.columns(5)
         p[0].metric("Spot ES equivalente",f"{price:,.2f}")
@@ -227,6 +237,39 @@ def show(week, store, logs=None):
             st.info("Scomposizione Call/Put non disponibile nel report "
                     "Edge selezionato; nessun valore ricostruito dalle "
                     "sole barre del grafico.")
+        # Totali Edge full-chain: NET/Gross uses signed NET / sum(abs(GEX)).
+        # Gross is not the Serafini NET GAMMA and is not a directional signal.
+        gg=e.get("gross_gex")
+        ng=e.get("net_gross_pct")
+        if gg is not None:
+            diag=st.columns(2)
+            diag[0].metric("Gross GEX · 0DTE",format_gex_billions(gg))
+            diag[1].metric("NET/Gross GEX · 0DTE",
+                           f"{float(ng):+.1f}%" if ng is not None else "N/D")
+            st.caption("NET/Gross = NET GEX / Gross GEX × 100. "
+                       "Misura lo sbilanciamento delle esposizioni modellate, "
+                       "non la probabilità di rialzo o ribasso.")
+
+        with st.expander("GEX per scadenza · prossime quattro", expanded=False):
+            expiry_rows=e.get("expiry_gex",[])
+            if expiry_rows:
+                st.dataframe([{
+                    "Scadenza":r["expiry"],
+                    "Call GEX (mld)":f"{float(r['call_gex'])/1e9:+.2f}",
+                    "Put GEX (mld)":f"{float(r['put_gex'])/1e9:+.2f}",
+                    "NET GEX (mld)":f"{float(r['net_gex'])/1e9:+.2f}",
+                    "Gross GEX (mld)":f"{float(r['gross_gex'])/1e9:.2f}",
+                    "NET/Gross":(f"{float(r['net_gross_pct']):+.1f}%"
+                                  if r.get("net_gross_pct") is not None else "N/D"),
+                    "Contratti validi":r["valid_contracts"],
+                } for r in expiry_rows],hide_index=True,width="stretch")
+                st.caption("Valori calcolati sulla stessa fotografia Cboe, "
+                           "alle prossime quattro scadenze ancora valide. "
+                           "La tabella NON sostituisce il profilo principale 0DTE "
+                           "e non modifica il NET GAMMA Serafini.")
+            else:
+                st.info("Ripartizione per scadenza non disponibile.")
+
         try:
             candles=load_es_candles(day)
             if candles.empty:raise ValueError("Nessuna candela disponibile")
@@ -248,6 +291,47 @@ def show(week, store, logs=None):
             "**Call Wall** (tratteggio verde) · **Put Wall** (tratteggio rosso) · "
             "**Gamma Flip** (tratteggio giallo)."
         )
+        with st.expander("DEX EDGE 0DTE — pannello Delta separato", expanded=False):
+            # Independent Black-Scholes Delta × OI × multiplier × spot.
+            # Option-long convention: calls have +Delta, puts have -Delta.
+            if e.get("net_dex") is None:
+                st.info("DEX non disponibile per questa fotografia.")
+            else:
+                dc=st.columns(4)
+                dc[0].metric("NET DEX",format_gex_billions(e["net_dex"],signed=True))
+                dc[1].metric("Call DEX",format_gex_billions(e["call_dex"],signed=True))
+                dc[2].metric("Put DEX",format_gex_billions(e["put_dex"],signed=True))
+                dc[3].metric("Gross DEX",format_gex_billions(e["gross_dex"]))
+                dex_rows=[r for r in e.get("dex_rows",[])
+                          if abs(float(r["strike_spx"])/float(e["spot_spx"])-1)<=.10]
+                if dex_rows:
+                    dy=[float(r["strike_spx"])+shift for r in dex_rows]
+                    dfig=go.Figure()
+                    dfig.add_trace(go.Bar(
+                        x=[float(r["call_dex"])/1e9 for r in dex_rows],y=dy,
+                        orientation="h",marker_color="#22b573",name="Call DEX"))
+                    dfig.add_trace(go.Bar(
+                        x=[float(r["put_dex"])/1e9 for r in dex_rows],y=dy,
+                        orientation="h",marker_color="#e64b4b",name="Put DEX"))
+                    dfig.add_trace(go.Scatter(
+                        x=[float(r["net_dex"])/1e9 for r in dex_rows],y=dy,
+                        mode="lines",line=dict(color="#9ac8ff",width=1.7),
+                        name="NET DEX"))
+                    dfig.update_layout(height=480,barmode="relative",
+                                       xaxis_title="DEX · miliardi USD di nozionale Delta",
+                                       yaxis_title="Prezzo ES equivalente",
+                                       margin=dict(l=40,r=25,t=25,b=40))
+                    dfig.update_yaxes(range=list(bounds))
+                    st.plotly_chart(dfig,width="stretch",key="edge_dex_profile")
+                st.caption("DEX = Delta Black-Scholes × OI × 100 × spot SPX, "
+                           "calcolato sulla catena valida 0DTE completa; grafico "
+                           "visualizzato entro ±10% dallo spot. Call positive e Put "
+                           "negative con convenzione di detenzione long delle opzioni. "
+                           "È un'esposizione Delta teorica in USD, NON USD per 1%, "
+                           "NON rappresenta le posizioni reali dei dealer e NON "
+                           "costituisce un segnale direzionale. Nessuna influenza "
+                           "sui livelli e sul NET GAMMA Serafini.")
+
         with st.expander("Curva teorica GEX",expanded=False):
             curve=e.get("curve",[])
             curve_title = (f"Curva teorica GEX 0DTE — fotografia Cboe ore {reading_clock} Roma"
