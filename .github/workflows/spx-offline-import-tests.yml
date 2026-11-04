@@ -18,6 +18,7 @@ on:
       - tests/test_emergency_pine.py
       - tests/test_macro_calendar_auth.py
       - tests/test_spx_layout_parity.py
+      - tests/test_snapshot_selection.py
       - .github/workflows/spx-offline-import-tests.yml
   workflow_dispatch:
 jobs:
@@ -43,3 +44,5 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_edge_gex_exposure.py' -v
       - name: Test SPX-only layout and Supabase 402 fallback
         run: python -m unittest discover -s tests -p 'test_spx_layout_parity.py' -v
+      - name: Test latest CBOE automatic follow and manual history
+        run: python -m unittest discover -s tests -p 'test_snapshot_selection.py' -v
