@@ -1,7 +1,7 @@
 """Regression tests for manual-scale Pine exports (no external data)."""
 import unittest
 
-from pine_export import make_pine
+from pine_export import make_pine, _top_gamma_rows
 from pine_compare import make_pine_comparison
 
 
@@ -94,6 +94,60 @@ class PineComparisons(unittest.TestCase):
                 self.assertIn("renderProfile(odteLevels, odteValues", code)
                 self.assertIn("renderProfile(weeklyLevels, weeklyValues", code)
                 self.assertNotIn("Distanza 0DTE attuale (senza precedente)", code)
+
+    def test_rank_only_real_0dte_positive_negative_bars(self):
+        rows = [
+            {"strike_spx": 100.0, "net_gamma": 0.0},
+            {"strike_spx": 105.0, "net_gamma": 2.0},
+            {"strike_spx": 101.0, "net_gamma": 5.0},
+            {"strike_spx": 99.0, "net_gamma": 5.0},
+            {"strike_spx": 102.0, "net_gamma": -1.0},
+            {"strike_spx": 106.0, "net_gamma": -8.0},
+            {"strike_spx": 107.0, "net_gamma": -12.0},
+            {"strike_spx": 108.0, "net_gamma": -4.0},
+        ]
+        self.assertEqual(
+            [r["strike_spx"] for r in _top_gamma_rows(rows, True)],
+            [99.0, 101.0, 105.0],
+        )
+        self.assertEqual(
+            [r["strike_spx"] for r in _top_gamma_rows(rows, False)],
+            [107.0, 106.0, 108.0],
+        )
+        self.assertEqual(_top_gamma_rows(rows[:1], True), [])
+        self.assertEqual(_top_gamma_rows(rows[:1], False), [])
+
+    def test_top3_lines_start_at_last_candle_no_labels_and_only_current_0dte(self):
+        enriched = dict(self.odte)
+        enriched["display_rows"] = [
+            {"strike_spx": 7490.0, "net_gamma": 999.0},
+            {"strike_spx": 7495.0, "net_gamma": -999.0},
+            *self.odte["rows"],
+        ]
+        for code in (
+            make_pine(enriched, self.weekly, 36,
+                      "2026-10-28", "2026-10-28 03:19:18"),
+            make_pine_comparison(
+                self.earlier, enriched, self.weekly, 36,
+                "2026-10-28", "07:30", "15:50"),
+        ):
+            with self.subTest(code_type="comparison" if "showPrevious" in code else "standard"):
+                self.assertIn('showTop3Odte = input.bool(true, "Proietta Top 3 Call / Put 0DTE")', code)
+                self.assertIn("var array<float> topCallFull = array.from(", code)
+                self.assertIn("var array<float> topPutFull = array.from(", code)
+                self.assertIn("7526.0", code)  # 7490 + ES-SPX basis 36, actual strike
+                self.assertIn("7531.0", code)  # 7495 + ES-SPX basis 36, actual strike
+                self.assertIn("var array<float> topCallCore = array.from(", code)
+                self.assertIn("var array<float> topPutCore = array.from(", code)
+                self.assertEqual(code.count("drawOdteTopProjections(showExtension ?"), 1)
+                self.assertIn("if showTop3Odte\\n        drawOdteTopProjections", code)
+                self.assertIn("line c = line.new(bar_index, y, bar_index + 1, y", code)
+                self.assertIn("line p = line.new(bar_index, y, bar_index + 1, y", code)
+                self.assertEqual(code.count("extend=extend.right, color=positiveColor, style=line.style_dashed, width=1"), 1)
+                self.assertEqual(code.count("extend=extend.right, color=negativeColor, style=line.style_dashed, width=1"), 1)
+                helper = code.split("drawOdteTopProjections(array<float>", 1)[1].split("if barstate.islast and validTicker", 1)[0]
+                self.assertNotIn("label.new(", helper)
+                self.assertNotIn("weeklyLevels", helper)
 
     def test_invalid_pair_fails_closed(self):
         with self.assertRaises(ValueError):
