@@ -221,10 +221,10 @@ def render_payoff_charts(chosen: dict, offset: float | None = None,
     left, right = st.columns(2, gap='small')
     key_suffix = '_'.join(str(s[key]) for key in names)
     with left:
-        st.plotly_chart(fig_gamma, use_container_width=True,
+        st.plotly_chart(fig_gamma, width="stretch",
                         key=f'structure_gamma_{offset:g}_{key_suffix}')
     with right:
-        st.plotly_chart(fig_payoff, use_container_width=True,
+        st.plotly_chart(fig_payoff, width="stretch",
                         key=f'structure_combined_{offset:g}_{key_suffix}')
     st.caption(f'Prezzi ES = strike SPX + differenziale {offset:+.2f}. '
                'Le curve rappresentano solo la struttura didattica ipotizzata '
