@@ -19,6 +19,7 @@ on:
       - tests/test_macro_calendar_auth.py
       - tests/test_spx_layout_parity.py
       - tests/test_snapshot_selection.py
+      - tests/test_edge_metric_colors.py
       - .github/workflows/spx-offline-import-tests.yml
   workflow_dispatch:
 jobs:
@@ -46,3 +47,5 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_spx_layout_parity.py' -v
       - name: Test latest CBOE automatic follow and manual history
         run: python -m unittest discover -s tests -p 'test_snapshot_selection.py' -v
+      - name: Test Edge colored metric values and no periodic refresh
+        run: python -m unittest discover -s tests -p 'test_edge_metric_colors.py' -v
