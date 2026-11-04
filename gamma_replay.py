@@ -74,9 +74,20 @@ def _official_frames(store, week, day, logs):
                     calculated = profile(snap, expiry, ref)
                     if not calculated.get("rows"):
                         raise ValueError("Profilo vuoto")
-                    profiles[kind] = {"rows": [
-                        {"strike_spx": r["strike_spx"], "net_gamma": r["net_gamma"]}
-                        for r in calculated["rows"]]}
+                    # I 50 strike Serafini rimangono invariati. Aggiungiamo
+                    # separatamente 100 righe MT4 dalla STESSA catena già scaricata.
+                    try:
+                        extended = profile(snap, expiry, ref, strike_count=100)["rows"]
+                    except ValueError:
+                        extended = []  # non inventare livelli se la copertura manca
+                    profiles[kind] = {
+                        "rows": [
+                            {"strike_spx": r["strike_spx"], "net_gamma": r["net_gamma"]}
+                            for r in calculated["rows"]],
+                        "mt4_rows": [
+                            {"strike_spx": r["strike_spx"], "net_gamma": r["net_gamma"]}
+                            for r in extended],
+                    }
                 if not any(abs(r["net_gamma"]) > 0 for r in profiles["0DTE"]["rows"]):
                     continue
                 result[slot] = {
