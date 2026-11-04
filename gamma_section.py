@@ -118,6 +118,7 @@ def _snapshot_log_index(week, log_names, _store):
     """
     rome=ZoneInfo('Europe/Rome')
     earliest={}
+    latest={}
     for log_name in log_names:
         try:
             item=json.loads(_store.download(f'{week}/logs/{log_name}'))
@@ -135,6 +136,8 @@ def _snapshot_log_index(week, log_names, _store):
             dt=dt.astimezone(rome)
             if file_path not in earliest or dt < earliest[file_path][0]:
                 earliest[file_path]=(dt, str(item.get('scheduled_slot','')).strip())
+            if file_path not in latest or dt > latest[file_path]:
+                latest[file_path]=dt
         except (KeyError, TypeError, ValueError, OverflowError, OSError, RuntimeError):
             continue
     result={}
@@ -159,8 +162,63 @@ def _snapshot_log_index(week, log_names, _store):
             label=f'Manuale {dt:%H:%M}'
         else:
             label=f'Download {dt:%H:%M}'
-        result[path]=(label,dt.strftime('%H:%M'))
+        result[path]=(label,dt.strftime('%H:%M'),latest[path])
     return result
+
+
+def _latest_downloaded_snapshot(store, week, snaps, logs):
+    """Choose the latest successful download, not the CBOE timestamp in filenames.
+
+    Uses the cached acquisition-log index; selecting never downloads raw chains.
+    """
+    names = {item['name'] for item in snaps if item.get('name','').startswith('SPX_CBOE_')}
+    if not names:
+        return None
+    index = _snapshot_log_index(week, tuple(item['name'] for item in logs), store)
+    registered = [
+        (index[f'{week}/snapshots/{name}'][2], name)
+        for name in names if f'{week}/snapshots/{name}' in index
+    ]
+    # Legacy/local archives without logs: preserve previous filename fallback,
+    # without claiming the true acquisition time is known.
+    return max(registered)[1] if registered else max(names)
+
+
+def _sync_snapshot_selection(store, week, snaps, logs):
+    """Follow latest by default, preserving explicit manual historical selection."""
+    names = sorted((item['name'] for item in snaps), reverse=True)
+    if not names:
+        return names, None
+    selected_key = f'serafini_selected_snapshot_{week}'
+    follow_key = f'serafini_follow_latest_{week}'
+    latest = _latest_downloaded_snapshot(store, week, snaps, logs) or names[0]
+    if st.session_state.pop(f'spx_refresh_latest_{week}', False):
+        st.session_state[follow_key] = True
+    if st.session_state.get(follow_key, True) or st.session_state.get(selected_key) not in names:
+        st.session_state[selected_key] = latest
+    return names, latest
+
+
+def _snapshot_choice_changed(week, latest):
+    """Widget callback: choosing history pauses following; latest resumes it."""
+    selected = st.session_state.get(f'serafini_selected_snapshot_{week}')
+    st.session_state[f'serafini_follow_latest_{week}'] = (selected == latest)
+
+
+@st.fragment(run_every='5m')
+def watch_new_snapshot(store, week):
+    """Poll cheaply and rerun the full application only if a new photo appears."""
+    if not st.session_state.get(f'serafini_follow_latest_{week}', True):
+        return
+    try:
+        snaps = store.list(f'{week}/snapshots/')
+        logs = store.list(f'{week}/logs/')
+        latest = _latest_downloaded_snapshot(store, week, snaps, logs)
+        if latest and latest != st.session_state.get(f'serafini_selected_snapshot_{week}'):
+            st.rerun(scope='app')
+    except (OSError, RuntimeError, ValueError, KeyError, TypeError):
+        # A temporary Storage error must not interrupt the current chart.
+        return
 
 
 def _acquisition_label(store, week, logs, file_name):
@@ -648,16 +706,20 @@ def render_comparison(store, week, snaps, logs):
 
 
 def render_snapshot_selector(store, week, snaps, logs):
-    """Unico selettore nel pannello superiore, prima dell'importazione manuale."""
+    """Default to latest download while historical selections remain available."""
     if not snaps:
         st.caption("Nessuna fotografia Cboe disponibile: importa uno ZIP/JSON qui sotto.")
         return
-    names = sorted((o['name'] for o in snaps), reverse=True)
+    names, latest = _sync_snapshot_selection(store, week, snaps, logs)
     selection_key = f'serafini_selected_snapshot_{week}'
-    if st.session_state.pop(f'spx_refresh_latest_{week}', False):
-        st.session_state[selection_key] = names[0]
-    elif st.session_state.get(selection_key) not in names:
-        st.session_state[selection_key] = names[0]
+    follow_key = f'serafini_follow_latest_{week}'
+    st.checkbox(
+        "Segui automaticamente l'ultimo download Cboe",
+        value=True, key=follow_key,
+        help="Attivo: il profilo principale passa all'ultimo download. "
+             "Scegliere uno storico disattiva il seguito automatico; "
+             "riattivare la casella per tornare all'ultimo rilevamento.",
+    )
     labels = {}
     for name in names:
         day_code = name[len('SPX_CBOE_'):len('SPX_CBOE_') + 8]
@@ -668,8 +730,17 @@ def render_snapshot_selector(store, week, snaps, logs):
         else:
             capture = _acquisition_label(store, week, logs, name)
         labels[name] = f'{readable_date} · {capture} · {name}'
-    st.selectbox('Snapshot originale Cboe', names, key=selection_key,
-                 format_func=lambda name: labels.get(name, name))
+    st.selectbox(
+        'Snapshot originale Cboe', names, key=selection_key,
+        format_func=lambda name: labels.get(name, name),
+        on_change=_snapshot_choice_changed, args=(week, latest),
+    )
+    if st.session_state.get(follow_key, True):
+        st.caption("Modalità automatica: NET GAMMA 0DTE e Weekly seguono l'ultimo download disponibile.")
+    else:
+        st.caption("Modalità storica: la fotografia scelta rimane attiva anche con nuovi download.")
+    if not logs:
+        st.caption("Orario download non verificabile dai registri: ordinamento dei nomi Cboe.")
 
 
 def render(store, week, snaps, logs, *, show_heading=True, selector_external=False):
@@ -678,12 +749,8 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
     if not snaps:
         st.info('Nessuno snapshot disponibile nella settimana selezionata.')
         return
-    names = sorted((o['name'] for o in snaps), reverse=True)
+    names, _ = _sync_snapshot_selection(store, week, snaps, logs)
     selection_key = f'serafini_selected_snapshot_{week}'
-    if st.session_state.pop(f'spx_refresh_latest_{week}', False):
-        st.session_state[selection_key] = names[0]
-    elif st.session_state.get(selection_key) not in names:
-        st.session_state[selection_key] = names[0]
     # La selezione resta nello stato della sessione; il controllo viene mostrato
     # immediatamente prima delle opzioni di scala dei profili.
     choice = st.session_state[selection_key]
