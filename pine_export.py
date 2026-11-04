@@ -22,6 +22,25 @@ def _pine_array(rows, field: str, offset: float = 0.0):
     return 'array.from(\n        ' + ',\n        '.join(', '.join(vals[i:i + 8]) for i in range(0, len(vals), 8)) + '\n    )'
 
 
+def _top_gamma_rows(rows, positive: bool, limit: int = 3):
+    """Only existing CBOE strikes: strongest net-positive / net-negative 0DTE bars.
+
+    The same source rows used for the histogram are ranked by net magnitude.
+    For equal magnitude, choose the lower strike consistently. No levels are
+    synthesized and zero-net rows cannot be counted as either side.
+    """
+    selected = []
+    for row in rows:
+        gamma = float(row['net_gamma'])
+        strike = float(row['strike_spx'])
+        if not isfinite(gamma) or not isfinite(strike):
+            raise ValueError('Non-finite 0DTE top-level value')
+        if gamma > 0 if positive else gamma < 0:
+            selected.append(row)
+    return sorted(selected, key=lambda r: (-abs(float(r['net_gamma'])),
+                                            float(r['strike_spx'])))[:limit]
+
+
 def _initial_manual_scale(profiles):
     """Scala iniziale sicura per xloc.bar_index +500; nessuna riscalatura dei Gamma."""
     minimum = 1.0
@@ -57,6 +76,12 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
             raise ValueError('Gli strike estesi devono contenere i 50 originali invariati')
     odte_display = odte.get('display_rows') or odte['rows']
     weekly_display = weekly.get('display_rows') or weekly['rows']
+    # Dotted/dashed horizontal projections rank ONLY the same 0DTE bars that
+    # the chosen histogram mode displays. Weekly never supplies a top level.
+    top_call_full = _top_gamma_rows(odte_display, positive=True)
+    top_put_full = _top_gamma_rows(odte_display, positive=False)
+    top_call_core = _top_gamma_rows(odte['rows'], positive=True)
+    top_put_core = _top_gamma_rows(odte['rows'], positive=False)
     default_scale = _initial_manual_scale([
         ({"rows": odte_display}, 100), ({"rows": weekly_display}, 200)
     ])
@@ -119,6 +144,7 @@ offsetOdte = input.int(100, "Distanza 0DTE da ultima candela", minval=45, maxval
 offsetWeekly = input.int(100, "Distanza Weekly dalle 0DTE", minval=20, maxval=600)\nshowExtension = input.bool(true, "Estensione automatica NET GAMMA")
 showCurrentOdte = input.bool(true, "Mostra 0DTE corrente")
 showCurrentWeekly = input.bool(true, "Mostra Weekly corrente")
+showTop3Odte = input.bool(true, "Proietta Top 3 Call / Put 0DTE")
 positiveColor = input.color(color.rgb(0, 230, 117), "NET GAMMA positivo")
 negativeColor = input.color(color.rgb(242, 54, 69), "NET GAMMA negativo")
 showTitles = input.bool(true, "Mostra intestazioni")
@@ -133,6 +159,11 @@ var array<label> drawnLabels = array.new_label()
 var array<float> odteLevels = {_pine_array(odte_display, 'strike_spx', offset)}
 var array<float> odteValues = {_pine_array(odte_display, 'net_gamma')}
 var array<float> odteCoreValues = {_pine_array(odte['rows'], 'net_gamma')}
+// Top 3 selezionati dalle barre effettive 0DTE, con segni e prezzi originali.
+var array<float> topCallFull = {_pine_array(top_call_full, 'strike_spx', offset)}
+var array<float> topPutFull = {_pine_array(top_put_full, 'strike_spx', offset)}
+var array<float> topCallCore = {_pine_array(top_call_core, 'strike_spx', offset)}
+var array<float> topPutCore = {_pine_array(top_put_core, 'strike_spx', offset)}
 var array<float> weeklyLevels = {_pine_array(weekly_display, 'strike_spx', offset)}
 var array<float> weeklyValues = {_pine_array(weekly_display, 'net_gamma')}
 var array<float> weeklyCoreValues = {_pine_array(weekly['rows'], 'net_gamma')}
@@ -175,6 +206,22 @@ renderProfile(array<float> levels, array<float> gamma, int center, string headin
             label t = label.new(center, top + spacing, heading, xloc=xloc.bar_index, yloc=yloc.price, color=color.new(color.black, 50), textcolor=color.white, style=label.style_label_down, size=size.normal)
             array.push(drawnLabels, t)
 
+// Come nell'esempio: la proiezione parte dall'ULTIMA candela e prosegue
+// solo a destra. I livelli non sono linee a tutto grafico e non hanno label.
+drawOdteTopProjections(array<float> callLevels, array<float> putLevels) =>
+    int countCall = array.size(callLevels)
+    if countCall > 0
+        for j = 0 to countCall - 1
+            float y = array.get(callLevels, j)
+            line c = line.new(bar_index, y, bar_index + 1, y, xloc=xloc.bar_index, extend=extend.right, color=positiveColor, style=line.style_dashed, width=1)
+            array.push(drawnLines, c)
+    int countPut = array.size(putLevels)
+    if countPut > 0
+        for j = 0 to countPut - 1
+            float y = array.get(putLevels, j)
+            line p = line.new(bar_index, y, bar_index + 1, y, xloc=xloc.bar_index, extend=extend.right, color=negativeColor, style=line.style_dashed, width=1)
+            array.push(drawnLines, p)
+
 if barstate.islast and validTicker
     for segment in drawnLines
         line.delete(segment)
@@ -198,4 +245,6 @@ if barstate.islast and validTicker
             renderProfile(odteLevels, odteValues, bar_index + offsetOdte, "{odte_heading}", actualScale, adjusted, odteCoreLow, odteCoreHigh)
         if showCurrentWeekly
             renderProfile(weeklyLevels, weeklyValues, bar_index + weeklyCenter, "{weekly_heading}", actualScale, adjusted, weeklyCoreLow, weeklyCoreHigh)
+        if showTop3Odte
+            drawOdteTopProjections(showExtension ? topCallFull : topCallCore, showExtension ? topPutFull : topPutCore)
 '''
