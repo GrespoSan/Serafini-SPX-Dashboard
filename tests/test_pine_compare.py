@@ -140,7 +140,7 @@ class PineComparisons(unittest.TestCase):
                 self.assertIn("var array<float> topCallCore = array.from(", code)
                 self.assertIn("var array<float> topPutCore = array.from(", code)
                 self.assertEqual(code.count("drawOdteTopProjections(showExtension ?"), 1)
-                self.assertIn("if showTop3Odte\\n        drawOdteTopProjections", code)
+                self.assertIn("if showTop3Odte\n        drawOdteTopProjections", code)
                 self.assertIn("line c = line.new(bar_index, y, bar_index + 1, y", code)
                 self.assertIn("line p = line.new(bar_index, y, bar_index + 1, y", code)
                 self.assertEqual(code.count("extend=extend.right, color=positiveColor, style=line.style_dashed, width=1"), 1)
