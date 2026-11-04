@@ -2,6 +2,7 @@
 from __future__ import annotations
 import math
 import hashlib
+from html import escape
 from datetime import date, datetime
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -10,6 +11,34 @@ from edge_context import read_report, _number
 from net_gamma import read_snapshot, profile
 from replay_prices import load_es_candles
 from edge_gex_exposure import format_gex_billions
+
+
+def _edge_metric_color(value):
+    """Semantic color for modeled Edge values; zero/unknown stay neutral."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if not math.isfinite(value):
+            return "inherit"
+        return "#22b573" if value > 0 else "#e64b4b" if value < 0 else "inherit"
+    sign = str(value or "").strip().lower()
+    if sign in ("positive", "positivo"):
+        return "#22b573"
+    if sign in ("negative", "negativo"):
+        return "#e64b4b"
+    return "inherit"
+
+
+def _colored_edge_metric(column, label, value, sign):
+    """Color the metric VALUE (not just a delta), safely and without global CSS."""
+    color = _edge_metric_color(sign)
+    column.markdown(
+        '<div style="min-height:5rem">'
+        f'<div style="font-size:.875rem;line-height:1.5rem;opacity:.85">{escape(str(label))}</div>'
+        f'<div style="font-size:2rem;line-height:2.45rem;font-weight:400;'
+        f'color:{color};overflow-wrap:anywhere">{escape(str(value))}</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
 
 def _matching_serafini(store, week, digest, day, reference):
     # Exact snapshot match: no comparing readings from different times.
@@ -90,10 +119,9 @@ def _plot(e, serafini_rows, candles, shift, bounds, reading_clock=None):
     fig.update_xaxes(title_text="GEX mld USD/1%",row=1,col=3)
     return fig
 
-@st.fragment(run_every="5m")
 def show(week, store, logs=None):
     with st.expander("GEX EDGE — CONFRONTO",expanded=False):
-        st.caption("Candele ES=F: controllo automatico ogni 5 minuti mentre la pagina resta aperta. GEX e Serafini restano riferiti alla fotografia indicata.")
+        st.caption("Candele ES=F e profili aggiornati all'apertura o al ricaricamento della pagina. GEX e Serafini restano riferiti alla fotografia indicata.")
         reading_clock = None
         ctx=st.session_state.get(f"gamma_compare_context_{week}")
         reading=st.radio("Rilevamento da confrontare",("Ultimo rilevamento","Mattina 07:30"),horizontal=True,key=f"edge_compare_reading_{week}")
@@ -193,7 +221,7 @@ def show(week, store, logs=None):
         p[0].metric("Spot ES equivalente",f"{price:,.2f}")
         for c,key,lab in zip(p[1:4],("put_wall_spx","gamma_flip_spx","call_wall_spx"),("Put Wall","Gamma Flip","Call Wall")):
             v=e.get(key);c.metric(lab,f"{float(v)+shift:,.2f}" if v is not None else "N/D")
-        p[4].metric("Regime Edge",str(e.get("regime","N/D")))
+        _colored_edge_metric(p[4], "Regime Edge", str(e.get("regime", "N/D")), e.get("regime"))
 
         # This is the complete 0DTE Edge chain (not just the strike bars
         # shown +/-10% on the chart). Source snapshot SHA-256 and selected
@@ -208,11 +236,12 @@ def show(week, store, logs=None):
                 "Negative": "Negativo", "Positive": "Positivo",
                 "Zero": "Zero",
             }
-            columns[0].metric(
-                "Segno Gamma modellato",
-                labels.get(sign_label, "N/D") + " allo spot Cboe")
-            columns[1].metric(
-                "NET GEX", format_gex_billions(e["net_gex"], signed=True))
+            _colored_edge_metric(
+                columns[0], "Segno Gamma modellato",
+                labels.get(sign_label, "N/D") + " allo spot Cboe", sign_label)
+            _colored_edge_metric(
+                columns[1], "NET GEX",
+                format_gex_billions(e["net_gex"], signed=True), e.get("net_gex"))
             columns[2].metric(
                 "Call GEX", format_gex_billions(call_exposure, signed=True))
             columns[3].metric(
