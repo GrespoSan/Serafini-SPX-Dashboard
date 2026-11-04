@@ -20,6 +20,7 @@ from gexlab.engine import gex
 from gexlab.engine.calendar import NY, Session, TradingCalendar
 from gexlab.models import parse_occ
 from gexlab.sources.cboe import parse_chain, parse_cboe_timestamp
+from edge_gex_exposure import full_chain_gex_components
 
 MODES = ("0DTE", "Prossime 4 scadenze", "Tutte (finestra Edge)")
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
@@ -153,6 +154,11 @@ def analyze(raw: bytes, mode: str = "0DTE") -> dict:
     levels, grid, values = gex.compute_levels(chain.ticker, contracts, spot)
     frame = pd.DataFrame(gex.strike_rows(contracts, spot * .9, spot * 1.1))
     cov = gex.gex_cov(contracts, spot)
+    # Unlike strike_rows (displayed +/-10% band), this is the FULL valid
+    # 0DTE chain used by the original Edge engine's NET and Gross figures.
+    # Reconcile to prevent different totals from appearing alongside walls.
+    components = full_chain_gex_components(
+        contracts, levels.net_gex, levels.gross_gex)
     return {
         "symbol": chain.ticker, "timestamp": chain.source_ts.isoformat(),
         "valuation": chain.valuation.isoformat(), "spot": spot, "mode": mode,
@@ -160,6 +166,8 @@ def analyze(raw: bytes, mode: str = "0DTE") -> dict:
         "call_wall": levels.call_wall, "put_wall": levels.put_wall,
         "flip": levels.nearest_zero_gamma, "flips": levels.zero_gamma,
         "regime": levels.regime, "net": levels.net_gex, "gross": levels.gross_gex,
+        "call_gex": components["call_gex"], "put_gex": components["put_gex"],
+        "modeled_gamma_sign": components["modeled_gamma_sign"],
         "quality_pct": cov.pct, "quality_unbounded": cov.ratio is None,
         "quality_sufficient": gex.gex_gate_ok(cov),
         "valid": sum(c.valid for c in contracts), "total": len(contracts),
