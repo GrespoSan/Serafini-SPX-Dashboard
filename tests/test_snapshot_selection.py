@@ -8,10 +8,6 @@ from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 
-class RerunRequested(BaseException):
-    pass
-
-
 class FakeStore:
     def __init__(self, week):
         self.week = week
@@ -48,7 +44,6 @@ def load_functions(fake_st):
     expected = {
         "_snapshot_log_index", "_latest_downloaded_snapshot",
         "_sync_snapshot_selection", "_snapshot_choice_changed",
-        "watch_new_snapshot",
     }
     selected = []
     for node in tree.body:
@@ -68,12 +63,6 @@ class SnapshotSelectionTests(unittest.TestCase):
     def setUp(self):
         self.week = "2026-W45"
         self.st = SimpleNamespace(session_state={})
-
-        def rerun(scope="app"):
-            self.assertEqual(scope, "app")
-            raise RerunRequested()
-
-        self.st.rerun = rerun
         self.fn = load_functions(self.st)
         self.store = FakeStore(self.week)
         # CBOE filename order intentionally differs from acquisition order.
@@ -118,17 +107,13 @@ class SnapshotSelectionTests(unittest.TestCase):
             self.evening,
         )
 
-    def test_watcher_only_reruns_in_auto_mode(self):
-        self.select()
-        self.store.add(self.evening, "log3", "20:30")
-        with self.assertRaises(RerunRequested):
-            self.fn["watch_new_snapshot"](self.store, self.week)
-        self.st.session_state[f"serafini_follow_latest_{self.week}"] = False
-        self.fn["watch_new_snapshot"](self.store, self.week)
-        self.assertEqual(
-            self.st.session_state[f"serafini_selected_snapshot_{self.week}"],
-            self.afternoon,
-        )
+    def test_no_scheduled_snapshot_or_edge_refresh(self):
+        root = Path(__file__).resolve().parents[1]
+        for filename in ("app.py", "gamma_section.py", "edge_triptych.py"):
+            with self.subTest(filename=filename):
+                source = (root / filename).read_text(encoding="utf-8")
+                self.assertNotIn("watch_new_snapshot", source)
+                self.assertNotIn("run_every=", source)
 
     def test_refresh_latest_restores_auto_mode(self):
         self.select()
