@@ -35,7 +35,7 @@ def _top_gamma_rows(rows, positive: bool, limit: int = 3):
         strike = float(row['strike_spx'])
         if not isfinite(gamma) or not isfinite(strike):
             raise ValueError('Non-finite 0DTE top-level value')
-        if gamma > 0 if positive else gamma < 0:
+        if (gamma > 0 and positive) or (gamma < 0 and not positive):
             selected.append(row)
     return sorted(selected, key=lambda r: (-abs(float(r['net_gamma'])),
                                             float(r['strike_spx'])))[:limit]
@@ -245,6 +245,7 @@ if barstate.islast and validTicker
             renderProfile(odteLevels, odteValues, bar_index + offsetOdte, "{odte_heading}", actualScale, adjusted, odteCoreLow, odteCoreHigh)
         if showCurrentWeekly
             renderProfile(weeklyLevels, weeklyValues, bar_index + weeklyCenter, "{weekly_heading}", actualScale, adjusted, weeklyCoreLow, weeklyCoreHigh)
-        if showTop3Odte
-            drawOdteTopProjections(showExtension ? topCallFull : topCallCore, showExtension ? topPutFull : topPutCore)
+    // Proiezioni indipendenti dalla scala del profilo e dalle Weekly.
+    if showTop3Odte
+        drawOdteTopProjections(showExtension ? topCallFull : topCallCore, showExtension ? topPutFull : topPutCore)
 '''
