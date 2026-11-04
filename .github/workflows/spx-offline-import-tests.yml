@@ -8,6 +8,11 @@ on:
       - offline_snapshot.py
       - macro_calendar.py
       - gamma_section.py
+      - edge_auto_engine.py
+      - edge_gex_exposure.py
+      - edge_auto.py
+      - edge_triptych.py
+      - tests/test_edge_gex_exposure.py
       - manual_acquisition.py
       - tests/test_offline_snapshot.py
       - tests/test_emergency_pine.py
@@ -27,12 +32,14 @@ jobs:
       - name: Install minimal runtime for macro calendar test
         run: python -m pip install -q "streamlit>=1.42,<2"
       - name: Compile dashboard and offline importer
-        run: python -m py_compile app.py gamma_section.py manual_acquisition.py offline_snapshot.py macro_calendar.py emergency_pine.py pine_export.py
+        run: python -m py_compile app.py gamma_section.py manual_acquisition.py offline_snapshot.py macro_calendar.py emergency_pine.py pine_export.py edge_auto_engine.py edge_gex_exposure.py edge_auto.py edge_triptych.py
       - name: Test offline import without credentials
         run: python -m unittest discover -s tests -p 'test_offline_snapshot.py' -v
       - name: Test emergency one-snapshot current Pine without Supabase
         run: python -m unittest discover -s tests -p 'test_emergency_pine.py' -v
       - name: Test FinanceCalendar authentication without secrets
         run: python -m unittest discover -s tests -p 'test_macro_calendar_auth.py' -v
+      - name: Test full-chain Edge GEX sign and Call/Put NET/Gross reconciliation
+        run: python -m unittest discover -s tests -p 'test_edge_gex_exposure.py' -v
       - name: Test SPX-only layout and Supabase 402 fallback
         run: python -m unittest discover -s tests -p 'test_spx_layout_parity.py' -v
