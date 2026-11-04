@@ -23,8 +23,10 @@ from es_spx_basis import download_and_calculate
 ROME = ZoneInfo('Europe/Rome')
 
 
-def build_feed(store, day, basis_result, mode="Replay"):
-    """Replay predefinito: ultimo frame disponibile; Ufficiale: soli 07:30/15:50/20:30."""
+def build_feed(store, day, basis_result, mode="Replay", strike_count=50):
+    """50 Serafini per feed legacy; 100 MT4 solo da estensione CBOE verificata."""
+    if strike_count not in (50, 100):
+        raise ValueError("Sono consentiti solo 50 o 100 strike per profilo")
     if mode not in ("Replay", "Ufficiale"):
         raise ValueError(f"Modalita feed MT4 sconosciuta: {mode}")
     basis_raw = float(basis_result['basis'])
@@ -47,6 +49,24 @@ def build_feed(store, day, basis_result, mode="Replay"):
         frames.update(official)
     candidates = []
     for slot, frame in frames.items():
+        if strike_count == 100:
+            # I vecchi Replay contengono solo 50 strike: non allargarli
+            # artificialmente ne' pubblicarli nel feed esteso.
+            profiles = frame.get('profiles') or {}
+            reference = float(frame.get('reference_spx') or 0)
+            if reference <= 0:
+                continue
+            complete = True
+            for kind in ("0DTE", "Weekly"):
+                rows = (profiles.get(kind) or {}).get('mt4_rows') or []
+                prices = [float(item['strike_spx']) for item in rows]
+                if (len(prices) != 100 or len(set(prices)) != 100
+                        or sum(price < reference for price in prices) != 50
+                        or sum(price > reference for price in prices) != 50):
+                    complete = False
+                    break
+            if not complete:
+                continue
         clock = frame.get('clock', '')
         try:
             downloaded = datetime.fromisoformat(f'{day.isoformat()}T{clock}').replace(tzinfo=ROME)
@@ -65,8 +85,9 @@ def build_feed(store, day, basis_result, mode="Replay"):
     writer_io = io.StringIO(newline='')
     out = csv.writer(writer_io, lineterminator='\n')
     meta = [
-        ('schema', 'serafini_mt4_v3'),
+        ('schema', 'serafini_mt4_v4' if strike_count == 100 else 'serafini_mt4_v3'),
         ('mode', mode),
+        ('profile_strikes', str(strike_count)),
         ('date_rome', day.isoformat()),
         ('slot_rome', slot),
         ('download_clock_rome', frame['clock']),
@@ -85,9 +106,11 @@ def build_feed(store, day, basis_result, mode="Replay"):
     from gamma_replay import weekly_expiry
     expiryw = weekly_expiry(day).isoformat()
     for kind, expiry in (('0DTE', expiry0), ('Weekly', expiryw)):
-        rows = (frame.get('profiles') or {}).get(kind, {}).get('rows') or []
-        if len(rows) != 50 or len({float(r['strike_spx']) for r in rows}) != 50:
-            raise ValueError(f'{kind}: 50 strike univoci richiesti')
+        selected_profile = (frame.get('profiles') or {}).get(kind, {})
+        field = 'mt4_rows' if strike_count == 100 else 'rows'
+        rows = selected_profile.get(field) or []
+        if len(rows) != strike_count or len({float(r['strike_spx']) for r in rows}) != strike_count:
+            raise ValueError(f'{kind}: {strike_count} strike univoci richiesti')
         for row in sorted(rows, key=lambda r: float(r['strike_spx'])):
             strike = float(row['strike_spx'])
             net = float(row['net_gamma'])
@@ -98,7 +121,8 @@ def build_feed(store, day, basis_result, mode="Replay"):
 
 
 def publish_levels(data, url, secret, bucket='spx-snapshots', target='mt4/latest.csv'):
-    if target not in ('mt4/latest.csv', 'mt4/official.csv'):
+    if target not in ('mt4/latest.csv', 'mt4/official.csv',
+                      'mt4/latest100.csv', 'mt4/official100.csv'):
         raise ValueError('Destinazione MT4 non consentita')
     endpoint = f"{url.rstrip('/')}/storage/v1/object/{quote(bucket,safe='')}/{target}"
     headers = {'apikey': secret, 'Authorization': f'Bearer {secret}',
@@ -132,6 +156,17 @@ def main():
     sha_official = publish_levels(data_official, url, key, bucket,
                                   target='mt4/official.csv')
     print(f'MT4 Ufficiale for {day}: SHA256={sha_official[:12]}')
+    # V4 e' un feed SEPARATO: i vecchi indicatori MT4 v3 continuano
+    # a leggere gli stessi file 50 strike senza alcuna incompatibilita'.
+    for mode, target in (('Replay', 'mt4/latest100.csv'),
+                         ('Ufficiale', 'mt4/official100.csv')):
+        try:
+            expanded = build_feed(store, day, basis_result, mode=mode, strike_count=100)
+        except ValueError as exc:
+            print(f'MT4 100 strike {mode}: nessun frame 50+50 disponibile ({exc}).')
+            continue
+        digest = publish_levels(expanded, url, key, bucket, target=target)
+        print(f'MT4 100 strike {mode} for {day}: SHA256={digest[:12]}')
 
 
 if __name__ == '__main__':
