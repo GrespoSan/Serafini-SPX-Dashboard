@@ -16,11 +16,12 @@ import exchange_calendars as xcals
 import pandas as pd
 
 from gexlab import config
-from gexlab.engine import gex
+from gexlab.engine import gex, bsm
 from gexlab.engine.calendar import NY, Session, TradingCalendar
 from gexlab.models import parse_occ
 from gexlab.sources.cboe import parse_chain, parse_cboe_timestamp
 from edge_gex_exposure import full_chain_gex_components
+from edge_diagnostics import net_gross_pct, spot_freshness_label, summarize_exposures
 
 MODES = ("0DTE", "Prossime 4 scadenze", "Tutte (finestra Edge)")
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
@@ -159,6 +160,16 @@ def analyze(raw: bytes, mode: str = "0DTE") -> dict:
     # Reconcile to prevent different totals from appearing alongside walls.
     components = full_chain_gex_components(
         contracts, levels.net_gex, levels.gross_gex)
+    # Independent, read-only diagnostics on the SAME exact CBOE snapshot.
+    # The official 0DTE Edge profile and all Serafini logic remain unchanged.
+    diagnostics = summarize_exposures(contracts, spot, bsm.delta)
+    if mode == "0DTE":
+        other_chain, multi_contracts, _ = prepare_contracts(raw, "Prossime 4 scadenze")
+        if not math.isclose(float(other_chain.spot.price), float(spot), abs_tol=1e-8):
+            raise ValueError("Prezzi spot divergenti per la stessa fotografia Cboe.")
+        expiry_rows = summarize_exposures(multi_contracts, spot, bsm.delta)["expiries"]
+    else:
+        expiry_rows = diagnostics["expiries"]
     return {
         "symbol": chain.ticker, "timestamp": chain.source_ts.isoformat(),
         "valuation": chain.valuation.isoformat(), "spot": spot, "mode": mode,
@@ -168,6 +179,15 @@ def analyze(raw: bytes, mode: str = "0DTE") -> dict:
         "regime": levels.regime, "net": levels.net_gex, "gross": levels.gross_gex,
         "call_gex": components["call_gex"], "put_gex": components["put_gex"],
         "modeled_gamma_sign": components["modeled_gamma_sign"],
+        "net_gross_pct": net_gross_pct(levels.net_gex, levels.gross_gex),
+        "spot_basis": getattr(chain.spot, "basis", None),
+        "spot_quote_timestamp": (
+            chain.spot.ts.isoformat() if getattr(chain.spot, "ts", None) else None),
+        "spot_freshness": spot_freshness_label(getattr(chain.spot, "basis", None)),
+        "expiry_gex": expiry_rows,
+        "call_dex": diagnostics["call_dex"], "put_dex": diagnostics["put_dex"],
+        "net_dex": diagnostics["net_dex"], "gross_dex": diagnostics["gross_dex"],
+        "dex_rows": diagnostics["dex_rows"],
         "quality_pct": cov.pct, "quality_unbounded": cov.ratio is None,
         "quality_sufficient": gex.gex_gate_ok(cov),
         "valid": sum(c.valid for c in contracts), "total": len(contracts),

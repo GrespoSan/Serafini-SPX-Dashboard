@@ -62,6 +62,15 @@ def result_from_snapshot(raw:bytes, offset:float):
         "net_gex":result["net"],"gross_gex":result["gross"],"regime":result["regime"],
         "call_gex":result["call_gex"],"put_gex":result["put_gex"],
         "modeled_gamma_sign":result["modeled_gamma_sign"],
+        # Edge-only diagnostics; never passed into the Serafini engine.
+        "net_gross_pct":result["net_gross_pct"],
+        "spot_basis":result["spot_basis"],
+        "spot_quote_timestamp":result["spot_quote_timestamp"],
+        "spot_freshness":result["spot_freshness"],
+        "expiry_gex":result["expiry_gex"],
+        "call_dex":result["call_dex"],"put_dex":result["put_dex"],
+        "net_dex":result["net_dex"],"gross_dex":result["gross_dex"],
+        "dex_rows":result["dex_rows"],
         "quality_pct":result["quality_pct"],
         "rows":[{"strike_spx":float(row["strike"]),"call_gex":float(row["call_gex"]),
                  "put_gex":float(row["put_gex"]),"net_gex":float(row["net_gex"])}
