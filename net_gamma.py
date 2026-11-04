@@ -35,8 +35,9 @@ def profile(snapshot: dict, expiry: date, reference: float, strike_count: int = 
     Lo strike esattamente uguale al riferimento resta escluso: 25+25=50.
     Utilizza gli strike effettivamente disponibili per la scadenza richiesta.
     """
-    if strike_count != 50:
-        raise ValueError('Il metodo Serafini richiede esattamente 50 strike (25 sopra e 25 sotto)')
+    if strike_count not in (50, 100):
+        raise ValueError('Profili consentiti: Serafini 50 strike; estensione dedicata MT4 100 strike')
+    side_count = strike_count // 2
     if not reference > 0:
         raise ValueError('Chiusura SPX precedente obbligatoria')
     raw = defaultdict(lambda: {'call_oi': 0., 'call_vol': 0., 'put_oi': 0., 'put_vol': 0., 'call_weighted': 0., 'put_weighted': 0., 'call_n': 0, 'put_n': 0})
@@ -60,10 +61,10 @@ def profile(snapshot: dict, expiry: date, reference: float, strike_count: int = 
         rows += 1
     if not raw:
         return {'expiry': expiry.isoformat(), 'contracts': 0, 'available_strikes': 0, 'rows': [], 'selection': '25 strike sopra + 25 sotto la chiusura SPX'}
-    below = sorted((s for s in raw if s < reference), reverse=True)[:25]
-    above = sorted((s for s in raw if s > reference))[:25]
-    if len(below) != 25 or len(above) != 25:
-        raise ValueError(f'Strike insufficienti: {len(below)} sotto e {len(above)} sopra; occorrono 25 per lato. Nessun profilo incompleto viene esportato.')
+    below = sorted((s for s in raw if s < reference), reverse=True)[:side_count]
+    above = sorted((s for s in raw if s > reference))[:side_count]
+    if len(below) != side_count or len(above) != side_count:
+        raise ValueError(f'Strike insufficienti: {len(below)} sotto e {len(above)} sopra; occorrono {side_count} per lato. Nessun profilo incompleto viene esportato.')
     selected = set(below + above)
     records = []
     for k in sorted(selected):
@@ -73,8 +74,11 @@ def profile(snapshot: dict, expiry: date, reference: float, strike_count: int = 
                         'call_gamma_component': z['call_weighted'], 'put_gamma_component': z['put_weighted'],
                         'net_gamma': z['call_weighted'] - z['put_weighted'],
                         'call_contracts': z['call_n'], 'put_contracts': z['put_n']})
+    selection = ('25 strike sopra + 25 sotto la chiusura SPX (conferma diretta Serafini)'
+                 if strike_count == 50 else
+                 '50 strike sopra + 50 sotto la chiusura SPX (estensione esclusiva MT4)')
     return {'expiry': expiry.isoformat(), 'contracts': rows, 'available_strikes': len(raw), 'rows': records,
-            'selection': '25 strike sopra + 25 sotto la chiusura SPX (conferma diretta Serafini)'}
+            'selection': selection}
 
 
 def profile_csv(result, offset=None):
