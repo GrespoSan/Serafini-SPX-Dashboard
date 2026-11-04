@@ -207,7 +207,7 @@ def show(week, store, logs=None):
         view=st.radio("Scala verticale condivisa",("Zoom ±100 punti","Vista completa"),horizontal=True,key="edge_compare_yzoom")
         bounds=(price-100,price+100) if view.startswith("Zoom") else all_bounds
         fig=_plot(e,sr,candles,shift,bounds,reading_clock=reading_clock)
-        st.plotly_chart(fig,use_container_width=True,key="edge_compare_three_charts")
+        st.plotly_chart(fig,width="stretch",key="edge_compare_three_charts")
         st.markdown(
             "**Legenda GEX:** 🟢 **Call GEX** (barre verdi) · 🔴 **Put GEX** (barre rosse) · "
             "**NET GEX** (linea rosa) · "
@@ -236,7 +236,7 @@ def show(week, store, logs=None):
                     f=go.Figure(go.Scatter(x=[p[0] for p in valid_points],
                                            y=[p[1] for p in valid_points],mode="lines"))
                     f.add_hline(y=0, line_dash="dash", line_color="#f4c95d", line_width=1.5)
-                    st.plotly_chart(f,use_container_width=True)
+                    st.plotly_chart(f,width="stretch")
                     st.markdown(
                         "**Come leggere la curva teorica GEX**\n\n"
                         "**A cosa serve?** Se l'SPX raggiungesse un determinato prezzo, "
