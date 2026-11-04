@@ -60,6 +60,8 @@ def result_from_snapshot(raw:bytes, offset:float):
         "gamma_flip_spx":result["flip"],"call_wall_es":shifted(result["call_wall"]),
         "put_wall_es":shifted(result["put_wall"]),"gamma_flip_es":shifted(result["flip"]),
         "net_gex":result["net"],"gross_gex":result["gross"],"regime":result["regime"],
+        "call_gex":result["call_gex"],"put_gex":result["put_gex"],
+        "modeled_gamma_sign":result["modeled_gamma_sign"],
         "quality_pct":result["quality_pct"],
         "rows":[{"strike_spx":float(row["strike"]),"call_gex":float(row["call_gex"]),
                  "put_gex":float(row["put_gex"]),"net_gex":float(row["net_gex"])}
