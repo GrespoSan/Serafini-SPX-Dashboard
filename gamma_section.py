@@ -749,7 +749,12 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
     if not snaps:
         st.info('Nessuno snapshot disponibile nella settimana selezionata.')
         return
-    names, _ = _sync_snapshot_selection(store, week, snaps, logs)
+    # When the selector was already rendered in app.py, never write its widget
+    # session_state again in this same Streamlit run (widget-state restriction).
+    if selector_external:
+        names = sorted((item['name'] for item in snaps), reverse=True)
+    else:
+        names, _ = _sync_snapshot_selection(store, week, snaps, logs)
     selection_key = f'serafini_selected_snapshot_{week}'
     # La selezione resta nello stato della sessione; il controllo viene mostrato
     # immediatamente prima delle opzioni di scala dei profili.
