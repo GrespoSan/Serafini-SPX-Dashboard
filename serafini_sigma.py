@@ -80,15 +80,14 @@ def compute_cash_levels(candles, day: date):
     # essere parziale, perche' il campione 350 e' una finestra mobile).
     first_session = selected.index[0].date()
     for d in sorted(set(selected.index.date)):
-        if d == first_session:
-            continue
         observed = selected.loc[selected.index.date == d].index
         day_expected = pd.date_range(
             start=pd.Timestamp(d).tz_localize(CHICAGO) +
                   pd.Timedelta(hours=8, minutes=30),
             periods=27, freq="15min",
         )
-        if not observed.equals(day_expected):
+        required = day_expected[-len(observed):] if d == first_session else day_expected
+        if not observed.equals(required):
             raise ValueError("Buchi nelle M15 cash Yahoo: deviazione non verificabile")
 
     close_ref = float(frame.loc[ref_time, "close"])
