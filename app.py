@@ -283,13 +283,8 @@ with st.expander('ANALISI NET GAMMA', expanded=True):
         render_snapshot_selector(store, week, snaps, logs)
     from gamma_section import render
     render(store, week, snaps, logs, show_heading=False, selector_external=True)
-    # Solo in modalità automatica: controllo ogni 5 minuti mentre l'app è aperta.
-    # Se compare una fotografia nuova, aggiorna l'intera pagina in modo che
-    # 0DTE, Weekly, esportazioni Pine e contesto usino lo stesso snapshot.
-    # Nessun polling in modalità offline o quando Supabase non è disponibile.
-    if not offline and not storage_unavailable:
-        from gamma_section import watch_new_snapshot
-        watch_new_snapshot(store, week)
+    # Nessun controllo periodico di Supabase: il selettore segue l'ultimo
+    # download solo all'apertura/ricaricamento o durante una normale interazione.
     # Consultazione rilevamenti Cboe disponibile ad amministratore e lettore.
     # Solo la richiesta di un nuovo download rimane riservata all'admin.
     # I registri sono letti solo quando il pannello viene aperto.
