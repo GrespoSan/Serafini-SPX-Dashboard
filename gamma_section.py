@@ -205,22 +205,6 @@ def _snapshot_choice_changed(week, latest):
     st.session_state[f'serafini_follow_latest_{week}'] = (selected == latest)
 
 
-@st.fragment(run_every='5m')
-def watch_new_snapshot(store, week):
-    """Poll cheaply and rerun the full application only if a new photo appears."""
-    if not st.session_state.get(f'serafini_follow_latest_{week}', True):
-        return
-    try:
-        snaps = store.list(f'{week}/snapshots/')
-        logs = store.list(f'{week}/logs/')
-        latest = _latest_downloaded_snapshot(store, week, snaps, logs)
-        if latest and latest != st.session_state.get(f'serafini_selected_snapshot_{week}'):
-            st.rerun(scope='app')
-    except (OSError, RuntimeError, ValueError, KeyError, TypeError):
-        # A temporary Storage error must not interrupt the current chart.
-        return
-
-
 def _acquisition_label(store, week, logs, file_name):
     """Etichetta dal PRIMO registro valido, mai dal timestamp Cboe."""
     idx=_snapshot_log_index(week,tuple(x['name'] for x in logs),store)
