@@ -1,0 +1,100 @@
+"""MT4-only 100-strike feed and legacy 50-strike compatibility (offline)."""
+import csv
+import io
+import unittest
+from datetime import date, datetime
+from unittest.mock import patch
+
+import mt4_feed
+
+
+DAY = date(2026, 11, 4)
+REFERENCE = 7650.0
+BASIS = {"basis": 29.0, "reference_date": "2026-11-03", "source": "TEST"}
+
+
+class Clock(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return datetime(2026, 11, 4, 17, 0, tzinfo=tz)
+
+
+class Store:
+    def list(self, prefix):
+        return []
+
+
+def make_profile(extended=True):
+    below = list(range(7600, 7650))
+    above = list(range(7651, 7701))
+    all_prices = below + above
+    core_prices = below[25:] + above[:25]
+    def rows(values):
+        return [{"strike_spx": float(p), "net_gamma": float(p-7650)} for p in values]
+    return {"rows": rows(core_prices), "mt4_rows": rows(all_prices) if extended else []}
+
+
+def frame(clock, extended=True, origin="STUDIO NON UFFICIALE"):
+    return {
+        "clock": clock, "origin": origin, "reference_spx": REFERENCE,
+        "cboe_timestamp_original": "2026-11-04 16:45:11",
+        "profiles": {"0DTE": make_profile(extended), "Weekly": make_profile(extended)},
+    }
+
+
+def csv_rows(data):
+    rows = list(csv.reader(io.StringIO(data.decode("utf-8"))))
+    meta = {r[0]:r[1] for r in rows if len(r)==2}
+    profiles = {"0DTE": [], "Weekly": []}
+    for r in rows:
+        if len(r)==5 and r[0] in profiles:
+            profiles[r[0]].append(r)
+    return meta, profiles
+
+
+class MT4FeedTest(unittest.TestCase):
+    def build(self, mode="Replay", strikes=100, study_extended=True, official_extended=True):
+        official = {"15:50": frame("15:50:02", official_extended, "UFFICIALE")}
+        study = {"16:46": frame("16:46:02", study_extended)}
+        with patch.object(mt4_feed, "datetime", Clock), patch.object(
+                mt4_feed, "_official_frames", return_value=official), patch.object(
+                mt4_feed, "_study_frames", return_value=study):
+            return mt4_feed.build_feed(Store(), DAY, BASIS, mode=mode, strike_count=strikes)
+
+    def test_100_strikes_per_profile_and_basis(self):
+        meta, rows = csv_rows(self.build())
+        self.assertEqual(meta["schema"], "serafini_mt4_v4")
+        self.assertEqual(meta["profile_strikes"], "100")
+        self.assertEqual(meta["slot_rome"], "16:46")
+        for kind in ("0DTE", "Weekly"):
+            self.assertEqual(len(rows[kind]), 100)
+            self.assertEqual(len({float(r[2]) for r in rows[kind]}), 100)
+            for r in rows[kind]:
+                self.assertAlmostEqual(float(r[3])-float(r[2]), 29.0)
+                self.assertAlmostEqual(float(r[4]),float(r[2])-REFERENCE)
+
+    def test_legacy_feed_is_unchanged_50(self):
+        meta, rows = csv_rows(self.build(strikes=50))
+        self.assertEqual(meta["schema"], "serafini_mt4_v3")
+        self.assertEqual(len(rows["0DTE"]), 50)
+        self.assertEqual(len(rows["Weekly"]), 50)
+
+    def test_historical_replay_falls_back_to_real_official_100(self):
+        meta, rows = csv_rows(self.build(study_extended=False))
+        self.assertEqual(meta["slot_rome"], "15:50")
+        self.assertEqual(meta["origin"], "UFFICIALE")
+        self.assertEqual(len(rows["0DTE"]), 100)
+
+    def test_no_fabricated_100_strikes(self):
+        with self.assertRaisesRegex(ValueError, "Nessun frame"):
+            self.build(study_extended=False, official_extended=False)
+
+    def test_official_100_is_independent(self):
+        meta, rows = csv_rows(self.build(mode="Ufficiale"))
+        self.assertEqual(meta["slot_rome"], "15:50")
+        self.assertEqual(meta["mode"], "Ufficiale")
+        self.assertEqual(len(rows["Weekly"]), 100)
+
+
+if __name__ == "__main__":
+    unittest.main()
