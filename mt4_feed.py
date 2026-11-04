@@ -87,7 +87,6 @@ def build_feed(store, day, basis_result, mode="Replay", strike_count=50):
     meta = [
         ('schema', 'serafini_mt4_v4' if strike_count == 100 else 'serafini_mt4_v3'),
         ('mode', mode),
-        ('profile_strikes', str(strike_count)),
         ('date_rome', day.isoformat()),
         ('slot_rome', slot),
         ('download_clock_rome', frame['clock']),
@@ -98,6 +97,10 @@ def build_feed(store, day, basis_result, mode="Replay", strike_count=50):
         ('published_utc', datetime.now(timezone.utc).isoformat()),
         ('cboe_timestamp', str(frame.get('cboe_timestamp_original') or '')),
     ]
+    # Il CSV legacy 50 strike resta perfettamente compatibile: nessuna
+    # nuova riga di metadati introdotta nella sua versione v3.
+    if strike_count == 100:
+        meta.insert(2, ('profile_strikes', '100'))
     for item in meta:
         out.writerow(item)
     out.writerow(['profile', 'expiry', 'strike_spx', 'price_es', 'net_gamma'])
