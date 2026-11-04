@@ -9,6 +9,7 @@ import streamlit as st
 from edge_context import read_report, _number
 from net_gamma import read_snapshot, profile
 from replay_prices import load_es_candles
+from edge_gex_exposure import format_gex_billions
 
 def _matching_serafini(store, week, digest, day, reference):
     # Exact snapshot match: no comparing readings from different times.
@@ -193,6 +194,39 @@ def show(week, store, logs=None):
         for c,key,lab in zip(p[1:4],("put_wall_spx","gamma_flip_spx","call_wall_spx"),("Put Wall","Gamma Flip","Call Wall")):
             v=e.get(key);c.metric(lab,f"{float(v)+shift:,.2f}" if v is not None else "N/D")
         p[4].metric("Regime Edge",str(e.get("regime","N/D")))
+
+        # This is the complete 0DTE Edge chain (not just the strike bars
+        # shown +/-10% on the chart). Source snapshot SHA-256 and selected
+        # expiry are already checked above against the Serafini analysis.
+        st.markdown("**GEX EDGE 0DTE — esposizioni modellate**")
+        call_exposure = e.get("call_gex")
+        put_exposure = e.get("put_gex")
+        sign_label = e.get("modeled_gamma_sign")
+        if call_exposure is not None and put_exposure is not None and sign_label:
+            columns = st.columns(4)
+            labels = {
+                "Negative": "Negativo", "Positive": "Positivo",
+                "Zero": "Zero",
+            }
+            columns[0].metric(
+                "Segno Gamma modellato",
+                labels.get(sign_label, "N/D") + " allo spot Cboe")
+            columns[1].metric(
+                "NET GEX", format_gex_billions(e["net_gex"], signed=True))
+            columns[2].metric(
+                "Call GEX", format_gex_billions(call_exposure, signed=True))
+            columns[3].metric(
+                "Put GEX", format_gex_billions(put_exposure, signed=True))
+            st.caption(
+                "Unità: miliardi USD di variazione dell'esposizione delta "
+                "modellata per un movimento dell'1% di SPX. Call positive e "
+                "Put negative sono ipotesi sulle posizioni dei dealer, non "
+                "posizioni osservate. Segno Gamma ≠ previsione direzionale. "
+                "Scadenza 0DTE e fotografia uguali al confronto Serafini.")
+        else:
+            st.info("Scomposizione Call/Put non disponibile nel report "
+                    "Edge selezionato; nessun valore ricostruito dalle "
+                    "sole barre del grafico.")
         try:
             candles=load_es_candles(day)
             if candles.empty:raise ValueError("Nessuna candela disponibile")
