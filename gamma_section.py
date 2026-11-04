@@ -372,7 +372,7 @@ def render_comparison(store, week, snaps, logs):
                         f"Passati a zero: {raw_check.get('contracts_positive_to_zero', 0)} · "
                         f"Passati a dato mancante: {raw_check.get('contracts_become_missing', 0)}.")
                     st.dataframe(raw_check.get('example_largest_declines', []),
-                                 hide_index=True, use_container_width=True)
+                                 hide_index=True, width="stretch")
                 if volume_check['alert'] and not raw_check.get('possible_new_session_volume_reset'):
                     st.warning(
                         f"ATTENZIONE — volumi Cboe potenzialmente non omogenei: "
@@ -523,7 +523,7 @@ def render_comparison(store, week, snaps, logs):
                     else:
                         st.caption('Riferimenti ES non disponibili: verificare il differenziale in ANALISI NET GAMMA.')
                     st.plotly_chart(
-                        fig, use_container_width=True,
+                        fig, width="stretch",
                         key=f'v42_one_gamma_{selected_profile}_{first_name}_{second_name}',
                     )
                     st.caption(
@@ -791,7 +791,7 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
         # Allinea il pulsante all'altezza dei campi, anziché alle intestazioni.
         st.markdown('<div style="height: 29px"></div>', unsafe_allow_html=True)
         st.button('Ricalcola ES − SPX', key=f'auto_basis_{day}',
-                  on_click=_recalculate_basis, use_container_width=True)
+                  on_click=_recalculate_basis, width="stretch")
     if st.session_state.get(recalc_error_key):
         st.warning('Ricalcolo non disponibile: ' +
                    st.session_state[recalc_error_key] +
@@ -1009,7 +1009,7 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                 _, clipped_sigma = add_sigma_markers(fig, sigma_levels, y)
             else:
                 clipped_sigma = []
-            st.plotly_chart(fig, use_container_width=True, key=f'gamma_net_{title}_{choice}')
+            st.plotly_chart(fig, width="stretch", key=f'gamma_net_{title}_{choice}')
             if title == '0DTE':
                 if sigma_error:
                     st.caption('Deviazione Serafini M15 non disponibile: ' + sigma_error)
@@ -1040,7 +1040,7 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                 ]
                 with st.expander(f'Dettaglio numerico {detail_title} (50 strike)', expanded=False):
                     import pandas as pd
-                    st.dataframe(pd.DataFrame(detail_records), use_container_width=True, hide_index=True)
+                    st.dataframe(pd.DataFrame(detail_records), width="stretch", hide_index=True)
                 st.download_button(
                     f'Scarica calcolo CSV {detail_title}',
                     profile_csv(detail_result, offset),
@@ -1096,7 +1096,7 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                                         'Prezzo ES': None if offset is None else item['strike_spx'] + offset,
                                         'NET GAMMA': round(item['net_gamma'], 4),
                                         'Origine': 'top 3 per intensità / selezione modificabile'})
-                st.dataframe(ordered, hide_index=True, use_container_width=True)
+                st.dataframe(ordered, hide_index=True, width="stretch")
                 if offset is None:
                     st.caption('Inserisci un differenziale ES − SPX verificato per visualizzare anche i prezzi ES.')
                 st.caption('La numerazione resta SPERIMENTALE. Da Serafini: C1 vicino al Gamma Flip, C2 gamma particolarmente pronunciato, C3 livello esterno vicino a 1 deviazione standard; per Put logica analoga da verificare. Qui il Gamma Flip NON è calcolato; i tre top-per-intensità sono solo una proposta modificabile.')
@@ -1144,7 +1144,7 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                         st.info('Per visualizzare la struttura completa, assegna sei livelli distinti e ordinati.')
                     else:
                         role_rows, measures = structure
-                        st.dataframe(role_rows, use_container_width=True, hide_index=True)
+                        st.dataframe(role_rows, width="stretch", hide_index=True)
                         render_payoff_charts(chosen, offset, computed_profiles.get('0DTE'))
                         left, right = st.columns(2)
                         with left:
@@ -1270,7 +1270,7 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                 file_name=f'Serafini_NET_GAMMA_{day:%Y-%m-%d}_{slot.replace(":", "")}.pine',
                 mime='text/plain',
                 key=f'pine_export_{week}_{day}_{slot}',
-                use_container_width=True,
+                width="stretch",
                 disabled=script is None,
                 help=description if script else export_issues.get(
                     slot, 'Necessario il differenziale ES-SPX'),
