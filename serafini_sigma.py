@@ -1,7 +1,8 @@
-"""Deviazione Serafini cash M15, come G_Deviazioni_Serafini_Lab_Metodo90_v2.pine.
+"""Deviazione Serafini cash M15, come G. StdDev Serafini - 350 + 90 LONG v1.4 RTH.
 
 Metodo adottato (ipotesi del Pine originale):
-- solo chiusure delle M15 con apertura cash 08:30..14:45 Chicago;
+- 27 chiusure M15 RTH con apertura dalle 08:30 alle 15:00 Chicago, inclusa;
+- ta.stdev(close,N,true) calcolata sulla sessione TradingView ES M15 RTH/STD;
 - sigma popolazione (ddof=0) delle ultime 90/350 chiusure cash;
 - riferimento = chiusura della M15 15:00..15:15 Chicago precedente;
 - L90=ref+sigma90; L350=ref+sigma350; S350=ref-sigma350.
@@ -34,8 +35,7 @@ def compute_cash_levels(candles, day: date):
                          index=candles.index.tz_convert(CHICAGO))
     frame = frame[~frame.index.duplicated(keep="last")].sort_index()
     frame = frame.loc[frame["close"].apply(lambda n: math.isfinite(n) and n > 0)]
-    # Il Pine utilizza time(..., '0830-1500:23456', 'America/Chicago'):
-    # sono le APERTURE delle 26 barre cash, non le chiusure.
+    # Pine v1.4 ta.stdev include anche l'ultima M15 15:00-15:15.
     prev = frame.loc[
         (frame.index.date < day) &
         (frame.index.dayofweek < 5) &
@@ -48,22 +48,31 @@ def compute_cash_levels(candles, day: date):
     if (day - session).days > 5:
         raise ValueError("Ultima sessione precedente troppo distante")
 
+    # Non usare un close vecchio se la sessione precedente ha barre RTH
+    # ma manca la candela decisiva 15:00-15:15.
+    prior_minutes = frame.index.hour * 60 + frame.index.minute
+    prior_rth = frame.loc[
+        (frame.index.date < day) & (frame.index.dayofweek < 5) &
+        (prior_minutes >= 8 * 60 + 30) & (prior_minutes < 15 * 60 + 15)
+    ]
+    if not prior_rth.empty and max(prior_rth.index.date) != session:
+        raise ValueError("Ultima sessione RTH M15 incompleta: barra 15:00-15:15 mancante")
     cash_mask = (
         (frame.index.date <= session) &
         (frame.index.dayofweek < 5) &
         (((frame.index.hour * 60 + frame.index.minute) >= 8 * 60 + 30) &
-         ((frame.index.hour * 60 + frame.index.minute) < 15 * 60))
+         ((frame.index.hour * 60 + frame.index.minute) < 15 * 60 + 15))
     )
     cash = frame.loc[cash_mask, "close"]
     today_cash = cash.loc[cash.index.date == session]
-    # Un mezzo campione incompleto altererebbe sigma: non stimiamo il dato.
+    # 27 barre RTH per seduta; il close 15:15 entra NELLA deviazione.
     expected = pd.date_range(
         start=pd.Timestamp(session).tz_localize(CHICAGO) +
               pd.Timedelta(hours=8, minutes=30),
-        periods=26, freq="15min",
+        periods=27, freq="15min",
     )
-    if len(today_cash) != 26 or not today_cash.index.equals(expected):
-        raise ValueError("Ultima sessione cash M15 incompleta (richieste 26 barre)")
+    if len(today_cash) != 27 or not today_cash.index.equals(expected):
+        raise ValueError("Ultima sessione cash M15 incompleta (richieste 27 barre)")
     selected = cash.iloc[-350:]
     if len(selected) != 350:
         raise ValueError(f"Storico cash insufficiente ({len(selected)}/350 M15)")
@@ -77,7 +86,7 @@ def compute_cash_levels(candles, day: date):
         day_expected = pd.date_range(
             start=pd.Timestamp(d).tz_localize(CHICAGO) +
                   pd.Timedelta(hours=8, minutes=30),
-            periods=26, freq="15min",
+            periods=27, freq="15min",
         )
         if not observed.equals(day_expected):
             raise ValueError("Buchi nelle M15 cash Yahoo: deviazione non verificabile")
@@ -91,6 +100,7 @@ def compute_cash_levels(candles, day: date):
         "status": "VALIDO",
         "session_chicago": session.isoformat(),
         "reference_time_chicago": ref_time.isoformat(),
+        "reference_bar_close_chicago": (ref_time + pd.Timedelta(minutes=15)).isoformat(),
         "reference_close_es": close_ref,
         "sigma90": sigma90, "sigma350": sigma350,
         "L90": close_ref + sigma90,
@@ -98,8 +108,8 @@ def compute_cash_levels(candles, day: date):
         "S350": close_ref - sigma350,
         "sample90": 90, "sample350": 350,
         "source": "Yahoo Finance ES=F M15",
-        "method": "Cash 08:30-15:00 America/Chicago; close rif. 15:15 Chicago; sigma popolazione",
-        "note": "Risultato da confrontare con Pine Serafini su ES1!: i feed possono differire.",
+        "method": "Pine v1.4 RTH 08:30-15:15 Chicago incl. M15 15:00; freeze 15:15; ddof=0",
+        "note": "Yahoo ES=F e TradingView ES1! possono differire per storico e rollover.",
     }
 
 
@@ -127,16 +137,14 @@ def serafini_cash_levels(day: date):
                 "source": "Yahoo Finance ES=F M15"}
 
 
-def add_sigma_markers(fig, levels, y_values):
+def add_sigma_markers(fig, levels, y_values, show_90=False):
     """Tre ACCENNI orizzontali sul lato estremo SINISTRO del solo 0DTE."""
     if not levels or levels.get("status") != "VALIDO":
         return 0, []
     visible_min, visible_max = min(y_values), max(y_values)
-    definitions = (
-        ("L90", "#58D1E1", "L90"),
-        ("L350", "#72CD88", "L350"),
-        ("S350", "#F08888", "S350"),
-    )
+    definitions = [("L350", "#72CD88", "L350"), ("S350", "#F08888", "S350")]
+    if show_90:
+        definitions.append(("L90", "#58D1E1", "L90"))
     shown, clipped = 0, []
     for name, color, key in definitions:
         value = float(levels[key])
