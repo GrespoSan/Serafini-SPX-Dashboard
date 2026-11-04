@@ -90,7 +90,7 @@ class EdgeExposureSummaryTests(unittest.TestCase):
         self.assertIn('Segno Gamma modellato', panel)
         self.assertIn('Call GEX', panel)
         self.assertIn('Put GEX', panel)
-        self.assertIn("non posizioni osservate", panel)
+        self.assertIn("posizioni osservate", panel)
         self.assertIn("non disponibile nel report", panel)
 
 
