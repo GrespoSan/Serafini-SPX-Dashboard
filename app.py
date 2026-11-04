@@ -359,7 +359,7 @@ with st.expander('ANALISI NET GAMMA', expanded=True):
                     else 'color: #EAB308' for value in series
                 ]
             st.dataframe(frame.style.apply(quality_color, subset=['Qualità dati']),
-                         use_container_width=True, hide_index=True)
+                         width="stretch", hide_index=True)
         else:
             st.info('Non sono presenti registri per questa settimana.')
 
