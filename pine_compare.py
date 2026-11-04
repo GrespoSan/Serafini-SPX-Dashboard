@@ -153,5 +153,8 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
             renderProfile(odteLevels, odteValues, bar_index + currentCenter, currentTitle, actualScale, adjusted, odteCoreLow, odteCoreHigh)
         if showCurrentWeekly
             renderProfile(weeklyLevels, weeklyValues, bar_index + weeklyCenter, weeklyTitle, actualScale, adjusted, weeklyCoreLow, weeklyCoreHigh)
+        // Proiezioni SOLO dalle 0DTE CORRENTI, mai dal precedente o Weekly.
+        if showTop3Odte
+            drawOdteTopProjections(showExtension ? topCallFull : topCallCore, showExtension ? topPutFull : topPutCore)
 """
     return code
