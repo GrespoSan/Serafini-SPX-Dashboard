@@ -382,7 +382,7 @@ def render(store, week, logs, view_mode=None):
                            "i dati 5m Yahoo hanno uno storico limitato.")
             except Exception as exc:
                 st.warning(f"Candele ES non disponibili ({exc}). Resta visibile il Replay NET GAMMA originale.")
-    st.plotly_chart(graph, use_container_width=True,
+    st.plotly_chart(graph, width="stretch",
                     key=f"replay_chart_{week}_{day}_{kind}_{view_mode}")
 
     # GIF solo su richiesta: nessuna generazione nei normali rerun del replay.
@@ -446,7 +446,7 @@ def render(store, week, logs, view_mode=None):
                       "ES stimato": round(spot + offset, 2) if spot is not None and offset is not None else None,
                       "Tipo": item["origin"], "Top 3 positivo": fmt(upper),
                       "Top 3 negativo": fmt(lower)})
-    st.dataframe(table, hide_index=True, use_container_width=True)
+    st.dataframe(table, hide_index=True, width="stretch")
     st.caption("I tre frame ufficiali provengono dall'archivio invariato. "
                "I frame intermedi NON entrano nei report ufficiali. "
                "L'orario di download non garantisce la freschezza della chain Cboe.")
