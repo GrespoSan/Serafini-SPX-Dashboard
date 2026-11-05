@@ -136,26 +136,10 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
     # Render independently of Massive Daily: even unavailable OHLC must
     # not hide a successful Edge result. No new Edge or Cboe requests.
     if modeled_gex is not None:
-        from edge_triptych import _colored_edge_metric
-        from edge_gex_exposure import format_gex_billions
-        sign = modeled_gex["modeled_gamma_sign"]
-        names = {"Positive": "Positivo", "Negative": "Negativo",
-                 "Zero": "Zero"}
-        cols = st.columns(2)
-        _colored_edge_metric(
-            cols[0], "Segno Gamma modellato",
-            names[sign] + " allo spot Cboe", sign)
-        _colored_edge_metric(
-            cols[1], "NET GEX",
-            format_gex_billions(modeled_gex["net_gex"], signed=True),
-            modeled_gex["net_gex"])
-        clock = modeled_gex.get("download_clock")
-        stamp = (" · download " + clock + " Roma") if clock else ""
-        st.caption("GEX EDGE 0DTE · fotografia Cboe "
-                   + modeled_gex["expiry"] + stamp
-                   + " · modello, non posizioni dealer osservate. "
-                   "Valori identici al confronto Edge; non sono un "
-                   "segnale direzionale.")
+        # Presentation is intentionally independent of Edge graph imports:
+        # missing Yahoo/Plotly or Cboe must never block the Daily context.
+        from edge_daily_gex import render_daily_gex
+        render_daily_gex(st, modeled_gex)
     today_rome = reference_day or datetime.now(ZoneInfo("Europe/Rome")).date()
     try:
         bars = massive_frame(daily_bars, today_rome, contract=contract)
