@@ -1,6 +1,10 @@
 """MT4-only 100-strike feed and legacy 50-strike compatibility (offline)."""
 import csv
+import gzip
 import io
+import json
+import tempfile
+from pathlib import Path
 import unittest
 from datetime import date, datetime
 from unittest.mock import patch
@@ -37,6 +41,7 @@ def make_profile(extended=True):
 def frame(clock, extended=True, origin="STUDIO NON UFFICIALE"):
     return {
         "clock": clock, "origin": origin, "reference_spx": REFERENCE,
+        "spot": REFERENCE,
         "cboe_timestamp_original": "2026-11-04 16:45:11",
         "profiles": {"0DTE": make_profile(extended), "Weekly": make_profile(extended)},
     }
@@ -94,6 +99,72 @@ class MT4FeedTest(unittest.TestCase):
         self.assertEqual(meta["slot_rome"], "15:50")
         self.assertEqual(meta["mode"], "Ufficiale")
         self.assertEqual(len(rows["Weekly"]), 100)
+
+
+    def test_verified_artifact_adds_edge_sign_to_only_100_strike_csv(self):
+        with tempfile.TemporaryDirectory() as folder:
+            raw = json.dumps({
+                "timestamp": "2026-11-04 16:45:11",
+                "data": {"current_price": REFERENCE}}).encode()
+            Path(folder, "SPX_CBOE_20261104_164511.json.gz").write_bytes(
+                gzip.compress(raw))
+            def edge(raw_bytes, mode):
+                self.assertEqual(raw_bytes[:2], bytes((31, 139)))
+                self.assertEqual(mode, "0DTE")
+                return {"symbol":"SPX", "mode":"0DTE",
+                        "expiries":[DAY.isoformat()],
+                        "quality_sufficient":True, "net":2_770_000_000.0,
+                        "modeled_gamma_sign":"Positive"}
+            with patch.object(mt4_feed,"datetime",Clock), patch.object(
+                mt4_feed,"_official_frames",return_value={
+                    "15:50":frame("15:50:02",True,"UFFICIALE")}), patch.object(
+                mt4_feed,"_study_frames",return_value={
+                    "16:46":frame("16:46:02",True)}):
+                data=mt4_feed.build_feed(
+                    Store(),DAY,BASIS,mode="Replay",strike_count=100,
+                    edge_artifacts=folder,edge_analyzer=edge)
+                legacy=mt4_feed.build_feed(
+                    Store(),DAY,BASIS,mode="Replay",strike_count=50,
+                    edge_artifacts=folder,edge_analyzer=edge)
+        meta,profiles=csv_rows(data)
+        self.assertEqual(meta["gex_model"],"EDGE_0DTE")
+        self.assertEqual(meta["gex_modeled_sign"],"Positive")
+        self.assertEqual(meta["gex_cboe_timestamp"],meta["cboe_timestamp"])
+        self.assertEqual(meta["gex_expiry"],DAY.isoformat())
+        self.assertEqual(len(profiles["0DTE"]),100)
+        self.assertEqual(len(profiles["Weekly"]),100)
+        old_meta,_=csv_rows(legacy)
+        self.assertNotIn("gex_modeled_sign",old_meta)
+        self.assertEqual(old_meta["schema"],"serafini_mt4_v3")
+
+    def test_wrong_raw_timestamp_or_model_is_nonblocking_and_nd(self):
+        with tempfile.TemporaryDirectory() as folder:
+            data={"timestamp":"2026-11-04 15:30:00",
+                  "data":{"current_price":REFERENCE}}
+            file=Path(folder,"SPX_CBOE_20261104_153000.json.gz")
+            file.write_bytes(gzip.compress(json.dumps(data).encode()))
+            frame_obj=frame("16:46:02",True)
+            self.assertIsNone(mt4_feed.verified_edge_from_artifact(
+                frame_obj,DAY,folder,analyzer=lambda *_: (_ for _ in ()).throw(
+                    AssertionError("Mismatched timestamp must never analyze"))))
+            data["timestamp"]=frame_obj["cboe_timestamp_original"]
+            file.write_bytes(gzip.compress(json.dumps(data).encode()))
+            base={"symbol":"SPX","mode":"0DTE",
+                  "expiries":[DAY.isoformat()],
+                  "quality_sufficient":True,"net":-2_000_000_000.0,
+                  "modeled_gamma_sign":"Negative"}
+            self.assertEqual(mt4_feed.verified_edge_from_artifact(
+                frame_obj,DAY,folder,analyzer=lambda *_: base
+            )["gex_modeled_sign"],"Negative")
+            for wrong in (
+                dict(base, modeled_gamma_sign="Positive"),
+                dict(base, quality_sufficient=False),
+                dict(base, expiries=["2026-11-05"]),
+                dict(base, mode="Weekly"),
+                dict(base, net=float("nan")),
+            ):
+                self.assertIsNone(mt4_feed.verified_edge_from_artifact(
+                    frame_obj,DAY,folder,analyzer=lambda *args: wrong))
 
 
 if __name__ == "__main__":

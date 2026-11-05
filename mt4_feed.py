@@ -10,6 +10,7 @@ import io
 import json
 import math
 import os
+from pathlib import Path
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, timezone
 from urllib.parse import quote
@@ -23,7 +24,68 @@ from es_spx_basis import download_and_calculate
 ROME = ZoneInfo('Europe/Rome')
 
 
-def build_feed(store, day, basis_result, mode="Replay", strike_count=50):
+def verified_edge_from_artifact(frame, day, artifact_dir=None, analyzer=None):
+    """Optional exact-snapshot Edge 0DTE sign for MT4 v3.44 (never inferred).
+
+    The workflow's triggering Cboe raw artifact is the only permitted input.
+    No separate Cboe download and no cross-slot/cross-day reuse. If missing,
+    unparseable or low-quality, this returns None and does not stop MT4.
+    """
+    base = artifact_dir or os.environ.get('MT4_CBOE_RAW_DIR', '')
+    if not base:
+        return None
+    expected_ts = str(frame.get('cboe_timestamp_original') or '')
+    expected_spot = frame.get('spot')
+    if not expected_ts or expected_spot is None:
+        return None
+    try:
+        expected_spot = float(expected_spot)
+        if not (math.isfinite(expected_spot) and expected_spot > 0):
+            return None
+    except (ValueError, TypeError):
+        return None
+    from gzip import decompress
+    for path in sorted(Path(base).glob('**/SPX_CBOE_*.json.gz')):
+        try:
+            raw = path.read_bytes()
+            envelope = json.loads(decompress(raw))
+            if envelope.get('timestamp') != expected_ts:
+                continue
+            spot = float(envelope['data']['current_price'])
+            if not math.isfinite(spot) or abs(spot - expected_spot) > 0.0001:
+                continue
+            # Import only after raw timestamp + exact spot match.
+            # Source is the pinned Edge engine already used by Serafini SPX.
+            if analyzer is None:
+                from edge_auto_engine import analyze
+                analyzer = analyze
+            result = analyzer(raw, '0DTE')
+            sign = result.get('modeled_gamma_sign')
+            net = float(result.get('net'))
+            if result.get('symbol') != 'SPX' or result.get('mode') != '0DTE':
+                continue
+            if result.get('expiries') != [day.isoformat()]:
+                continue
+            if not result.get('quality_sufficient'):
+                continue
+            if not math.isfinite(net) or (
+                'Positive' if net > 0 else 'Negative' if net < 0 else 'Zero'
+            ) != sign:
+                continue
+            if sign not in ('Positive', 'Negative', 'Zero'):
+                continue
+            return {'gex_model': 'EDGE_0DTE',
+                    'gex_modeled_sign': sign,
+                    'gex_cboe_timestamp': expected_ts,
+                    'gex_expiry': day.isoformat()}
+        except (OSError, EOFError, ValueError, TypeError, KeyError,
+                RuntimeError, ImportError, MemoryError):
+            # GEX is optional; do not interrupt the Serafini feed.
+            continue
+    return None
+
+
+def build_feed(store, day, basis_result, mode="Replay", strike_count=50, edge_artifacts=None, edge_analyzer=None):
     """50 Serafini per feed legacy; 100 MT4 solo da estensione CBOE verificata."""
     if strike_count not in (50, 100):
         raise ValueError("Sono consentiti solo 50 o 100 strike per profilo")
@@ -101,6 +163,14 @@ def build_feed(store, day, basis_result, mode="Replay", strike_count=50):
     # nuova riga di metadati introdotta nella sua versione v3.
     if strike_count == 100:
         meta.insert(2, ('profile_strikes', '100'))
+        # V4 only: append independent Edge modeled sign to the SAME
+        # authenticated snapshot, never modify the legacy v3/50 feed.
+        verified = verified_edge_from_artifact(
+            frame, day, artifact_dir=edge_artifacts, analyzer=edge_analyzer)
+        if verified:
+            meta.extend((key, verified[key]) for key in (
+                'gex_model', 'gex_modeled_sign',
+                'gex_cboe_timestamp', 'gex_expiry'))
     for item in meta:
         out.writerow(item)
     out.writerow(['profile', 'expiry', 'strike_spx', 'price_es', 'net_gamma'])
