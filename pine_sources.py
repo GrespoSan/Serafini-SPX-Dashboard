@@ -75,6 +75,9 @@ def load_export_profiles(store, week, day: date, logs):
             result[slot] = {
                 "origin": frame.get("origin", "NON VERIFICATO"),
                 "cboe_timestamp": frame.get("cboe_timestamp_original", ""),
+                # Prefer the actual *verified* log timestamp over the
+                # slot nickname: the Cboe field itself has no certified TZ.
+                "download_rome": frame.get("download_rome"),
                 "reference_spx": frame.get("reference_spx"),
                 "profiles": clean,
             }
