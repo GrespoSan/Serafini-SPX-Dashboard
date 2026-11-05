@@ -243,6 +243,8 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
     # Solo visualizzazione: la logica evaluate e i valori restano invariati.
     columns_css = ("repeat(4,minmax(0,1fr)) minmax(190px,1.08fr)"
                    if gex_card else "repeat(4,minmax(0,1fr))")
+    gex_source = (f'<div class="spx-trend-gex-source">{escape(gex_caption)}</div>'
+                  if gex_card else "")
     st.markdown(f"""
 <style>
 .spx-trend-card {{
@@ -258,6 +260,7 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
 .spx-trend-gex-label {{font-size:.74rem;color:#b6bcc5;margin-top:7px;line-height:1.25;}}
 .spx-trend-gex-value {{font-size:1.08rem;font-weight:700;line-height:1.35;overflow-wrap:anywhere;}}
 .spx-trend-gex .spx-trend-label {{font-weight:600;}}
+.spx-trend-gex-source {{padding:7px 0 9px;color:#9ca3af;font-size:.72rem;line-height:1.4;}}
 
 .spx-trend-note {{border-top:1px solid #292b30;margin-top:9px;padding-top:9px;color:#9ca3af;font-size:.78rem;line-height:1.45;}}
 .spx-trend-foot {{
@@ -277,11 +280,10 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
     <div class="spx-trend-kpi"><div class="spx-trend-label">Barre stesso colore</div><div class="spx-trend-value" style="color:{count_color}">{result["same_color"]}</div></div>
     {gex_card}
   </div>
+  {gex_source}
   <div class="spx-trend-foot">{escape(baricentro_text)}</div>\n  <div class="spx-trend-foot">{escape(impulse_text)}</div>\n  <div class="spx-trend-foot">{escape(meaning)}</div>\n  <div class="spx-trend-note">Candela di impulso: criterio sperimentale (range ≥1,3% della chiusura precedente, corpo ≥60% del range, ricerca nelle ultime 20 sedute). Tenuta = tutte le barre successive rispettano il baricentro; recuperato/perso = posizione dell’ultima chiusura dopo una violazione. Non è un segnale operativo validato.</div>
 </div>
 """, unsafe_allow_html=True)
-    if gex_card:
-        st.caption(gex_caption)
     st.caption(
         f"Fonte: Massive Futures {contract or 'N/D'} · 1session · "
         f"seduta chiusa {result['last_day']}. "
