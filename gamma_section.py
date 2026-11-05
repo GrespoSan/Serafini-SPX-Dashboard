@@ -1304,22 +1304,33 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
         except Exception as exc:
             st.caption(f'Rilevamenti esportabili non leggibili: {type(exc).__name__}.')
             sources = {}
-    # Le quattro esportazioni ricevono le news del calendario già usato
-    # dalla dashboard. Eventuali errori del feed non interrompono gli export.
+    # News verticali Pine: SOLO eventi futuri rispetto all'orario di
+    # download effettivo della fotografia CORRENTE dello slot (non il
+    # timestamp Cboe senza fuso, non l'ora di esportazione del .pine).
+    # Il confronto 07:30→15:50 usa dunque l'ora della 15:50.
+    # La chiave FinanceCalendar è obbligatoria (come nel calendario UI).
+    # Un errore del feed non blocca mai l'export NET GAMMA.
     if scripts:
         try:
             from macro_calendar import _fetch, _prepare
             from pine_news_overlay import append_news
+            finance_key = str(st.secrets.get(
+                "FINANCE_CALENDAR_API_KEY", "")).strip()
             daily_news = [
                 event for event in _prepare(
-                    _fetch(day.isoformat(), day.isoformat()), day)
+                    _fetch(day.isoformat(), day.isoformat(), finance_key), day)
                 if event["day"] == day
             ]
             if daily_news:
-                scripts = {slot: append_news(code, daily_news)
-                           for slot, code in scripts.items()}
+                scripts = {
+                    slot: append_news(
+                        code, daily_news,
+                        captured_at=(sources.get(slot) or {}).get("download_rome"))
+                    for slot, code in scripts.items()
+                }
         except Exception:
-            st.caption("Linee news non disponibili nel Pine: calendario non verificabile.")
+            st.caption("News Pine non disponibili: calendario non verificabile. "
+                       "Le esportazioni NET GAMMA restano utilizzabili.")
 
     columns = st.columns(4, gap='small')
     descriptions = (

@@ -2,12 +2,57 @@
 Non modifica in alcun modo la costruzione dei profili NET GAMMA.
 """
 import re
+from datetime import date, datetime, time, timezone
+from zoneinfo import ZoneInfo
 
 
-def append_news(script, events):
+ROME = ZoneInfo("Europe/Rome")
+
+
+def future_news_only(events, captured_at):
+    """Only scheduled events STRICTLY AFTER the verified Cboe download.
+
+    The exported Pine is a frozen snapshot, not a historical chart of
+    everything that happened today. A news event at 14:40 must not show
+    up in the export captured at 15:50 (regardless of later download of
+    the .pine file). Never guess acquisition time from Cboe's timezone-
+    unspecified timestamp, or from the nominal slot name.
+    """
+    if isinstance(captured_at, str):
+        try:
+            captured_at = datetime.fromisoformat(
+                captured_at.replace("Z", "+00:00"))
+        except ValueError:
+            return []
+    if not isinstance(captured_at, datetime) or captured_at.tzinfo is None:
+        return []
+    captured_rome = captured_at.astimezone(ROME)
+    cutoff = captured_rome.astimezone(timezone.utc)
+    result = []
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        day, clock = event.get("day"), event.get("clock")
+        if not isinstance(day, date) or isinstance(day, datetime):
+            continue
+        if day != captured_rome.date():
+            continue
+        if not re.fullmatch(r"\d{2}:\d{2}", str(clock or "")):
+            continue
+        hh, mm = (int(x) for x in clock.split(":"))
+        if hh > 23 or mm > 59:
+            continue
+        event_dt = datetime.combine(day, time(hh, mm), tzinfo=ROME)
+        if event_dt.astimezone(timezone.utc) > cutoff:
+            result.append(event)
+    return result
+
+
+def append_news(script, events, *, captured_at=None):
+    """Append optional TV lines ONLY if event time follows the Cboe capture."""
     # Più eventi nello stesso minuto condividono una linea e una sola etichetta.
     unique = {}
-    for event in events:
+    for event in future_news_only(events, captured_at):
         if not re.fullmatch(r"\d{2}:\d{2}", str(event.get("clock", ""))):
             continue
         hh, mm = map(int, event["clock"].split(":"))
@@ -21,7 +66,7 @@ def append_news(script, events):
     lines = [
         "",
         "// News del calendario macro della dashboard: orari Europe/Rome.",
-        "// Le linee vengono create anche PRIMA dell'evento sul grafico.",
+        "// Solo eventi programmati DOPO il download Cboe di questo Pine.",
         'showMacroNews = input.bool(true, "News macro · linee verticali")',
         'var array<line> macroNewsLines = array.new_line()',
         'var array<label> macroNewsLabels = array.new_label()',
