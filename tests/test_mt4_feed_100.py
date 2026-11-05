@@ -41,6 +41,7 @@ def make_profile(extended=True):
 def frame(clock, extended=True, origin="STUDIO NON UFFICIALE"):
     return {
         "clock": clock, "origin": origin, "reference_spx": REFERENCE,
+        "spot": REFERENCE,
         "cboe_timestamp_original": "2026-11-04 16:45:11",
         "profiles": {"0DTE": make_profile(extended), "Weekly": make_profile(extended)},
     }
