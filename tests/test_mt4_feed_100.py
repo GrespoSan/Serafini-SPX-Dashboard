@@ -137,6 +137,62 @@ class MT4FeedTest(unittest.TestCase):
         self.assertNotIn("gex_modeled_sign",old_meta)
         self.assertEqual(old_meta["schema"],"serafini_mt4_v3")
 
+    def test_official_100_gex_from_already_downloaded_original_without_trigger_artifact(self):
+        """A later Replay workflow must not delete the official 0DTE Edge sign."""
+        payload={"timestamp":"2026-11-04 16:45:11",
+                 "data":{"current_price": REFERENCE}}
+        already_read=gzip.compress(json.dumps(payload).encode())
+        official_frame=frame("15:50:02",True,"UFFICIALE")
+        official_frame["_mt4_original_cboe_bytes"]=already_read
+
+        def model(raw,mode):
+            self.assertEqual(raw,already_read)
+            self.assertEqual(mode,"0DTE")
+            return {"symbol":"SPX","mode":"0DTE",
+                    "expiries":[DAY.isoformat()],
+                    "quality_sufficient":True,
+                    "net":-16_758_700_000.0,
+                    "modeled_gamma_sign":"Negative"}
+
+        with patch.object(mt4_feed,"datetime",Clock), patch.object(
+            mt4_feed,"_official_frames",
+            return_value={"15:50":official_frame}) as official_mock, patch.object(
+            mt4_feed,"_study_frames", return_value={"16:46":frame("16:46:02",True)}):
+            result=mt4_feed.build_feed(
+                Store(),DAY,BASIS,mode="Ufficiale",strike_count=100,
+                edge_artifacts="/unavailable/nonmatching_artifact",edge_analyzer=model)
+            old=mt4_feed.build_feed(
+                Store(),DAY,BASIS,mode="Ufficiale",strike_count=50,
+                edge_artifacts="/unavailable/nonmatching_artifact",edge_analyzer=model)
+
+        meta,rows=csv_rows(result)
+        self.assertEqual(meta["schema"],"serafini_mt4_v4")
+        self.assertEqual(meta["gex_model"],"EDGE_0DTE")
+        self.assertEqual(meta["gex_modeled_sign"],"Negative")
+        self.assertEqual(meta["gex_cboe_timestamp"],meta["cboe_timestamp"])
+        self.assertEqual(len(rows["0DTE"]),100)
+        self.assertEqual(len(rows["Weekly"]),100)
+        previous,_=csv_rows(old)
+        self.assertNotIn("gex_modeled_sign",previous)
+        self.assertEqual(previous["schema"],"serafini_mt4_v3")
+        self.assertEqual(
+            official_mock.call_args_list[0].kwargs["include_mt4_raw"],True)
+        self.assertEqual(
+            official_mock.call_args_list[1].kwargs["include_mt4_raw"],False)
+
+    def test_official_raw_must_match_frame_even_when_already_downloaded(self):
+        bad=frame("15:50:02",True,"UFFICIALE")
+        bad["_mt4_original_cboe_bytes"]=gzip.compress(json.dumps(
+            {"timestamp":"2026-11-04 12:05:00",
+             "data":{"current_price": REFERENCE}}).encode())
+        called=[]
+        def should_not_run(*args):
+            called.append(1)
+            raise AssertionError("Must not analyze unmatching raw")
+        self.assertIsNone(mt4_feed.verified_edge_from_artifact(
+            bad,DAY,artifact_dir=None,analyzer=should_not_run))
+        self.assertFalse(called)
+
     def test_wrong_raw_timestamp_or_model_is_nonblocking_and_nd(self):
         with tempfile.TemporaryDirectory() as folder:
             data={"timestamp":"2026-11-04 15:30:00",

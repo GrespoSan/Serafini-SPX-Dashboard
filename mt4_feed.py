@@ -27,12 +27,19 @@ ROME = ZoneInfo('Europe/Rome')
 def verified_edge_from_artifact(frame, day, artifact_dir=None, analyzer=None):
     """Optional exact-snapshot Edge 0DTE sign for MT4 v3.44 (never inferred).
 
-    The workflow's triggering Cboe raw artifact is the only permitted input.
-    No separate Cboe download and no cross-slot/cross-day reuse. If missing,
-    unparseable or low-quality, this returns None and does not stop MT4.
+    Prefer the already-downloaded ORIGINAL Cboe bytes from the selected
+    OFFICIAL frame, otherwise the triggering Replay/Official artifact.
+    No extra Cboe request or cross-slot/cross-day reuse. Invalid source,
+    missing data or quality failure => None without blocking NET GAMMA.
     """
     base = artifact_dir or os.environ.get('MT4_CBOE_RAW_DIR', '')
-    if not base:
+    raw_from_frame = frame.get('_mt4_original_cboe_bytes')
+    candidates = []
+    if isinstance(raw_from_frame, bytes) and raw_from_frame:
+        candidates.append(raw_from_frame)
+    if base:
+        candidates.extend(sorted(Path(base).glob('**/SPX_CBOE_*.json.gz')))
+    if not candidates:
         return None
     expected_ts = str(frame.get('cboe_timestamp_original') or '')
     expected_spot = frame.get('spot')
@@ -45,9 +52,10 @@ def verified_edge_from_artifact(frame, day, artifact_dir=None, analyzer=None):
     except (ValueError, TypeError):
         return None
     from gzip import decompress
-    for path in sorted(Path(base).glob('**/SPX_CBOE_*.json.gz')):
+    for original in candidates:
         try:
-            raw = path.read_bytes()
+            raw = (original if isinstance(original, bytes)
+                   else original.read_bytes())
             envelope = json.loads(decompress(raw))
             if envelope.get('timestamp') != expected_ts:
                 continue
@@ -100,7 +108,12 @@ def build_feed(store, day, basis_result, mode="Replay", strike_count=50, edge_ar
     iso = day.isocalendar()
     week = f'{iso.year}-W{iso.week:02d}'
     logs = store.list(f'{week}/logs/')
-    official = _official_frames(store, week, day, logs)
+    # The official original Cboe bytes have already been downloaded by
+    # _official_frames to compute Serafini's 100 strikes. Reuse them only
+    # for the optional 100-strike MT4 Edge sign; ordinary 50-strike
+    # and Replay dashboard call sites remain unchanged.
+    official = _official_frames(
+        store, week, day, logs, include_mt4_raw=(strike_count == 100))
     if mode == "Ufficiale":
         # Solo i rilevamenti ufficiali come il Pine della Dashboard.
         frames = official
@@ -171,6 +184,9 @@ def build_feed(store, day, basis_result, mode="Replay", strike_count=50, edge_ar
             meta.extend((key, verified[key]) for key in (
                 'gex_model', 'gex_modeled_sign',
                 'gex_cboe_timestamp', 'gex_expiry'))
+        print('MT4 100 Edge GEX ' + mode + ' ' + str(day) + ' ' + slot
+              + ': ' + (verified['gex_modeled_sign'] if verified else 'N/D'
+                        + ' (raw/expiry/quality not verified)'))
     for item in meta:
         out.writerow(item)
     out.writerow(['profile', 'expiry', 'strike_spx', 'price_es', 'net_gamma'])

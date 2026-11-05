@@ -40,7 +40,7 @@ def _download_clock(record):
         return None
 
 
-def _official_frames(store, week, day, logs):
+def _official_frames(store, week, day, logs, *, include_mt4_raw=False):
     """Preferisci il primo evento valido nello slot ufficiale."""
     by_slot = {}
     for log in logs:
@@ -65,7 +65,11 @@ def _official_frames(store, week, day, logs):
     for slot, candidates in by_slot.items():
         for clock, item in sorted(candidates, key=lambda pair: pair[0]):
             try:
-                snap = read_snapshot(store.download(item["file"]))
+                # Raw Cboe is already downloaded to construct the 100
+                # Serafini strikes. Reuse those SAME bytes for optional
+                # MT4 Edge metadata, without a second Storage/Cboe fetch.
+                raw_cboe = store.download(item["file"])
+                snap = read_snapshot(raw_cboe)
                 ref = float(snap["data"].get("prev_day_close") or 0)
                 if ref <= 0:
                     continue
@@ -96,6 +100,10 @@ def _official_frames(store, week, day, logs):
                     "reference_spx": ref, "profiles": profiles,
                     "cboe_timestamp_original": snap.get("timestamp"),
                 }
+                # NEVER attach raw bytes in ordinary Streamlit/Replay calls:
+                # this opt-in is exclusively for the MT4 feed publisher.
+                if include_mt4_raw:
+                    result[slot]["_mt4_original_cboe_bytes"] = raw_cboe
                 break
             except (KeyError, TypeError, ValueError, OSError, RuntimeError, OverflowError):
                 continue
