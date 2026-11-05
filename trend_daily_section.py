@@ -1,5 +1,6 @@
-"""Trend Daily SPX/ES: stesso contratto Massive per Range Daily e struttura.
-Non importa né modifica gamma_section, gamma_replay, GEX, livelli o Supabase.
+"""Trend Daily SPX/ES: stessa serie Massive per Range Daily e struttura.
+Duplica soltanto la visualizzazione dei valori Edge GEX già verificati;
+nessun nuovo download, ricalcolo GEX, accesso a Supabase o modifica Serafini.
 """
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
@@ -128,8 +129,17 @@ def impulse_reference(frame, threshold_pct=1.3, body_fraction=0.60, lookback=20)
 
 
 def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
-           daily_bars=None, contract=None, daily_error=None):
+           daily_bars=None, contract=None, daily_error=None,
+           modeled_gex=None):
     st.subheader(f"Trend Daily — contesto {market_name}")
+    # Read-only presentation of the SAME validated 0DTE Edge Cboe report.
+    # Render independently of Massive Daily: even unavailable OHLC must
+    # not hide a successful Edge result. No new Edge or Cboe requests.
+    if modeled_gex is not None:
+        # Presentation is intentionally independent of Edge graph imports:
+        # missing Yahoo/Plotly or Cboe must never block the Daily context.
+        from edge_daily_gex import render_daily_gex
+        render_daily_gex(st, modeled_gex)
     today_rome = reference_day or datetime.now(ZoneInfo("Europe/Rome")).date()
     try:
         bars = massive_frame(daily_bars, today_rome, contract=contract)

@@ -119,7 +119,7 @@ def _plot(e, serafini_rows, candles, shift, bounds, reading_clock=None):
     fig.update_xaxes(title_text="GEX mld USD/1%",row=1,col=3)
     return fig
 
-def show(week, store, logs=None):
+def show(week, store, logs=None, *, on_valid_gex=None):
     with st.expander("GEX EDGE — CONFRONTO",expanded=False):
         st.caption("Candele ES=F e profili aggiornati all'apertura o al ricaricamento della pagina. GEX e Serafini restano riferiti alla fotografia indicata.")
         reading_clock = None
@@ -231,6 +231,17 @@ def show(week, store, logs=None):
         put_exposure = e.get("put_gex")
         sign_label = e.get("modeled_gamma_sign")
         if call_exposure is not None and put_exposure is not None and sign_label:
+            # Only publish the SAME verified Edge metrics to Trend Daily.
+            # A transient callback is passed by app.py for this rerun: no
+            # session_state value can survive a failed later Cboe download.
+            if on_valid_gex is not None:
+                from edge_daily_gex import prepare_daily_gex
+                try:
+                    duplicate = prepare_daily_gex(e, day, reading_clock)
+                except (ValueError, KeyError, TypeError):
+                    pass
+                else:
+                    on_valid_gex(duplicate)
             columns = st.columns(4)
             labels = {
                 "Negative": "Negativo", "Positive": "Positivo",
