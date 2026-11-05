@@ -55,45 +55,49 @@ def prepare_daily_gex(edge, expected_day: date, download_clock=None):
 
 
 
-def render_daily_gex(st, modeled_gex):
-    """Display the SAME two labels, rounded amounts and Edge semantic colors.
 
-    Lightweight: imports no Edge plotting, Yahoo, Supabase or remote client.
+def compact_gex_kpi_html(modeled_gex):
+    """A single compact KPI cell alongside the four Trend Daily cards.
+
+    Reuses the previously checked Edge metrics. No Gamma recomputation,
+    state storage, plotting dependency or Cboe download.
     """
     from html import escape
     from edge_gex_exposure import format_gex_billions
 
     sign = modeled_gex["modeled_gamma_sign"]
-    names = {"Positive": "Positivo", "Negative": "Negativo", "Zero": "Zero"}
-    color = "#22b573" if sign == "Positive" else (
-        "#e64b4b" if sign == "Negative" else "inherit")
-    net = modeled_gex["net_gex"]
-    net_color = "#22b573" if net > 0 else (
-        "#e64b4b" if net < 0 else "inherit")
+    labels = {"Positive": "Positivo", "Negative": "Negativo", "Zero": "Zero"}
+    if sign not in labels:
+        raise ValueError("Segno Gamma non valido.")
+    value = modeled_gex["net_gex"]
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        raise ValueError("NET GEX non valido.")
+    sign_color = ("#22b573" if sign == "Positive"
+                  else "#e64b4b" if sign == "Negative" else "#b6bcc5")
+    net_color = ("#22b573" if value > 0 else
+                 "#e64b4b" if value < 0 else "#b6bcc5")
+    net_label = escape(format_gex_billions(value, signed=True))
+    return (
+        '<div class="spx-trend-kpi spx-trend-gex">'
+        '<div class="spx-trend-label">GEX</div>'
+        '<div class="spx-trend-gex-label">Segno Gamma modellato</div>'
+        f'<div class="spx-trend-gex-value" style="color:{sign_color}">'
+        f'{escape(labels[sign])}</div>'
+        '<div class="spx-trend-gex-label">NET GEX</div>'
+        f'<div class="spx-trend-gex-value" style="color:{net_color}">'
+        f'{net_label}</div>'
+        '</div>'
+    )
 
-    cols = st.columns(2)
-    for col, label, value, value_color in (
-        (cols[0], "Segno Gamma modellato",
-         names[sign] + " allo spot Cboe", color),
-        (cols[1], "NET GEX", format_gex_billions(net, signed=True), net_color),
-    ):
-        # Same visual markup as the Edge GEX comparison metrics.
-        col.markdown(
-            '<div style="min-height:5rem">'
-            f'<div style="font-size:.875rem;line-height:1.5rem;opacity:.85">'
-            f'{escape(label)}</div>'
-            f'<div style="font-size:2rem;line-height:2.45rem;font-weight:400;'
-            f'color:{value_color};overflow-wrap:anywhere">'
-            f'{escape(value)}</div>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
 
+def compact_gex_caption(modeled_gex):
+    """Provenance below the KPI row, not a separate metrics header."""
+    from html import escape
+    day = str(modeled_gex["expiry"])
     clock = modeled_gex.get("download_clock")
-    stamp = (" · download " + clock + " Roma") if clock else ""
-    st.caption(
+    stamp = (" · download " + str(clock) + " Roma") if clock else ""
+    return (
         "GEX EDGE 0DTE · fotografia Cboe "
-        + modeled_gex["expiry"] + stamp
-        + " · modello, non posizioni dealer osservate. "
-        "Valori identici al confronto Edge; non sono un segnale direzionale."
+        + day + stamp
+        + " · modello, non posizioni dealer osservate."
     )
