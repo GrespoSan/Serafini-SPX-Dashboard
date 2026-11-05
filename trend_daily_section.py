@@ -1,5 +1,6 @@
-"""Trend Daily SPX/ES: stesso contratto Massive per Range Daily e struttura.
-Non importa né modifica gamma_section, gamma_replay, GEX, livelli o Supabase.
+"""Trend Daily SPX/ES: stessa serie Massive per Range Daily e struttura.
+Duplica soltanto la visualizzazione dei valori Edge GEX già verificati;
+nessun nuovo download, ricalcolo GEX, accesso a Supabase o modifica Serafini.
 """
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
@@ -128,8 +129,33 @@ def impulse_reference(frame, threshold_pct=1.3, body_fraction=0.60, lookback=20)
 
 
 def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
-           daily_bars=None, contract=None, daily_error=None):
+           daily_bars=None, contract=None, daily_error=None,
+           modeled_gex=None):
     st.subheader(f"Trend Daily — contesto {market_name}")
+    # Read-only presentation of the SAME validated 0DTE Edge Cboe report.
+    # Render independently of Massive Daily: even unavailable OHLC must
+    # not hide a successful Edge result. No new Edge or Cboe requests.
+    if modeled_gex is not None:
+        from edge_triptych import _colored_edge_metric
+        from edge_gex_exposure import format_gex_billions
+        sign = modeled_gex["modeled_gamma_sign"]
+        names = {"Positive": "Positivo", "Negative": "Negativo",
+                 "Zero": "Zero"}
+        cols = st.columns(2)
+        _colored_edge_metric(
+            cols[0], "Segno Gamma modellato",
+            names[sign] + " allo spot Cboe", sign)
+        _colored_edge_metric(
+            cols[1], "NET GEX",
+            format_gex_billions(modeled_gex["net_gex"], signed=True),
+            modeled_gex["net_gex"])
+        clock = modeled_gex.get("download_clock")
+        stamp = (" · download " + clock + " Roma") if clock else ""
+        st.caption("GEX EDGE 0DTE · fotografia Cboe "
+                   + modeled_gex["expiry"] + stamp
+                   + " · modello, non posizioni dealer osservate. "
+                   "Valori identici al confronto Edge; non sono un "
+                   "segnale direzionale.")
     today_rome = reference_day or datetime.now(ZoneInfo("Europe/Rome")).date()
     try:
         bars = massive_frame(daily_bars, today_rome, contract=contract)
