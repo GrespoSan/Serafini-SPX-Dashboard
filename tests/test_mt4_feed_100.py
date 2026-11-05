@@ -109,7 +109,7 @@ class MT4FeedTest(unittest.TestCase):
             Path(folder, "SPX_CBOE_20261104_164511.json.gz").write_bytes(
                 gzip.compress(raw))
             def edge(raw_bytes, mode):
-                self.assertEqual(raw_bytes[:2], b"\\x1f\\x8b")
+                self.assertEqual(raw_bytes[:2], bytes((31, 139)))
                 self.assertEqual(mode, "0DTE")
                 return {"symbol":"SPX", "mode":"0DTE",
                         "expiries":[DAY.isoformat()],
