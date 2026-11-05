@@ -337,11 +337,21 @@ with st.expander('ANALISI NET GAMMA', expanded=True):
 
         # I registri restano consultabili solo quando l'archivio è disponibile.
 
+# Transient read-only copy: never keep yesterday's GEX after an Edge
+# failure, an unavailable Supabase archive or a changed Cboe snapshot.
+# Only the already verified Edge panel can populate this per-run dict.
+trend_edge_gex = {}
 # Edge e Replay sono confronti storici: non sono disponibili con un solo
 # file offline e senza registri di acquisizione verificati.
 if not offline and not storage_unavailable:
-    from edge_triptych import show as show_edge_triptych
-    show_edge_triptych(week, store, logs)
+    try:
+        from edge_triptych import show as show_edge_triptych
+        show_edge_triptych(
+            week, store, logs, on_valid_gex=trend_edge_gex.update)
+    except Exception:
+        # The optional GEX Edge path must never interrupt Serafini or
+        # News / Volatility / Trend Daily if Cboe or Edge downloads fail.
+        trend_edge_gex.clear()
 
 # Confronto e Replay condividono la stessa sezione, con calcoli invariati.
 if not offline and not storage_unavailable:
@@ -415,4 +425,5 @@ with context_details_slot.container():
     render_trend_daily(reference_day=trend_day,
                        daily_bars=es_daily_context.get('daily_bars'),
                        contract=es_daily_context.get('ticker'),
-                       daily_error=daily_error)
+                       daily_error=daily_error,
+                       modeled_gex=trend_edge_gex or None)
