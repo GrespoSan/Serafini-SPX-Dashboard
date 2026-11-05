@@ -52,3 +52,48 @@ def prepare_daily_gex(edge, expected_day: date, download_clock=None):
         "expiry": day,
         "download_clock": download_clock,
     }
+
+
+
+def render_daily_gex(st, modeled_gex):
+    """Display the SAME two labels, rounded amounts and Edge semantic colors.
+
+    Lightweight: imports no Edge plotting, Yahoo, Supabase or remote client.
+    """
+    from html import escape
+    from edge_gex_exposure import format_gex_billions
+
+    sign = modeled_gex["modeled_gamma_sign"]
+    names = {"Positive": "Positivo", "Negative": "Negativo", "Zero": "Zero"}
+    color = "#22b573" if sign == "Positive" else (
+        "#e64b4b" if sign == "Negative" else "inherit")
+    net = modeled_gex["net_gex"]
+    net_color = "#22b573" if net > 0 else (
+        "#e64b4b" if net < 0 else "inherit")
+
+    cols = st.columns(2)
+    for col, label, value, value_color in (
+        (cols[0], "Segno Gamma modellato",
+         names[sign] + " allo spot Cboe", color),
+        (cols[1], "NET GEX", format_gex_billions(net, signed=True), net_color),
+    ):
+        # Same visual markup as the Edge GEX comparison metrics.
+        col.markdown(
+            '<div style="min-height:5rem">'
+            f'<div style="font-size:.875rem;line-height:1.5rem;opacity:.85">'
+            f'{escape(label)}</div>'
+            f'<div style="font-size:2rem;line-height:2.45rem;font-weight:400;'
+            f'color:{value_color};overflow-wrap:anywhere">'
+            f'{escape(value)}</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+    clock = modeled_gex.get("download_clock")
+    stamp = (" · download " + clock + " Roma") if clock else ""
+    st.caption(
+        "GEX EDGE 0DTE · fotografia Cboe "
+        + modeled_gex["expiry"] + stamp
+        + " · modello, non posizioni dealer osservate. "
+        "Valori identici al confronto Edge; non sono un segnale direzionale."
+    )
