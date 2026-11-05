@@ -126,7 +126,12 @@ class EdgeDailyDuplicationTests(unittest.TestCase):
         self.assertLess(edge.index("_matching_serafini(store,week,e"),
                         edge.index("on_valid_gex(duplicate)"))
         self.assertIn("prepare_daily_gex(e, day, reading_clock)",edge)
-        self.assertIn('from edge_gex_exposure import format_gex_billions',trend)
+        self.assertIn('from edge_daily_gex import render_daily_gex',trend)
+        display=(ROOT/"edge_daily_gex.py").read_text(encoding="utf-8")
+        self.assertIn('from edge_gex_exposure import format_gex_billions',display)
+        self.assertIn("Segno Gamma modellato",display)
+        self.assertIn("NET GEX",display)
+        self.assertNotIn("from edge_triptych",trend)
         self.assertNotIn("result_from_snapshot",trend)
         self.assertNotIn("store.download(",trend)
 
