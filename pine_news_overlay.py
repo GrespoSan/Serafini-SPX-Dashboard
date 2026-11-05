@@ -37,7 +37,7 @@ def future_news_only(events, captured_at):
             continue
         if day != captured_rome.date():
             continue
-        if not re.fullmatch(r"\\d{2}:\\d{2}", str(clock or "")):
+        if not re.fullmatch(r"\d{2}:\d{2}", str(clock or "")):
             continue
         hh, mm = (int(x) for x in clock.split(":"))
         if hh > 23 or mm > 59:
