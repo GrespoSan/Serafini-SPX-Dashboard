@@ -132,20 +132,39 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
            daily_bars=None, contract=None, daily_error=None,
            modeled_gex=None):
     st.subheader(f"Trend Daily — contesto {market_name}")
-    # Read-only presentation of the SAME validated 0DTE Edge Cboe report.
-    # Render independently of Massive Daily: even unavailable OHLC must
-    # not hide a successful Edge result. No new Edge or Cboe requests.
+    # One compact GEX card next to the four Daily KPIs, not a second header.
+    # Reuse validated Edge values only: no Cboe request, new Gamma calculation,
+    # cached stale value, or dependency on Massive Daily OHLC.
+    gex_card = ""
+    gex_caption = ""
     if modeled_gex is not None:
-        # Presentation is intentionally independent of Edge graph imports:
-        # missing Yahoo/Plotly or Cboe must never block the Daily context.
-        from edge_daily_gex import render_daily_gex
-        render_daily_gex(st, modeled_gex)
+        try:
+            from edge_daily_gex import compact_gex_kpi_html, compact_gex_caption
+            gex_card = compact_gex_kpi_html(modeled_gex)
+            gex_caption = compact_gex_caption(modeled_gex)
+        except (ValueError, TypeError, KeyError):
+            # A missing or malformed optional GEX must never block Daily.
+            gex_card = ""
+            gex_caption = ""
     today_rome = reference_day or datetime.now(ZoneInfo("Europe/Rome")).date()
     try:
         bars = massive_frame(daily_bars, today_rome, contract=contract)
         result = evaluate(bars)
         impulse = impulse_reference(bars)
     except (ValueError, TypeError, KeyError):
+        # If OHLC is missing, a successfully verified Cboe GEX remains
+        # available in its own small dark card; no stale or invented data.
+        if gex_card:
+            st.markdown(
+                '<div style="background:#090a0c;border:1px solid #34363c;'
+                'border-radius:13px;padding:14px 18px;color:#f4f5f6;'
+                'max-width:370px">'
+                '<style>.spx-trend-gex-label{color:#b6bcc5;font-size:.75rem;'
+                'margin-top:6px}.spx-trend-gex-value{font-size:1.15rem;'
+                'font-weight:700}</style>'
+                + gex_card + '</div>',
+                unsafe_allow_html=True)
+            st.caption(gex_caption)
         st.info("Trend Daily non disponibile: servono sessioni futures Massive con OHLC "
                 "completi. Non utilizzo Yahoo come fonte alternativa.")
         if daily_error:
@@ -222,18 +241,24 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
                        "recuperato; non significa che sia stato rispettato "
                        "in tutte le sedute successive.")
     # Solo visualizzazione: la logica evaluate e i valori restano invariati.
+    columns_css = ("repeat(4,minmax(0,1fr)) minmax(190px,1.08fr)"
+                   if gex_card else "repeat(4,minmax(0,1fr))")
     st.markdown(f"""
 <style>
 .spx-trend-card {{
   border:1px solid #34363c; border-radius:13px; padding:14px 18px;
   background:#090a0c; color:#f4f5f6;
 }}
-.spx-trend-grid {{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:center;}}
+.spx-trend-grid {{display:grid;grid-template-columns:{columns_css};align-items:stretch;}}
 .spx-trend-kpi {{padding:6px 16px;border-left:1px solid #292b30;min-width:0;}}
 .spx-trend-kpi:first-child {{border-left:0;padding-left:0;}}
 .spx-trend-label {{font-size:.82rem;color:#b6bcc5;margin-bottom:6px;}}
 .spx-trend-value {{font-size:1.22rem;font-weight:700;overflow-wrap:anywhere;}}
 .spx-trend-sub {{font-size:.78rem;color:#a9b4c3;margin-top:6px;line-height:1.4;}}
+.spx-trend-gex-label {{font-size:.74rem;color:#b6bcc5;margin-top:7px;line-height:1.25;}}
+.spx-trend-gex-value {{font-size:1.08rem;font-weight:700;line-height:1.35;overflow-wrap:anywhere;}}
+.spx-trend-gex .spx-trend-label {{font-weight:600;}}
+
 .spx-trend-note {{border-top:1px solid #292b30;margin-top:9px;padding-top:9px;color:#9ca3af;font-size:.78rem;line-height:1.45;}}
 .spx-trend-foot {{
   border-top:1px solid #292b30;margin-top:12px;padding-top:10px;
@@ -241,7 +266,7 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
 }}
 @media(max-width:750px) {{
   .spx-trend-grid {{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:10px;}}
-  .spx-trend-kpi:nth-child(3) {{border-left:0;padding-left:0;}}
+  .spx-trend-kpi:nth-child(odd) {{border-left:0;padding-left:0;}}
 }}
 </style>
 <div class="spx-trend-card">
@@ -250,10 +275,13 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
     <div class="spx-trend-kpi"><div class="spx-trend-label">Chiusura vs baricentro</div><div class="spx-trend-value" style="color:{state_color}">{escape(result["midpoint_state"])}</div><div class="spx-trend-sub">{escape(delta_text)} dal baricentro</div></div>
     <div class="spx-trend-kpi"><div class="spx-trend-label">Baricentro Daily</div><div class="spx-trend-value">{escape(center_text)}</div></div>
     <div class="spx-trend-kpi"><div class="spx-trend-label">Barre stesso colore</div><div class="spx-trend-value" style="color:{count_color}">{result["same_color"]}</div></div>
+    {gex_card}
   </div>
   <div class="spx-trend-foot">{escape(baricentro_text)}</div>\n  <div class="spx-trend-foot">{escape(impulse_text)}</div>\n  <div class="spx-trend-foot">{escape(meaning)}</div>\n  <div class="spx-trend-note">Candela di impulso: criterio sperimentale (range ≥1,3% della chiusura precedente, corpo ≥60% del range, ricerca nelle ultime 20 sedute). Tenuta = tutte le barre successive rispettano il baricentro; recuperato/perso = posizione dell’ultima chiusura dopo una violazione. Non è un segnale operativo validato.</div>
 </div>
 """, unsafe_allow_html=True)
+    if gex_card:
+        st.caption(gex_caption)
     st.caption(
         f"Fonte: Massive Futures {contract or 'N/D'} · 1session · "
         f"seduta chiusa {result['last_day']}. "
