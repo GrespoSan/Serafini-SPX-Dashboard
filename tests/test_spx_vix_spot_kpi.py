@@ -117,7 +117,7 @@ class VixSpotTests(unittest.TestCase):
         self.assertLess(card.index("Buffer standard"),
                         card.index("VIX spot · chiusura precedente"))
         self.assertIn("15 punti (alta volatilità)",card)
-        self.assertIn("28,18",card)
+        self.assertIn('<div class="number" style="color:#ff676d">28,18</div>',card)
         self.assertIn("Chiusura 05/11/2026 · Cboe",card)
         self.assertIn('<div class="vix-spot-prior">Seduta prima 04/11/2026</div>',card)
         self.assertIn('<div class="vix-spot-previous-detail">16,61 · <span class="vix-spot-change">(+11,57 pt)</span></div>',card)
@@ -136,6 +136,7 @@ class VixSpotTests(unittest.TestCase):
         card=next(markup for markup,_ in fake.html if 'class="spx-vol-card"' in markup)
         self.assertIn("VIX spot · chiusura precedente",card)
         self.assertIn('<div class="number">N/D</div>',card)
+        self.assertNotIn('<div class="number" style="color:#ff676d">N/D</div>',card)
         self.assertIn("Chiusura Cboe non disponibile",card)
         self.assertIn('<div class="vix-spot-previous-detail">N/D</div>',card)
         self.assertEqual(result["vix_spot"]["status"],"NON DISPONIBILE")
@@ -170,10 +171,43 @@ class VixSpotTests(unittest.TestCase):
                           "change_points":None,"change_pct":None}):
             vix_regime.render(date(2026,11,6))
         card=next(markup for markup,_ in fake2.html if 'class="spx-vol-card"' in markup)
-        self.assertIn('<div class="number">28,18</div>',card)
+        self.assertIn('<div class="number" style="color:#ff676d">28,18</div>',card)
         self.assertIn("Seduta prima: N/D",card)
         self.assertIn('<div class="vix-spot-previous-detail">N/D</div>',card)
         self.assertIn("15 punti (alta volatilità)",card)
+
+    def test_vix_spot_threshold_strictly_greater_than_20(self):
+        # 20 is the user's threshold, not a regime affecting the ES buffer.
+        # Test both sides and equality; the comparison delta retains its
+        # independent red/green colour logic.
+        for close, should_be_red in ((19.99, False), (20.00, False),
+                                     (20.01, True), (28.18, True)):
+            with self.subTest(close=close):
+                fake=FakeStreamlit()
+                data={"status":"VALIDO", "day":"2026-11-05",
+                      "close":close, "previous_day":"2026-11-04",
+                      "previous_close":21.0,
+                      "change_points":close - 21.0,
+                      "change_pct":(close / 21.0 - 1) * 100}
+                with patch.object(vix_regime, "st", fake), patch.object(
+                    vix_regime, "volatility_context", return_value=scenario()), patch(
+                    "vix_spot_history.previous_vix_spot", return_value=data):
+                    rendered=vix_regime.render(date(2026,11,6),
+                                               return_context=True)
+                html=next(markup for markup,_ in fake.html
+                          if 'class="spx-vol-card"' in markup)
+                expected=f'{close:.2f}'.replace(".", ",")
+                styled=f'<div class="number" style="color:#ff676d">{expected}</div>'
+                unstyled=f'<div class="number">{expected}</div>'
+                if should_be_red:
+                    self.assertIn(styled,html)
+                    self.assertNotIn(unstyled,html)
+                else:
+                    self.assertIn(unstyled,html)
+                    self.assertNotIn(styled,html)
+                self.assertEqual(rendered["breakout_buffer"]["buffer_es_points"],15)
+                self.assertIn('class="vix-spot-change"',html)
+                self.assertIn("Buffer standard",html)
 
     def test_vix_spot_close_is_never_used_to_compute_buffer(self):
         import inspect

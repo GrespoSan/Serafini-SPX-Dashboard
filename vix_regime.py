@@ -233,6 +233,9 @@ def render(target_day, return_context=False):
         if not math.isfinite(spot_close) or spot_close <= 0:
             raise ValueError("VIX spot non valido.")
         spot_value = f"{spot_close:.2f}".replace(".", ",")
+        # Red ONLY when VIX spot CLOSE strictly exceeds 20.00.
+        # At 20.00 or below, preserve the original KPI text colour.
+        spot_value_style = ' style="color:#ff676d"' if spot_close > 20.0 else ""
         spot_date = date.fromisoformat(spot["day"]).strftime("%d/%m/%Y")
         spot_note = f"Chiusura {spot_date} · Cboe"
         # Compare only two confirmed consecutive Cboe trading records.
@@ -264,6 +267,7 @@ def render(target_day, return_context=False):
             ImportError, UnicodeError):
         spot = {"status":"NON DISPONIBILE"}
         spot_value = "N/D"
+        spot_value_style = ""
         spot_note = "Chiusura Cboe non disponibile"
         previous_value = "Seduta prima: N/D"
         previous_close_value = "N/D"
@@ -382,7 +386,7 @@ def render(target_day, return_context=False):
     </div>
     <div class="spx-vol-kpi">
       <div class="label">VIX spot · chiusura precedente</div>
-      <div class="number">{escape(spot_value)}</div>
+      <div class="number"{spot_value_style}>{escape(spot_value)}</div>
       <div class="vix-spot-note">{escape(spot_note)}</div>
       <div class="vix-spot-prior">{escape(previous_value)}</div>
       <div class="vix-spot-previous-detail">{previous_details_html}</div>
