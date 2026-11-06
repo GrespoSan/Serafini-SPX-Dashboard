@@ -58,6 +58,40 @@ def get_sources(day, store):
     iso = day.isocalendar()
     week = f"{iso.year}-W{iso.week:02d}"
     logs = store.list(f"{week}/logs/")
+    if not logs:
+        # Probe metadata only; no raw option contents, tokens, or private paths
+        # are printed. A legacy anon JWT can read 0 objects due to Storage RLS.
+        import base64
+        import json
+        api_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+        if api_key.startswith("sb_secret_"):
+            role_kind = "MODERN_SECRET"
+        elif api_key.startswith("eyJ"):
+            try:
+                part = api_key.split(".")[1]
+                data = json.loads(base64.urlsafe_b64decode(
+                    part + "=" * (-len(part) % 4)))
+                role_kind = str(data.get("role") or "UNKNOWN_ROLE")
+            except (ValueError, IndexError, TypeError):
+                role_kind = "UNREADABLE_JWT"
+        else:
+            role_kind = "UNKNOWN_KEY_FORMAT"
+        direct = {}
+        for label, prefix in (("root", ""), ("week", week + "/"),
+                              ("logs_with_slash", week + "/logs/"),
+                              ("logs_without_slash", week + "/logs")):
+            try:
+                entries = store._list_uncached(prefix)
+                direct[label] = {
+                    "entries": len(entries),
+                    "files": sum(bool(x.get("id")) for x in entries)}
+            except Exception as exc:
+                direct[label] = {"error": type(exc).__name__}
+        print("STORAGE_LIST_DIAGNOSTIC " + json.dumps({
+            "key_role_or_kind": role_kind,
+            "project_ref_matches": store.url.rstrip("/").endswith(
+                "rnpnibdxuqlmuqmcixsd.supabase.co"),
+            "bucket": store.bucket, "probes": direct}, sort_keys=True))
     profiles = load_export_profiles(store, week, day, logs)
     if not profiles:
         # Diagnostic only: never log option contents, credentials, raw JSON or
