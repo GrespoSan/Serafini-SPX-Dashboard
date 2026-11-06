@@ -70,8 +70,24 @@ def _parse_close_history(raw_csv, target_day, expected_day=None):
     chosen = expected_day if expected_day is not None else max(found)
     if chosen not in found:
         raise ValueError("Chiusura VIX non presente per la seduta ES precedente.")
-    return {"status":"VALIDO", "day":chosen.isoformat(),
-            "close":found[chosen], "source":"Cboe · VIX Index storico · CLOSE"}
+    # Find the last ACTUAL earlier trading session, never simply calendar
+    # yesterday. This uses the same Cboe history already fetched/cached.
+    prior_candidates = [d for d in found if d < chosen
+                        and (chosen - d) <= timedelta(days=7)]
+    previous_day = max(prior_candidates) if prior_candidates else None
+    previous_close = found[previous_day] if previous_day else None
+    current_close = found[chosen]
+    result = {
+        "status": "VALIDO", "day": chosen.isoformat(),
+        "close": current_close, "source": "Cboe · VIX Index storico · CLOSE",
+        "previous_day": previous_day.isoformat() if previous_day else None,
+        "previous_close": previous_close,
+        "change_points": None, "change_pct": None,
+    }
+    if previous_close is not None:
+        result["change_points"] = current_close - previous_close
+        result["change_pct"] = (current_close / previous_close - 1) * 100
+    return result
 
 
 def _is_csv_header(text):
