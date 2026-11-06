@@ -15,7 +15,8 @@ concurrency:
 
 jobs:
   pine:
-    if: ${{ vars.MARKET_MAP_PINE_UNATTENDED_ENABLED == 'true' }}
+    # Manual tests are allowed; scheduled runs remain disabled until explicit activation.
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.MARKET_MAP_PINE_UNATTENDED_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
