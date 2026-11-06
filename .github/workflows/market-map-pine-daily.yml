@@ -1,0 +1,73 @@
+name: MARKET MAP — Pine daily autonomous generation (opt-in)
+on:
+  workflow_dispatch:
+  schedule:
+    # UTC heartbeat. DST in Rome is handled by Python ZoneInfo.
+    - cron: '15 6-21 * * 1-5'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: market-map-pine-autogen
+  cancel-in-progress: false
+
+jobs:
+  pine:
+    if: ${{ vars.MARKET_MAP_PINE_UNATTENDED_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install same runtime dependencies as Dashboard
+        run: python -m pip install -r requirements.txt
+
+      - name: Reuse same-day frozen basis from earlier successful run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p freeze
+          ROME_DAY="$(TZ=Europe/Rome date +%Y%m%d)"
+          BASIS_NAME="mm-pine-basis-${ROME_DAY}"
+          echo "BASIS_NAME=${BASIS_NAME}" >> "$GITHUB_ENV"
+          RUN_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=${BASIS_NAME}" \
+            --jq '[.artifacts[] | select(.expired == false) | .workflow_run.id] | first // empty' || true)"
+          if [[ -n "$RUN_ID" ]]; then
+            gh run download "$RUN_ID" --name "$BASIS_NAME" --dir freeze
+            test -s freeze/basis.json
+            echo "Reused immutable daily basis artifact"
+          else
+            echo "No previously frozen basis today; first valid slot will create it"
+          fi
+
+      - name: Generate available Pine scripts from existing snapshots only
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          FINANCE_CALENDAR_API_KEY: ${{ secrets.FINANCE_CALENDAR_API_KEY }}
+        run: python market_map_pine_autogen.py --basis-path freeze/basis.json --out pine_daily
+
+      - name: Preserve the first computed same-day ES-SPX basis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BASIS_NAME }}
+          path: freeze/basis.json
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Archive generated Pine + source manifest for Apps Script pull
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mm-pine-daily-${{ github.run_id }}
+          path: pine_daily/
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: ignore
