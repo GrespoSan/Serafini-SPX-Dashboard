@@ -145,7 +145,7 @@ offsetWeekly = input.int(100, "Distanza Weekly dalle 0DTE", minval=20, maxval=60
 showCurrentOdte = input.bool(true, "Mostra 0DTE corrente")
 showCurrentWeekly = input.bool(true, "Mostra Weekly corrente")
 showTop3Odte = input.bool(true, "Proietta Top 3 Call / Put 0DTE")
-positiveColor = input.color(color.rgb(0, 230, 117), "NET GAMMA positivo")
+positiveColor = input.color(color.rgb(0, 143, 76), "NET GAMMA positivo")
 negativeColor = input.color(color.rgb(242, 54, 69), "NET GAMMA negativo")
 showTitles = input.bool(true, "Mostra intestazioni")
 labelSizeChoice = input.string("Normale", "Dimensione scritte Pine", options=["Piccola", "Normale", "Grande", "Molto grande"], tooltip="Regola la dimensione di intestazioni, avvisi e news. Default Normale.")
