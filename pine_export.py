@@ -148,6 +148,12 @@ showTop3Odte = input.bool(true, "Proietta Top 3 Call / Put 0DTE")
 positiveColor = input.color(color.rgb(0, 230, 117), "NET GAMMA positivo")
 negativeColor = input.color(color.rgb(242, 54, 69), "NET GAMMA negativo")
 showTitles = input.bool(true, "Mostra intestazioni")
+labelSizeChoice = input.string("Grande", "Dimensione scritte Pine", options=["Piccola", "Normale", "Grande", "Molto grande"], tooltip="Regola la dimensione di intestazioni, avvisi e news. Default Grande (leggermente più grande del precedente).")
+labelTextSize = switch labelSizeChoice
+    "Piccola" => size.small
+    "Normale" => size.normal
+    "Grande" => size.large
+    => size.huge
 // Nessun livello SPX su sottostanti estranei: solo futures ES/MES.
 validTicker = syminfo.type == "futures" and (syminfo.root == "ES" or syminfo.root == "MES")
 
@@ -203,7 +209,7 @@ renderProfile(array<float> levels, array<float> gamma, int center, string headin
         if showTitles
             float spacing = count > 1 ? math.max(5.0, (top - bottom) / 20.0) : 10.0
             string scaleText = " | scala comune " + str.tostring(actualScale, "#.######") + " Gamma/bar" + (adjusted ? " (adattata)" : "")
-            label t = label.new(center, top + spacing, heading, xloc=xloc.bar_index, yloc=yloc.price, color=color.new(color.black, 50), textcolor=color.white, style=label.style_label_down, size=size.normal)
+            label t = label.new(center, top + spacing, heading, xloc=xloc.bar_index, yloc=yloc.price, color=color.new(color.black, 50), textcolor=color.white, style=label.style_label_down, size=labelTextSize)
             array.push(drawnLabels, t)
 
 // Come nell'esempio: la proiezione parte dall'ULTIMA candela e prosegue
@@ -235,10 +241,10 @@ if barstate.islast and validTicker
     bool beyondLimit = (showCurrentOdte and offsetOdte >= 480) or (showCurrentWeekly and weeklyCenter >= 480)
     float minimumSafe = math.max(showCurrentOdte ? requiredScale(showExtension ? odteValues : odteCoreValues, offsetOdte) : 0.0, showCurrentWeekly ? requiredScale(showExtension ? weeklyValues : weeklyCoreValues, weeklyCenter) : 0.0)
     if beyondLimit
-        label warningLimit = label.new(bar_index + 10, close, "Distanza Weekly/0DTE oltre il limite TradingView (+500 barre): riduci la distanza. Nessun valore modificato automaticamente.", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.new(color.orange, 15), textcolor=color.black, size=size.small)
+        label warningLimit = label.new(bar_index + 10, close, "Distanza Weekly/0DTE oltre il limite TradingView (+500 barre): riduci la distanza. Nessun valore modificato automaticamente.", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.new(color.orange, 15), textcolor=color.black, size=labelTextSize)
         array.push(drawnLabels, warningLimit)
     else if actualScale + 0.000001 < minimumSafe
-        label warningLabel = label.new(bar_index + 10, close, "Scala manuale troppo piccola per TradingView. Imposta almeno " + str.tostring(math.ceil(minimumSafe * 10) / 10.0, "#.0") + " G/bar", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.new(color.orange, 15), textcolor=color.black, size=size.small)
+        label warningLabel = label.new(bar_index + 10, close, "Scala manuale troppo piccola per TradingView. Imposta almeno " + str.tostring(math.ceil(minimumSafe * 10) / 10.0, "#.0") + " G/bar", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.new(color.orange, 15), textcolor=color.black, size=labelTextSize)
         array.push(drawnLabels, warningLabel)
     else
         if showCurrentOdte
