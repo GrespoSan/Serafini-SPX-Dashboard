@@ -9,6 +9,7 @@ on:
       - pine_news_overlay.py
       - pine_sources.py
       - tests/test_pine_compare.py
+      - tests/test_pine_text_size.py
       - tests/test_pine_news_overlay.py
       - offline_snapshot.py
       - macro_calendar.py
@@ -47,6 +48,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_offline_snapshot.py' -v
       - name: Test TradingView 0DTE Top 3 Call/Put levels and comparison exports
         run: python -m unittest discover -s tests -p 'test_pine_compare.py' -v
+      - name: Test all Serafini Pine exports default to Normale text size
+        run: python -m unittest discover -s tests -p 'test_pine_text_size.py' -v
       - name: Test future-only Pine macro vertical lines and as-of snapshot time
         run: python -m unittest discover -s tests -p 'test_pine_news_overlay.py' -v
       - name: Test emergency one-snapshot current Pine without Supabase
