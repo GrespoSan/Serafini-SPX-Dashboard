@@ -148,7 +148,7 @@ showTop3Odte = input.bool(true, "Proietta Top 3 Call / Put 0DTE")
 positiveColor = input.color(color.rgb(0, 230, 117), "NET GAMMA positivo")
 negativeColor = input.color(color.rgb(242, 54, 69), "NET GAMMA negativo")
 showTitles = input.bool(true, "Mostra intestazioni")
-labelSizeChoice = input.string("Grande", "Dimensione scritte Pine", options=["Piccola", "Normale", "Grande", "Molto grande"], tooltip="Regola la dimensione di intestazioni, avvisi e news. Default Grande (leggermente più grande del precedente).")
+labelSizeChoice = input.string("Normale", "Dimensione scritte Pine", options=["Piccola", "Normale", "Grande", "Molto grande"], tooltip="Regola la dimensione di intestazioni, avvisi e news. Default Normale.")
 labelTextSize = switch labelSizeChoice
     "Piccola" => size.small
     "Normale" => size.normal
