@@ -59,6 +59,56 @@ def get_sources(day, store):
     week = f"{iso.year}-W{iso.week:02d}"
     logs = store.list(f"{week}/logs/")
     profiles = load_export_profiles(store, week, day, logs)
+    if not profiles:
+        # Diagnostic only: never log option contents, credentials, raw JSON or
+        # Supabase object bodies. The reader may silently reject invalid Gamma.
+        from gamma_replay import OFFICIAL, LEGACY_STUDY, weekly_expiry
+        from net_gamma import read_snapshot, profile
+        import json
+        info = {"week": week, "logs_listed": len(logs),
+                "candidate_logs": 0, "candidate_snapshots": 0,
+                "rejection_causes": {}, "weekly_expiry": weekly_expiry(day).isoformat()}
+        for obj in logs:
+            try:
+                item = json.loads(store.download(f"{week}/logs/{obj['name']}"))
+                if item.get("rome_date") != day.isoformat():
+                    continue
+                info["candidate_logs"] += 1
+                slot = next((k for k,v in (OFFICIAL | LEGACY_STUDY).items()
+                             if v == item.get("scheduled_slot")), None)
+                reason = None
+                if not slot:
+                    reason = "UNRECOGNIZED_SLOT"
+                elif item.get("status") not in ("NUOVO", "INVARIATO"):
+                    reason = "UNACCEPTED_STATUS"
+                elif not item.get("file"):
+                    reason = "MISSING_FILE_PATH"
+                elif not item.get("download_rome") and not item.get("download_utc"):
+                    reason = "MISSING_DOWNLOAD_CLOCK"
+                else:
+                    try:
+                        snap = read_snapshot(store.download(item["file"]))
+                        info["candidate_snapshots"] += 1
+                        ref = float(snap["data"].get("prev_day_close") or 0)
+                        if ref <= 0:
+                            reason = "MISSING_PREVIOUS_CLOSE"
+                        else:
+                            one = profile(snap, day, ref)
+                            weekly = profile(snap, weekly_expiry(day), ref)
+                            if not one.get("rows"):
+                                reason = "ZERO_0DTE_STRIKES"
+                            elif not weekly.get("rows"):
+                                reason = "ZERO_WEEKLY_STRIKES"
+                            else:
+                                reason = "READER_REJECTED_AFTER_PROFILE"
+                    except (ValueError, TypeError, KeyError, RuntimeError, OSError) as exc:
+                        reason = "PROFILE_" + type(exc).__name__
+                if reason:
+                    info["rejection_causes"][reason] = info["rejection_causes"].get(reason, 0) + 1
+            except (ValueError, TypeError, KeyError, RuntimeError, OSError) as exc:
+                reason = "LOG_" + type(exc).__name__
+                info["rejection_causes"][reason] = info["rejection_causes"].get(reason, 0) + 1
+        print("SOURCE_DIAGNOSTIC " + json.dumps(info, sort_keys=True))
     return profiles
 
 
