@@ -35,6 +35,7 @@ jobs:
           mkdir -p freeze
           ROME_DAY="$(TZ=Europe/Rome date +%Y%m%d)"
           BASIS_NAME="mm-pine-basis-${ROME_DAY}"
+          echo "BASIS_NAME=${BASIS_NAME}" >> "$GITHUB_ENV"
           RUN_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=${BASIS_NAME}" \
             --jq '[.artifacts[] | select(.expired == false) | .workflow_run.id] | first // empty' || true)"
           if [[ -n "$RUN_ID" ]]; then
@@ -56,7 +57,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mm-pine-basis-${{ github.run_id }}
+          name: ${{ env.BASIS_NAME }}
           path: freeze/basis.json
           retention-days: 14
           if-no-files-found: ignore
