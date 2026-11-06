@@ -119,9 +119,10 @@ class VixSpotTests(unittest.TestCase):
         self.assertIn("15 punti (alta volatilità)",card)
         self.assertIn("28,18",card)
         self.assertIn("Chiusura 05/11/2026 · Cboe",card)
-        self.assertIn("Seduta prima 16,61 · 04/11/2026",card)
-        self.assertIn("Δ +11,57 pt (+69,66%)",card)
-        self.assertIn("color:#ff676d",card)
+        self.assertIn('<div class="vix-spot-prior">Seduta prima 04/11/2026</div>',card)
+        self.assertIn('<div class="vix-spot-previous-detail">16,61 · <span class="vix-spot-change">(+11,57 pt)</span></div>',card)
+        self.assertIn(".spx-vol-kpi .vix-spot-change {color:#ff676d;}",card)
+        self.assertNotIn("69,66%",card)
         self.assertIn("Regime VX precedente",card)
         self.assertTrue(any("non modifica il buffer" in c for c in fake.caption_messages))
 
@@ -136,7 +137,7 @@ class VixSpotTests(unittest.TestCase):
         self.assertIn("VIX spot · chiusura precedente",card)
         self.assertIn('<div class="number">N/D</div>',card)
         self.assertIn("Chiusura Cboe non disponibile",card)
-        self.assertIn("Variazione: N/D",card)
+        self.assertIn('<div class="vix-spot-previous-detail">N/D</div>',card)
         self.assertEqual(result["vix_spot"]["status"],"NON DISPONIBILE")
         self.assertEqual(result["breakout_buffer"]["buffer_es_points"],15)
         self.assertIn("Backwardation",card)
@@ -153,8 +154,9 @@ class VixSpotTests(unittest.TestCase):
                           "change_pct":(14.50/16.61-1)*100}):
             vix_regime.render(date(2026,11,6))
         html=next(markup for markup,_ in fake.html if 'class="spx-vol-card"' in markup)
-        self.assertIn("Δ -2,11 pt (-12,70%)",html)
-        self.assertIn("color:#56d49e",html)
+        self.assertIn('16,61 · <span class="vix-spot-change">(-2,11 pt)</span>',html)
+        self.assertIn(".spx-vol-kpi .vix-spot-change {color:#56d49e;}",html)
+        self.assertNotIn("12,70%",html)
 
         # The primary VIX close remains useful if only one historical
         # record is available (e.g. on stale/partial source responses).
@@ -170,7 +172,7 @@ class VixSpotTests(unittest.TestCase):
         card=next(markup for markup,_ in fake2.html if 'class="spx-vol-card"' in markup)
         self.assertIn('<div class="number">28,18</div>',card)
         self.assertIn("Seduta prima: N/D",card)
-        self.assertIn("Variazione: N/D",card)
+        self.assertIn('<div class="vix-spot-previous-detail">N/D</div>',card)
         self.assertIn("15 punti (alta volatilità)",card)
 
     def test_vix_spot_close_is_never_used_to_compute_buffer(self):
