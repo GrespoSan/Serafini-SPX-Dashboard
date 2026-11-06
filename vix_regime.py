@@ -235,11 +235,39 @@ def render(target_day, return_context=False):
         spot_value = f"{spot_close:.2f}".replace(".", ",")
         spot_date = date.fromisoformat(spot["day"]).strftime("%d/%m/%Y")
         spot_note = f"Chiusura {spot_date} · Cboe"
+        # Compare only two confirmed consecutive Cboe trading records.
+        # Red: higher implied-volatility index. Green: lower index.
+        previous = spot.get("previous_close")
+        previous_day = spot.get("previous_day")
+        difference = spot.get("change_points")
+        percent_change = spot.get("change_pct")
+        if all(v is not None for v in (
+                previous, previous_day, difference, percent_change)):
+            prev = float(previous)
+            delta = float(difference)
+            delta_pct = float(percent_change)
+            previous_date = date.fromisoformat(previous_day)
+            if (not all(math.isfinite(v) for v in (prev, delta, delta_pct))
+                    or prev <= 0 or previous_date >= date.fromisoformat(spot["day"])):
+                raise ValueError("Confronto VIX non valido.")
+            previous_value = (f"Seduta prima {prev:.2f} · "
+                              f"{previous_date:%d/%m/%Y}").replace(".", ",")
+            change_value = (f"Δ {delta:+.2f} pt ({delta_pct:+.2f}%)"
+                            .replace(".", ","))
+            change_color = ("#ff676d" if delta > 0 else
+                            "#56d49e" if delta < 0 else "#b6bcc5")
+        else:
+            previous_value = "Seduta prima: N/D"
+            change_value = "Variazione: N/D"
+            change_color = "#b6bcc5"
     except (ValueError, TypeError, KeyError, OSError, TimeoutError,
             ImportError, UnicodeError):
         spot = {"status":"NON DISPONIBILE"}
         spot_value = "N/D"
         spot_note = "Chiusura Cboe non disponibile"
+        previous_value = "Seduta prima: N/D"
+        change_value = "Variazione: N/D"
+        change_color = "#b6bcc5"
     ctx["vix_spot"] = spot
     if daily_ok:
         raw_range = float(daily["range_points"])
@@ -309,6 +337,8 @@ def render(target_day, return_context=False):
 .spx-vol-kpi .candle-direction {{font-size:.84rem;font-weight:700;margin-top:7px;line-height:1.4;color:{candle_text_color};}}
 .spx-vol-kpi .buffer {{color:{highlight}; font-size:1.3rem;}}
 .spx-vol-kpi .vix-spot-note {{font-size:.78rem;color:#abb6c4;margin-top:7px;}}
+.spx-vol-kpi .vix-spot-prior {{font-size:.78rem;color:#b6bcc5;margin-top:5px;}}
+.spx-vol-kpi .vix-spot-change {{font-size:.90rem;color:{change_color};font-weight:700;margin-top:5px;}}
 .spx-vol-foot {{
   border-top:1px solid #292b30; padding-top:9px; margin-top:12px;
   color:#949ba6; font-size:.74rem; line-height:1.4;
@@ -344,6 +374,8 @@ def render(target_day, return_context=False):
       <div class="label">VIX spot · chiusura precedente</div>
       <div class="number">{escape(spot_value)}</div>
       <div class="vix-spot-note">{escape(spot_note)}</div>
+      <div class="vix-spot-prior">{escape(previous_value)}</div>
+      <div class="vix-spot-change">{escape(change_value)}</div>
     </div>
   </div>
   <div class="spx-vol-foot">
@@ -376,8 +408,11 @@ def render(target_day, return_context=False):
                    "Espansione/compressione: confronto con il range percentuale "
                    "della seduta ancora precedente.")
         st.caption("Fonte VIX spot: Cboe VIX Index Historical Data, CLOSE "
-                   "della seduta precedente verificata; non è il future VX, "
-                   "non è un valore live e non modifica il buffer.")
+                   "delle ultime due sedute VIX effettive precedenti, "
+                   "con differenza in punti VIX e percentuale sulla chiusura "
+                   "ancora precedente. Rosso = VIX salito, verde = VIX sceso. "
+                   "È volatilità implicita, non volatilità realizzata ES; "
+                   "non è il future VX, non è un valore live e non modifica il buffer.")
         st.caption("Fonte VX: settlement futures mensili Cboe. "
                    "Buffer ES 15 punti in backwardation oppure con candela ES rossa "
                    "e range High-Low strettamente maggiore di 1%. "
