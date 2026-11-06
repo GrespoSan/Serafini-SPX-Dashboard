@@ -250,15 +250,15 @@ def render(target_day, return_context=False):
             if (not all(math.isfinite(v) for v in (prev, delta, delta_pct))
                     or prev <= 0 or previous_date >= date.fromisoformat(spot["day"])):
                 raise ValueError("Confronto VIX non valido.")
-            previous_value = (f"Seduta prima {prev:.2f} · "
-                              f"{previous_date:%d/%m/%Y}").replace(".", ",")
-            change_value = (f"Δ {delta:+.2f} pt ({delta_pct:+.2f}%)"
-                            .replace(".", ","))
+            previous_value = f"Seduta prima {previous_date:%d/%m/%Y}"
+            previous_close_value = f"{prev:.2f}".replace(".", ",")
+            change_value = f"({delta:+.2f} pt)".replace(".", ",")
             change_color = ("#ff676d" if delta > 0 else
                             "#56d49e" if delta < 0 else "#b6bcc5")
         else:
             previous_value = "Seduta prima: N/D"
-            change_value = "Variazione: N/D"
+            previous_close_value = "N/D"
+            change_value = "N/D"
             change_color = "#b6bcc5"
     except (ValueError, TypeError, KeyError, OSError, TimeoutError,
             ImportError, UnicodeError):
@@ -268,6 +268,14 @@ def render(target_day, return_context=False):
         previous_value = "Seduta prima: N/D"
         change_value = "Variazione: N/D"
         change_color = "#b6bcc5"
+    # The previous close is neutral white; ONLY the bracketed point delta
+    # inherits the red/green variation colour.
+    previous_details_html = escape(previous_close_value)
+    if change_value != "N/D":
+        previous_details_html += (
+            ' · <span class="vix-spot-change">'
+            + escape(change_value) + '</span>'
+        )
     ctx["vix_spot"] = spot
     if daily_ok:
         raw_range = float(daily["range_points"])
@@ -338,7 +346,8 @@ def render(target_day, return_context=False):
 .spx-vol-kpi .buffer {{color:{highlight}; font-size:1.3rem;}}
 .spx-vol-kpi .vix-spot-note {{font-size:.78rem;color:#abb6c4;margin-top:7px;}}
 .spx-vol-kpi .vix-spot-prior {{font-size:.78rem;color:#b6bcc5;margin-top:5px;}}
-.spx-vol-kpi .vix-spot-change {{font-size:.90rem;color:{change_color};font-weight:700;margin-top:5px;}}
+.spx-vol-kpi .vix-spot-previous-detail {{font-size:.90rem;color:#f4f5f6;font-weight:700;margin-top:5px;}}
+.spx-vol-kpi .vix-spot-change {{color:{change_color};}}
 .spx-vol-foot {{
   border-top:1px solid #292b30; padding-top:9px; margin-top:12px;
   color:#949ba6; font-size:.74rem; line-height:1.4;
@@ -375,7 +384,7 @@ def render(target_day, return_context=False):
       <div class="number">{escape(spot_value)}</div>
       <div class="vix-spot-note">{escape(spot_note)}</div>
       <div class="vix-spot-prior">{escape(previous_value)}</div>
-      <div class="vix-spot-change">{escape(change_value)}</div>
+      <div class="vix-spot-previous-detail">{previous_details_html}</div>
     </div>
   </div>
   <div class="spx-vol-foot">
