@@ -223,6 +223,24 @@ def render(target_day, return_context=False):
     vx_ok = vx.get("status") == "VALIDO"
     daily_ok = daily.get("status") == "VALIDO"
     pct = vx.get("contango_pct") if vx_ok else None
+    # VIX spot is the INDEX close, not the VX futures curve. Read-only,
+    # optional, never fed into combined_breakout_buffer.
+    try:
+        from vix_spot_history import previous_vix_spot
+        spot = previous_vix_spot(
+            target_day, expected_es_day=daily.get("day") if daily_ok else None)
+        spot_close = float(spot["close"])
+        if not math.isfinite(spot_close) or spot_close <= 0:
+            raise ValueError("VIX spot non valido.")
+        spot_value = f"{spot_close:.2f}".replace(".", ",")
+        spot_date = date.fromisoformat(spot["day"]).strftime("%d/%m/%Y")
+        spot_note = f"Chiusura {spot_date} · Cboe"
+    except (ValueError, TypeError, KeyError, OSError, TimeoutError,
+            ImportError, UnicodeError):
+        spot = {"status":"NON DISPONIBILE"}
+        spot_value = "N/D"
+        spot_note = "Chiusura Cboe non disponibile"
+    ctx["vix_spot"] = spot
     if daily_ok:
         raw_range = float(daily["range_points"])
         range_value = (
@@ -280,7 +298,7 @@ def render(target_day, return_context=False):
   background:#090a0c; color:#f4f5f6; font-family:inherit;
 }}
 .spx-vol-grid {{
-  display:grid; grid-template-columns:repeat(3,minmax(0,1fr));
+  display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
   gap:0; align-items:center;
 }}
 .spx-vol-kpi {{padding:5px 18px; min-width:0; border-left:1px solid #292b30;}}
@@ -290,13 +308,19 @@ def render(target_day, return_context=False):
 .spx-vol-kpi .range-direction {{font-size:.79rem;color:#abb6c4;margin-top:8px;line-height:1.5;}}
 .spx-vol-kpi .candle-direction {{font-size:.84rem;font-weight:700;margin-top:7px;line-height:1.4;color:{candle_text_color};}}
 .spx-vol-kpi .buffer {{color:{highlight}; font-size:1.3rem;}}
+.spx-vol-kpi .vix-spot-note {{font-size:.78rem;color:#abb6c4;margin-top:7px;}}
 .spx-vol-foot {{
   border-top:1px solid #292b30; padding-top:9px; margin-top:12px;
   color:#949ba6; font-size:.74rem; line-height:1.4;
 }}
+@media(max-width:950px) {{
+  .spx-vol-grid {{grid-template-columns:repeat(2,minmax(0,1fr));}}
+  .spx-vol-kpi:nth-child(3) {{border-left:0;padding-left:0;}}
+  .spx-vol-kpi:nth-child(n+3) {{border-top:1px solid #292b30;margin-top:9px;padding-top:12px;}}
+}}
 @media(max-width:700px) {{
   .spx-vol-grid {{grid-template-columns:1fr;}}
-  .spx-vol-kpi {{padding:10px 0; border-left:0; border-top:1px solid #292b30;}}
+  .spx-vol-kpi {{padding:10px 0!important;border-left:0;border-top:1px solid #292b30;margin-top:0!important;}}
   .spx-vol-kpi:first-child {{border-top:0;}}
 }}
 </style>
@@ -315,6 +339,11 @@ def render(target_day, return_context=False):
     <div class="spx-vol-kpi">
       <div class="label">Buffer standard</div>
       <div class="number buffer">{escape(value)}</div>
+    </div>
+    <div class="spx-vol-kpi">
+      <div class="label">VIX spot · chiusura precedente</div>
+      <div class="number">{escape(spot_value)}</div>
+      <div class="vix-spot-note">{escape(spot_note)}</div>
     </div>
   </div>
   <div class="spx-vol-foot">
@@ -346,6 +375,9 @@ def render(target_day, return_context=False):
         st.caption("Range Daily ES (%) = (High − Low) / Close × 100. "
                    "Espansione/compressione: confronto con il range percentuale "
                    "della seduta ancora precedente.")
+        st.caption("Fonte VIX spot: Cboe VIX Index Historical Data, CLOSE "
+                   "della seduta precedente verificata; non è il future VX, "
+                   "non è un valore live e non modifica il buffer.")
         st.caption("Fonte VX: settlement futures mensili Cboe. "
                    "Buffer ES 15 punti in backwardation oppure con candela ES rossa "
                    "e range High-Low strettamente maggiore di 1%. "
