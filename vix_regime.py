@@ -266,7 +266,8 @@ def render(target_day, return_context=False):
         spot_value = "N/D"
         spot_note = "Chiusura Cboe non disponibile"
         previous_value = "Seduta prima: N/D"
-        change_value = "Variazione: N/D"
+        previous_close_value = "N/D"
+        change_value = "N/D"
         change_color = "#b6bcc5"
     # The previous close is neutral white; ONLY the bracketed point delta
     # inherits the red/green variation colour.
