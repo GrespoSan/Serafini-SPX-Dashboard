@@ -42,7 +42,7 @@ def _parse_close_history(raw_csv, target_day, expected_day=None):
     # Cboe CSV may be preceded by a descriptive header line.
     lines = text.splitlines()
     start = next((i for i, line in enumerate(lines)
-                  if line.strip().lstrip("\ufeff").upper().startswith("DATE,")), None)
+                  if _is_csv_header(line)), None)
     if start is None:
         raise ValueError("Colonne DATE/CLOSE non disponibili nello storico Cboe.")
     reader = csv.DictReader(io.StringIO("\n".join(lines[start:])))
@@ -72,6 +72,15 @@ def _parse_close_history(raw_csv, target_day, expected_day=None):
         raise ValueError("Chiusura VIX non presente per la seduta ES precedente.")
     return {"status":"VALIDO", "day":chosen.isoformat(),
             "close":found[chosen], "source":"Cboe · VIX Index storico · CLOSE"}
+
+
+def _is_csv_header(text):
+    try:
+        columns = next(csv.reader([text.strip().lstrip("\ufeff")]))
+        normalized = [c.strip().upper() for c in columns]
+        return "DATE" in normalized and "CLOSE" in normalized
+    except (StopIteration, csv.Error):
+        return False
 
 
 def _valid_date(text, pattern):
