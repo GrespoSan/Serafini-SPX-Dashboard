@@ -39,3 +39,10 @@ Questa prima proposta **non garantisce quattro salvataggi senza visite alla Dash
 5. Valutare successivamente job schedulato indipendente se occorre completo funzionamento unattended.
 
 Nessuna modifica al test MARKET MAP W45 né alle formule Serafini/Edge.
+
+## Aggiornamento di sicurezza (06/11/2026)
+- Protezione **no look-ahead**: l'archiviazione è consentita solo per la data corrente nel fuso `Europe/Rome`; la consultazione di giorni precedenti non crea file retroattivi.
+- Protezione dai rerun: nella singola sessione Streamlit lo stesso codice Pine con lo stesso differenziale non genera ulteriori richieste a Google Drive; eventuali nuove versioni con hash diverso restano distinte.
+- In caso di indisponibilità Google Drive il rendering e i quattro pulsanti Pine Serafini non vengono bloccati.
+- **Limite**: l'archiviazione avviene solo quando la Dashboard è aperta ed esegue gli esportatori; non è ancora garantito l'archivio completo autonomo a dashboard chiusa. Ogni slot privo di rilevazione valida rimane assente, non viene fabbricato.
+- Prima di attivare il flag verificare che l'utente autorizzato al Drive corrisponda al client OAuth desktop usato per creare la cartella `SPX Pine Daily`.
