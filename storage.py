@@ -1,4 +1,5 @@
 """Client server-side per il bucket privato di Supabase Storage."""
+from __future__ import annotations
 import json
 from urllib.error import HTTPError
 from urllib.parse import quote
