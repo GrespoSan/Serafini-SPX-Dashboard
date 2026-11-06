@@ -56,16 +56,27 @@ class VixSpotTests(unittest.TestCase):
                                     expected_day="2026-11-05")
         self.assertEqual(result["day"],"2026-11-05")
         self.assertEqual(result["close"],28.18)
+        self.assertEqual(result["previous_close"],16.61)
+        self.assertEqual(result["previous_day"],"2026-11-04")
+        self.assertAlmostEqual(result["change_points"],11.57)
+        self.assertAlmostEqual(result["change_pct"],(28.18/16.61-1)*100)
         self.assertEqual(result["source"],"Cboe · VIX Index storico · CLOSE")
         result2=_parse_close_history(CSV_DATA,date(2026,11,6))
         self.assertEqual(result2["day"],"2026-11-05")
         result3=_parse_close_history(CSV_DATA,date(2026,11,5))
         self.assertEqual(result3["day"],"2026-11-04")
+        self.assertEqual(result3["previous_day"],"2026-11-03")
+        result4=_parse_close_history(CSV_DATA,date(2026,11,4))
+        self.assertEqual(result4["day"],"2026-11-03")
+        self.assertEqual(result4["previous_day"],"2026-10-30")
+        self.assertAlmostEqual(result4["change_points"],1.41)
 
     def test_quoted_header_and_different_date_encoding(self):
         csv_text='Preamble\n"DATE","OPEN","HIGH","LOW","CLOSE"\n2026-11-05,23,29,21,28.18\n'
         found=_parse_close_history(csv_text.encode("utf-8"),date(2026,11,6))
         self.assertEqual(found["close"],28.18)
+        self.assertIsNone(found["previous_close"])
+        self.assertIsNone(found["change_pct"])
 
     def test_no_invented_previous_close_from_wrong_day(self):
         for expected in ("2026-11-02", "2026-11-06", "no-date"):
@@ -89,7 +100,10 @@ class VixSpotTests(unittest.TestCase):
             vix_regime,"volatility_context",return_value=original),patch(
             "vix_spot_history.previous_vix_spot",
             return_value={"status":"VALIDO","day":"2026-11-05",
-                          "close":28.18}) as read:
+                          "close":28.18,"previous_day":"2026-11-04",
+                          "previous_close":16.61,
+                          "change_points":11.57,
+                          "change_pct":(28.18/16.61-1)*100}) as read:
             displayed=vix_regime.render(date(2026,11,6),return_context=True)
         read.assert_called_once_with(date(2026,11,6),
                                      expected_es_day="2026-11-05")
@@ -105,6 +119,9 @@ class VixSpotTests(unittest.TestCase):
         self.assertIn("15 punti (alta volatilità)",card)
         self.assertIn("28,18",card)
         self.assertIn("Chiusura 05/11/2026 · Cboe",card)
+        self.assertIn("Seduta prima 16,61 · 04/11/2026",card)
+        self.assertIn("Δ +11,57 pt (+69,66%)",card)
+        self.assertIn("color:#ff676d",card)
         self.assertIn("Regime VX precedente",card)
         self.assertTrue(any("non modifica il buffer" in c for c in fake.caption_messages))
 
@@ -119,9 +136,42 @@ class VixSpotTests(unittest.TestCase):
         self.assertIn("VIX spot · chiusura precedente",card)
         self.assertIn('<div class="number">N/D</div>',card)
         self.assertIn("Chiusura Cboe non disponibile",card)
+        self.assertIn("Variazione: N/D",card)
         self.assertEqual(result["vix_spot"]["status"],"NON DISPONIBILE")
         self.assertEqual(result["breakout_buffer"]["buffer_es_points"],15)
         self.assertIn("Backwardation",card)
+
+    def test_falling_vix_green_and_missing_prior_not_misleading(self):
+        fake=FakeStreamlit()
+        with patch.object(vix_regime,"st",fake),patch.object(
+            vix_regime,"volatility_context",return_value=scenario()),patch(
+            "vix_spot_history.previous_vix_spot",
+            return_value={"status":"VALIDO","day":"2026-11-05",
+                          "close":14.50,"previous_day":"2026-11-04",
+                          "previous_close":16.61,
+                          "change_points":-2.11,
+                          "change_pct":(14.50/16.61-1)*100}):
+            vix_regime.render(date(2026,11,6))
+        html=next(markup for markup,_ in fake.html if 'class="spx-vol-card"' in markup)
+        self.assertIn("Δ -2,11 pt (-12,70%)",html)
+        self.assertIn("color:#56d49e",html)
+
+        # The primary VIX close remains useful if only one historical
+        # record is available (e.g. on stale/partial source responses).
+        fake2=FakeStreamlit()
+        with patch.object(vix_regime,"st",fake2),patch.object(
+            vix_regime,"volatility_context",return_value=scenario()),patch(
+            "vix_spot_history.previous_vix_spot",
+            return_value={"status":"VALIDO","day":"2026-11-05",
+                          "close":28.18, "previous_day":None,
+                          "previous_close":None,
+                          "change_points":None,"change_pct":None}):
+            vix_regime.render(date(2026,11,6))
+        card=next(markup for markup,_ in fake2.html if 'class="spx-vol-card"' in markup)
+        self.assertIn('<div class="number">28,18</div>',card)
+        self.assertIn("Seduta prima: N/D",card)
+        self.assertIn("Variazione: N/D",card)
+        self.assertIn("15 punti (alta volatilità)",card)
 
     def test_vix_spot_close_is_never_used_to_compute_buffer(self):
         import inspect
