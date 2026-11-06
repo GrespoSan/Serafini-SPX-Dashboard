@@ -171,7 +171,7 @@ class VixSpotTests(unittest.TestCase):
                           "change_points":None,"change_pct":None}):
             vix_regime.render(date(2026,11,6))
         card=next(markup for markup,_ in fake2.html if 'class="spx-vol-card"' in markup)
-        self.assertIn('<div class="number">28,18</div>',card)
+        self.assertIn('<div class="number" style="color:#ff676d">28,18</div>',card)
         self.assertIn("Seduta prima: N/D",card)
         self.assertIn('<div class="vix-spot-previous-detail">N/D</div>',card)
         self.assertIn("15 punti (alta volatilità)",card)
