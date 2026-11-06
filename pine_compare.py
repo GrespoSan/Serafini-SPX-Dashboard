@@ -129,13 +129,13 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
     if showPrevious and showCurrentWeekly and not showCurrentOdte
         recommendedScale := math.max(recommendedScale, requiredGapScale(activePrevious, activeWeekly, prevCenter, weeklyCenter))
     if not validOrder
-        label wrongOrder = label.new(bar_index + 10, close, "Posizioni: 0DTE precedente < 0DTE attuale < Weekly", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.orange, textcolor=color.black, size=size.small)
+        label wrongOrder = label.new(bar_index + 10, close, "Posizioni: 0DTE precedente < 0DTE attuale < Weekly", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.orange, textcolor=color.black, size=labelTextSize)
         array.push(drawnLabels, wrongOrder)
     else if beyondLimit
-        label warningLimit = label.new(bar_index + 10, close, "Distanze oltre il limite TradingView (+500 barre): riduci la distanza Weekly/0DTE.", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.orange, textcolor=color.black, size=size.small)
+        label warningLimit = label.new(bar_index + 10, close, "Distanze oltre il limite TradingView (+500 barre): riduci la distanza Weekly/0DTE.", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.orange, textcolor=color.black, size=labelTextSize)
         array.push(drawnLabels, warningLimit)
     else if actualScale + 0.000001 < minimumSafe
-        label unsafe = label.new(bar_index + 10, close, "Scala manuale insufficiente per limite TradingView +500: aumenta ad almeno " + str.tostring(math.ceil(minimumSafe * 10) / 10.0, "#.0") + " G/bar", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.orange, textcolor=color.black, size=size.small)
+        label unsafe = label.new(bar_index + 10, close, "Scala manuale insufficiente per limite TradingView +500: aumenta ad almeno " + str.tostring(math.ceil(minimumSafe * 10) / 10.0, "#.0") + " G/bar", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.orange, textcolor=color.black, size=labelTextSize)
         array.push(drawnLabels, unsafe)
     else
         string recommendedText = "Scala ottimale " + str.tostring(math.ceil(recommendedScale * 10) / 10.0, "#.0")
@@ -145,7 +145,7 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
             int captionCenter = showCurrentOdte ? currentCenter : weeklyCenter
             float captionTop = showCurrentOdte ? array.max(odteLevels) : array.max(weeklyLevels)
             float captionBottom = showCurrentOdte ? array.min(odteLevels) : array.min(weeklyLevels)
-            label optimal = label.new(bar_index + captionCenter, captionTop + math.max(18.0, (captionTop - captionBottom) / 8), recommendedText, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_down, color=color.new(color.black, 35), textcolor=color.white, size=size.normal)
+            label optimal = label.new(bar_index + captionCenter, captionTop + math.max(18.0, (captionTop - captionBottom) / 8), recommendedText, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_down, color=color.new(color.black, 35), textcolor=color.white, size=labelTextSize)
             array.push(drawnLabels, optimal)
         if showPrevious
             renderProfile(prevLevels, prevValues, bar_index + prevCenter, "0DTE {previous_slot}", actualScale, adjusted, prevCoreLow, prevCoreHigh)
