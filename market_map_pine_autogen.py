@@ -100,6 +100,19 @@ def generate(today, now, basis, sources, news, news_status, output_dir):
         if not src or not safe_source(src, now):
             skipped[slot] = "WAIT_SOURCE_OR_TIMESTAMP"
             continue
+        # Never regenerate today's earlier slots using a substantially later
+        # calendar or changing external inputs. Live captures only.
+        source_clock = datetime.fromisoformat(
+            str(src["download_rome"]).replace("Z", "+00:00")).astimezone(ROME)
+        elapsed_minutes = (now - source_clock).total_seconds() / 60.0
+        if elapsed_minutes > 75:
+            skipped[slot] = "WAIT_STALE_SNAPSHOT_NO_BACKFILL"
+            continue
+        # A missing calendar is an explicitly missing source, not permission
+        # to generate a misleading "exact Dashboard" copy.
+        if news_status != "VERIFIED_AT_GENERATION":
+            skipped[slot] = "WAIT_NEWS_SOURCE_UNVERIFIED"
+            continue
         if prior and (not older or not safe_source(older, now)):
             skipped[slot] = "WAIT_PRIOR_SOURCE"
             continue
