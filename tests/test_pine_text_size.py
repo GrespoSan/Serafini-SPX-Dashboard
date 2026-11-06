@@ -13,7 +13,9 @@ def profile(expiry="2026-11-06", magnitude=100):
 
 class TextSizeRegression(unittest.TestCase):
     def check_common(self, script):
-        self.assertIn('labelSizeChoice = input.string("Grande", "Dimensione scritte Pine"', script)
+        self.assertIn('labelSizeChoice = input.string("Normale", "Dimensione scritte Pine"', script)
+        self.assertIn('options=["Piccola", "Normale", "Grande", "Molto grande"]', script)
+        self.assertIn('tooltip="Regola la dimensione di intestazioni, avvisi e news. Default Normale."', script)
         self.assertIn('labelTextSize = switch labelSizeChoice', script)
         self.assertIn('size=labelTextSize', script)
         self.assertIn("var array<float> odteValues", script)
@@ -29,6 +31,15 @@ class TextSizeRegression(unittest.TestCase):
                          "2026-11-06", old, new, "2026-11-06 06:30:00")
                 self.check_common(script)
                 self.assertIn("showPrevious = input.bool(true", script)
+
+    def test_emergency_current_snapshot_uses_normal_default(self):
+        # Emergency uses the same common Serafini exporter.
+        script = make_pine(
+            profile(), profile("2026-11-13"), 25, "2026-11-06",
+            "2026-11-06 06:30:00", "Download manuale 07:30",
+            current_only=True)
+        self.check_common(script)
+        self.assertIn("Serafini SPX NET GAMMA", script)
 
     def test_news_same_size(self):
         script = make_pine(profile(), profile("2026-11-13"), 25, "2026-11-06", "2026-11-06 06:30:00", "Mattina 07:30")

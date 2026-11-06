@@ -29,7 +29,7 @@ class PointInTime(unittest.TestCase):
             self.assertEqual(result["produced"][0]["slot"], "20:30")
             files=list(Path(tmp).glob("*.pine"))
             self.assertEqual(len(files),1)
-            self.assertTrue(all('labelSizeChoice = input.string("Grande"' in f.read_text()
+            self.assertTrue(all('labelSizeChoice = input.string("Normale"' in f.read_text()
                                 for f in files))
             self.assertEqual(result["news_status"],"VERIFIED_AT_GENERATION")
     def test_future_frame_not_exported(self):
