@@ -1332,6 +1332,20 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
             st.caption("News Pine non disponibili: calendario non verificabile. "
                        "Le esportazioni NET GAMMA restano utilizzabili.")
 
+    # MARKET MAP optional archive: persist the exact 4 Pine outputs only AFTER
+    # export generation and macro overlay. Does not modify the Pine code.
+    if scripts and st.secrets.get('MARKET_MAP_PINE_ARCHIVE_ENABLED', False):
+        try:
+            from market_map_pine_archive import archive_pine_exports
+            archive_result = archive_pine_exports(
+                day, scripts, sources, float(offset), st.secrets)
+            stored = archive_result.get('archived') or {}
+            st.caption(f'Market Map · archivio Pine Drive: {len(stored)} file verificati')
+        except Exception as exc:
+            # Do not let archiving interfere with existing Pine download buttons.
+            st.warning('Archivio Market Map Pine non riuscito (' +
+                       type(exc).__name__ + '). Gli export originali restano disponibili.')
+
     columns = st.columns(4, gap='small')
     descriptions = (
         ('07:30', '07:30 · 0DTE + Weekly'),
