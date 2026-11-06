@@ -16,6 +16,13 @@ class TextSizeRegression(unittest.TestCase):
         self.assertIn('labelSizeChoice = input.string("Normale", "Dimensione scritte Pine"', script)
         self.assertIn('options=["Piccola", "Normale", "Grande", "Molto grande"]', script)
         self.assertIn('tooltip="Regola la dimensione di intestazioni, avvisi e news. Default Normale."', script)
+        self.assertIn('positiveColor = input.color(color.rgb(0, 143, 76), "NET GAMMA positivo")', script)
+        self.assertNotIn('color.rgb(0, 230, 117)', script)
+        self.assertIn('negativeColor = input.color(color.rgb(242, 54, 69)', script)
+        # Stile, spessore e dimensione NON vanno alterati.
+        self.assertIn('color=g >= 0 ? positiveColor : negativeColor, width=5', script)
+        self.assertIn('extend=extend.right, color=positiveColor, style=line.style_dashed, width=1', script)
+        self.assertIn('extend=extend.right, color=negativeColor, style=line.style_dashed, width=1', script)
         self.assertIn('labelTextSize = switch labelSizeChoice', script)
         self.assertIn('size=labelTextSize', script)
         self.assertIn("var array<float> odteValues", script)
