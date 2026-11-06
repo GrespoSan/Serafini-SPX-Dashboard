@@ -24,26 +24,27 @@ class PointInTime(unittest.TestCase):
     def test_four_slots(self):
         inputs={slot:src(slot) for slot in ("07:30","13:30","15:50","20:30")}
         with tempfile.TemporaryDirectory() as tmp:
-            result=generate(DAY,NOW,25,inputs,[],"NOT_CONFIGURED",Path(tmp))
-            self.assertEqual(len(result["produced"]),4)
+            result=generate(DAY,NOW,25,inputs,[],"VERIFIED_AT_GENERATION",Path(tmp))
+            self.assertEqual(len(result["produced"]),1)
+            self.assertEqual(result["produced"][0]["slot"], "20:30")
             files=list(Path(tmp).glob("*.pine"))
-            self.assertEqual(len(files),4)
+            self.assertEqual(len(files),1)
             self.assertTrue(all('labelSizeChoice = input.string("Grande"' in f.read_text()
                                 for f in files))
-            self.assertEqual(result["news_status"],"NOT_CONFIGURED")
+            self.assertEqual(result["news_status"],"VERIFIED_AT_GENERATION")
     def test_future_frame_not_exported(self):
         inputs={"07:30":src("07:30"),"20:30":src("20:30")}
         early=datetime(2026,11,6,8,0,tzinfo=ROME)
         with tempfile.TemporaryDirectory() as tmp:
-            result=generate(DAY,early,25,inputs,[],"NOT_CONFIGURED",Path(tmp))
+            result=generate(DAY,early,25,inputs,[],"VERIFIED_AT_GENERATION",Path(tmp))
             self.assertEqual(len(result["produced"]),1)
             self.assertEqual(result["skipped"]["20:30"],"WAIT_SOURCE_OR_TIMESTAMP")
     def test_missing_source_yields_wait(self):
         with tempfile.TemporaryDirectory() as tmp:
             result=generate(DAY,NOW,25,{"07:30":src("07:30")},[],
-                            "NOT_CONFIGURED",Path(tmp))
-            self.assertEqual(len(result["produced"]),1)
-            self.assertEqual(len(result["skipped"]),3)
+                            "VERIFIED_AT_GENERATION",Path(tmp))
+            self.assertEqual(len(result["produced"]),0)
+            self.assertEqual(len(result["skipped"]),4)
 
 if __name__ == "__main__":
     unittest.main()
