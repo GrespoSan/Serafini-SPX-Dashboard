@@ -23,9 +23,9 @@ function pineCheckConnection() {
   const root = DriveApp.getFolderById(folderId);
   if (root.isTrashed()) throw Error('Pine folder is trashed');
   const repo = pineApi_(token, '');
-  if (repo.full_name !== PINE_CONFIG.repo || !repo.private)
-    throw Error('Unexpected GitHub repo or visibility');
-  Logger.log('MARKET MAP Pine: token/read access and private Drive folder verified');
+  if (repo.full_name !== PINE_CONFIG.repo)
+    throw Error('Unexpected GitHub repository');
+  Logger.log('MARKET MAP Pine: token/read access and Drive folder verified');
 }
 
 function pineApi_(token, endpoint) {
