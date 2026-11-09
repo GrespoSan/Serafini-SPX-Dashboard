@@ -14,13 +14,46 @@ from replay_prices import candles_up_to, load_es_candles
 ROME = ZoneInfo("Europe/Rome")
 
 
+def _frame_download_rome(day, item):
+    """Usa il timestamp di acquisizione reale, non uno slot ricostruito."""
+    value = item.get("download_rome")
+    if not value:
+        raise ValueError("Replay: download_rome assente; orario non verificabile")
+    try:
+        recorded = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("Replay: timestamp download non valido") from exc
+    if recorded.tzinfo is None:
+        raise ValueError("Replay: timestamp download privo di fuso")
+    local = recorded.astimezone(ROME)
+    if local.date() != day:
+        raise ValueError("Replay: data download diversa dalla giornata scelta")
+    return local
+
+
+def _plot_rome_clock(stamp):
+    """Solo grafica: ora civile di Roma senza offset per asse Plotly stabile.
+
+    Il timestamp aware resta intatto per scegliere le candele già chiuse.
+    """
+    if stamp.tzinfo is None:
+        raise ValueError("Timestamp candela senza fuso: impossibile localizzare")
+    return stamp.astimezone(ROME).replace(tzinfo=None).isoformat(timespec="seconds")
+
+
+def _time_window_rome(day, last_download):
+    """Finestra invariata in ogni frame: inizio giornata fino a fine replay."""
+    start = datetime.combine(day, time.min)
+    end = max(datetime.combine(day, time(18, 35)),
+              last_download.astimezone(ROME).replace(tzinfo=None) + timedelta(minutes=5))
+    return [start.isoformat(timespec="seconds"), end.isoformat(timespec="seconds")]
+
+
 def combined_graph(gamma_graph, available, day, kind, offset, gamma_bounds, gamma_ybounds):
     """Crea un grafico animato 5m ES=F (sinistra) + NET GAMMA (destra)."""
     data = load_es_candles(day)
-    end_of_last_slot = max(
-        datetime.combine(day, time.fromisoformat(item["clock"]), tzinfo=ROME)
-        for _, item in available
-    )
+    end_of_last_slot = max(_frame_download_rome(day, item) for _, item in available)
+    chart_time_window = _time_window_rome(day, end_of_last_slot)
     relevant = candles_up_to(data, end_of_last_slot)
     if relevant.empty:
         raise ValueError("Nessuna candela ES=F chiusa prima degli snapshot disponibili")
@@ -37,10 +70,13 @@ def combined_graph(gamma_graph, available, day, kind, offset, gamma_bounds, gamm
     )
 
     def candle_trace(item):
-        cutoff = datetime.combine(day, time.fromisoformat(item["clock"]), tzinfo=ROME)
+        cutoff = _frame_download_rome(day, item)
         subset = candles_up_to(data, cutoff)
+        # Sempre visualizzazione Europe/Rome, mai mixing tra UTC, browser e Roma.
+        # La selezione usa invece i timestamp originali timezone-aware.
+        clock_axis = [_plot_rome_clock(stamp) for stamp in subset["bar_close"]]
         return go.Candlestick(
-            x=subset["bar_close"].tolist(),
+            x=clock_axis,
             open=subset["open"].tolist(), high=subset["high"].tolist(),
             low=subset["low"].tolist(), close=subset["close"].tolist(),
             increasing_line_color="#22c55e", decreasing_line_color="#ef4444",
@@ -61,12 +97,13 @@ def combined_graph(gamma_graph, available, day, kind, offset, gamma_bounds, gamm
             data=[candle_trace(slot_to_item[frame.name]),
                   frame.data[0], frame.data[1]],
             traces=[0, 1, 2],
-            # gamma_graph anima l'asse NET GAMMA come xaxis; qui quel
-            # pannello e' il secondo subplot (xaxis2). Le candele conservano
-            # invece il loro asse temporale e i prezzi originali.
+            # Fissa anche xaxis (candele) ad ogni step: Plotly non deve
+            # ripristinare un autorange incoerente dopo slider/play.
+            # xaxis2 resta la scala NET GAMMA dinamica della fotografia.
             layout=go.Layout(
                 title=frame.layout.title,
-                xaxis2=dict(range=list(frame.layout.xaxis.range)),
+                xaxis=dict(range=chart_time_window, autorange=False),
+                xaxis2=dict(range=list(frame.layout.xaxis.range), autorange=False),
             ),
         )
         for frame in gamma_graph.frames
@@ -82,16 +119,13 @@ def combined_graph(gamma_graph, available, day, kind, offset, gamma_bounds, gamm
         sliders=gamma_graph.layout.sliders,
         showlegend=False,
     )
-    # Con i nuovi rilevamenti delle 20:00 e 21:30, la finestra temporale
-    # non deve piu' tagliare le candele successive alle 18:35.
-    right_edge = max(datetime.combine(day, time(18, 35), tzinfo=ROME),
-                     end_of_last_slot + timedelta(minutes=5))
+    # Tick e range sono orari CIVILI di Roma senza timezone: Plotly/browser
+    # non possono traslare la data né ampliare l'asse al giorno precedente.
     fig.update_xaxes(
-        title_text="ES=F · 5 minuti (ora Roma)",
-        range=[
-            datetime.combine(day, time(0, 0), tzinfo=ROME),
-            right_edge,
-        ],
+        title_text=f"ES=F · 5 minuti · ora Roma {day:%d/%m/%Y}",
+        type="date", range=chart_time_window, autorange=False,
+        tick0=chart_time_window[0], dtick=3 * 60 * 60 * 1000,
+        tickformat="%H:%M", showgrid=True,
         rangeslider_visible=False, row=1, col=1,
     )
     fig.update_xaxes(
