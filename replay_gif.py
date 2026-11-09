@@ -102,7 +102,7 @@ def generate_gif(available, day, kind, offset, show_extended=True):
         draw.text((candle_left, 79), "ES futures - candele 5 minuti (chiuse allo snapshot)",
                   font=font_caption, fill=WHITE)
         current = {float(row["strike_spx"]): float(row["net_gamma"])
-                   for row in display_rows(item)
+                   for row in display_rows(item)}
         gmin, gmax = dynamic_gamma_bounds(list(current.values()))
         def xgamma(value):
             return gamma_left + (float(value) - gmin) / (gmax - gmin) * (gamma_right - gamma_left)
