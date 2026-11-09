@@ -18,8 +18,6 @@ from pine_sources import load_export_profiles
 from gamma_scale import profile_gamma_bounds, gamma_components
 from serafini_sigma import serafini_cash_levels, add_sigma_markers
 from operational_levels import find_candidates, proposed_levels, candidate_csv
-from option_structure import build_structure, make_study_levels, future_es_to_spx_strikes
-from payoff_charts import render_payoff_charts
 from asia_range import download_asia_range
 from es_spx_basis import download_and_calculate
 from decimal import Decimal, ROUND_HALF_UP
@@ -1115,237 +1113,37 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                     mime='text/csv', key=f'csv_{detail_title}_{choice}',
                 )
     if candidate_0dte is not None:
-        with st.expander('STRUTTURA OPZIONI SPERIMENTALE', expanded=False):
-            st.warning('Questi sono CANDIDATI basati sulle tre barre NET GAMMA più intense per lato, NON livelli C1–C3/P1–P3 confermati da Serafini. Non sono segnali automatici. Il calcolo NET GAMMA resta invariato.')
-            st.caption('Criterio fisso di prova: tra i 25 strike sopra la chiusura SPX, le tre barre NET GAMMA positive più lunghe; tra i 25 sotto, le tre barre negative con valore assoluto maggiore. Nessun confronto con le barre vicine. C1→C3 in ordine crescente di prezzo, P1→P3 in ordine decrescente.')
-            # Le opzioni restano SPX; l'operativita' visualizza i livelli ES.
-            # Il differenziale è quello della fotografia selezionata.
-            if offset is not None and math.isfinite(offset):
-                st.caption(f'Livelli visualizzati sul future ES · '
-                           f'ES = strike SPX + differenziale {offset:+.2f}. '
-                           'Il NET GAMMA Cboe resta associato allo strike SPX reale.')
-            else:
-                st.info('Differenziale ES − SPX non disponibile: i selettori '
-                        'mostrano temporaneamente gli strike SPX originali. '
-                        'Inserisci il differenziale in alto per usare i livelli ES.')
-            suggestions = proposed_levels(candidate_0dte)
-            chosen = {}
-            for side, prefix, direction in [('call', 'C', 'Call'), ('put', 'P', 'Put')]:
-                entries = candidate_0dte[side]
-                st.markdown(f'**{direction} — {len(entries)} barre eleggibili; prime tre proposte per intensità**')
-                if len(entries) < 3:
-                    st.info('Meno di tre barre del segno richiesto: non si inventano livelli mancanti.')
-                # Tre selettori indipendenti, con i suggerimenti come valori iniziali.
-                options = [None] + [e['strike_spx'] for e in entries]
-                option_index = {e['strike_spx']: e for e in entries}
-                cols = st.columns(3)
-                for n in (1, 2, 3):
-                    label = f'{prefix}{n}'
-                    default = suggestions.get(label, {}).get('strike_spx')
-                    idx = options.index(default) if default in options else 0
-                    with cols[n-1]:
-                        selected = st.selectbox(
-                            (f'{label} · livello future ES' if offset is not None
-                             and math.isfinite(offset) else f'{label} · strike SPX'),
-                            options=options, index=idx,
-                            format_func=lambda v: ('Non assegnato' if v is None
-                                else (f'{v + offset:,.2f} ES'
-                                      if offset is not None and math.isfinite(offset)
-                                      else f'{v:g} SPX')),
-                            key=f'v9_{choice}_{label}_{ref}',
-                        )
-                    if selected is not None:
-                        chosen[label] = option_index[selected]
-            wrong_order = any(
-                all(f'{prefix}{n}' in chosen for n in (1,2,3)) and
-                not (chosen[f'{prefix}1']['strike_spx'] < chosen[f'{prefix}2']['strike_spx'] < chosen[f'{prefix}3']['strike_spx'])
-                if prefix == 'C' else
-                all(f'{prefix}{n}' in chosen for n in (1,2,3)) and
-                not (chosen[f'{prefix}1']['strike_spx'] > chosen[f'{prefix}2']['strike_spx'] > chosen[f'{prefix}3']['strike_spx'])
-                for prefix in ('C','P')
-            )
-            if len({x['strike_spx'] for x in chosen.values()}) != len(chosen):
-                st.error('Uno stesso strike è stato selezionato più volte. Correggere prima di usare i livelli.')
-            elif wrong_order:
-                st.error('Ordine non coerente: C1 < C2 < C3 e P1 > P2 > P3. Correggi i candidati.')
-            else:
-                ordered = []
-                for label in ('C1','C2','C3','P1','P2','P3'):
-                    if label in chosen:
-                        item = chosen[label]
-                        ordered.append({'Livello candidato': label,
-                                        'Livello future ES': None if offset is None else item['strike_spx'] + offset,
-                                        'Strike opzione SPX': item['strike_spx'],
-                                        'NET GAMMA': round(item['net_gamma'], 4),
-                                        'Origine': 'top 3 per intensità / selezione modificabile'})
-                st.dataframe(ordered, hide_index=True, width="stretch")
-                if offset is None:
-                    st.caption('Inserisci un differenziale ES − SPX verificato per visualizzare anche i prezzi ES.')
-                st.caption('La numerazione resta SPERIMENTALE. Da Serafini: C1 vicino al Gamma Flip, C2 gamma particolarmente pronunciato, C3 livello esterno vicino a 1 deviazione standard; per Put logica analoga da verificare. Qui il Gamma Flip NON è calcolato; i tre top-per-intensità sono solo una proposta modificabile.')
-                # Unica fonte dei livelli: selettori C1/P1 già esistenti.
-                # Non visualizziamo ancora il quadro: verrà reso nel placeholder in alto.
-                asia_c1 = (chosen['C1']['strike_spx'] + offset
-                           if offset is not None and 'C1' in chosen else None)
-                asia_p1 = (chosen['P1']['strike_spx'] + offset
-                           if offset is not None and 'P1' in chosen else None)
-                # Per il QUADRO delle 09:00 si possono usare soltanto livelli
-                # acquisiti entro quell'ora; altrimenti sarebbero look-ahead.
-                if download_clock is None or download_clock > '09:00':
-                    asia_c1 = None
-                    asia_p1 = None
-                    st.caption('Quadro 09:00: livelli dello snapshot selezionato '
-                               'successivi alle 09:00 o senza orario verificato. '
-                               'Non li uso per ricostruire un verdetto storico.')
-                # Espone i livelli effettivamente selezionati al report AI,
-                # identificando snapshot e riferimento: mai riusare livelli di un altro giorno.
-                st.session_state[f'asia_levels_{day.isoformat()}'] = {
-                    'snapshot': choice, 'reference_spx': float(ref),
-                    'basis': offset, 'c1_spx': chosen.get('C1', {}).get('strike_spx'),
-                    'p1_spx': chosen.get('P1', {}).get('strike_spx'),
-                    'selection': 'manuale su candidati sperimentali',
-                }
-                # Sezione separata: interpretazione della struttura, mai inferenza
-                # automatica sul verso delle singole transazioni.
-                with st.expander('STRUTTURA OPZIONI — 2 Vertical + Strangle', expanded=True):
-                    # Identifica esattamente lo snapshot su cui sono basati
-                    # livelli, struttura e payoff. Non inferire l'ora dal nome file.
-                    selection_description = ('Ultimo rilevamento'
-                                             if choice == names[0] else acquisition_label)
-                    clock_label = download_clock or 'non disponibile'
-                    st.caption(
-                        f'Rilevamento: {selection_description} · {day:%d/%m/%Y} · '
-                        f'download Roma {clock_label} · file {choice}'
-                    )
-                    st.warning('Schema di lettura dalle slide: NON è una prova di opzioni comprate o vendute. '
-                               'Il NET GAMMA aggregato non identifica il lato effettivo delle operazioni.')
-                    st.caption('I sei livelli derivano inizialmente dai selettori C1–C3 '
-                               'e P1–P3 sopra. Per studiare alternative, attiva la '
-                               'modifica manuale: la simulazione NON cambia i '
-                               'livelli ufficiali, il NET GAMMA o le altre analisi.')
-                    study_chosen = chosen
-                    study_error = None
-                    lab_root = f'opt_study_{day.isoformat()}_{choice}'
-                    study_enabled = st.checkbox(
-                        'Studio manuale — modifica i sei livelli future ES',
-                        value=False, key=f'{lab_root}_enabled',
-                        help='Inserisci direttamente i prezzi del future ES. '
-                             'Il programma calcola internamente gli strike SPX '
-                             'sottraendo il differenziale ES−SPX selezionato. '
-                             'Il NET GAMMA Cboe non viene modificato.',
-                    )
-                    if study_enabled:
-                        st.caption(
-                            'Inserisci i sei prezzi sul future ES. '
-                            'Per la simulazione degli spread su opzioni SPX '
-                            'ogni livello viene convertito sottraendo il '
-                            'differenziale ES−SPX della fotografia. '
-                            'Le posizioni e i premi NON sono osservati.'
-                        )
-                        labels = ('C1', 'C2', 'C3', 'P1', 'P2', 'P3')
-                        if offset is None or not math.isfinite(offset):
-                            study_error = (
-                                'Per modificare i livelli in ES occorre prima '
-                                'un differenziale ES−SPX valido, nel campo in alto.'
-                            )
-                        elif not all(label in chosen for label in labels):
-                            study_error = (
-                                'Prima assegna tutti e sei i livelli nei selettori '
-                                'della sezione STRUTTURA OPZIONI SPERIMENTALE.'
-                            )
-                        else:
-                            # Una modifica al differenziale non deve lasciare
-                            # valori ES vecchi in un nuovo scenario di prezzo.
-                            es_key_prefix = f'{lab_root}_es_basis_{offset:+.6f}'
-                            # Reset PRIMA dei widget Streamlit, nel contesto
-                            # della fotografia e del differenziale selezionati.
-                            if st.button(
-                                'Ripristina i sei prezzi ES dai selettori',
-                                key=f'{es_key_prefix}_reset',
-                            ):
-                                for label in labels:
-                                    st.session_state.pop(
-                                        f'{es_key_prefix}_price_{label}', None)
-                                st.rerun()
-                            future_prices = {}
-                            for heading, group in (
-                                ('Call — Vertical + Strangle', ('C1', 'C2', 'C3')),
-                                ('Put — Vertical + Strangle', ('P1', 'P2', 'P3')),
-                            ):
-                                st.markdown(f'**{heading}**')
-                                columns = st.columns(3)
-                                for column, label in zip(columns, group):
-                                    with column:
-                                        future_prices[label] = st.number_input(
-                                            f'{label} · livello future ES',
-                                            min_value=0.25,
-                                            value=float(chosen[label]['strike_spx']) + float(offset),
-                                            step=0.25, format='%.2f',
-                                            key=f'{es_key_prefix}_price_{label}',
-                                        )
-                            try:
-                                # Conversione reversibile ES -> SPX per payoff.
-                                # La struttura candidata originale rimane isolata.
-                                manual_strikes_spx = future_es_to_spx_strikes(
-                                    future_prices, offset)
-                                study_chosen = make_study_levels(
-                                    chosen, manual_strikes_spx,
-                                    computed_profiles.get('0DTE'))
-                            except (ValueError, TypeError, OverflowError) as exc:
-                                study_error = str(exc)
-                            if study_error is None:
-                                changed = [
-                                    label for label in labels
-                                    if abs(study_chosen[label]['strike_spx'] -
-                                           float(chosen[label]['strike_spx'])) > 1e-6
-                                ]
-                                st.caption(
-                                    'Simulazione ES attiva · livelli modificati: ' +
-                                    (', '.join(changed) if changed else 'nessuno') +
-                                    f' · differenziale {offset:+.2f} punti. '
-                                    'Il NET GAMMA è N/D quando lo strike SPX '
-                                    'convertito non compare nel profilo Cboe 0DTE.'
-                                )
-                    if study_error is not None:
-                        st.warning(study_error)
-                    else:
-                        structure = build_structure(study_chosen, offset)
-                        if structure is None:
-                            st.info('Per visualizzare la struttura completa, assegna '
-                                    'sei livelli distinti e ordinati.')
-                        else:
-                            role_rows, measures = structure
-                            # Prezzi future ES in primo piano. Strike delle
-                            # opzioni SPX in seconda colonna per tracciabilità.
-                            future_first_rows = [
-                                {'Livello': row['Livello'],
-                                 'Livello future ES': row['Prezzo ES'],
-                                 'Strike opzione SPX': row['Strike SPX'],
-                                 'Struttura ipotizzata': row['Struttura ipotizzata'],
-                                 'Ruolo ipotizzato': row['Ruolo ipotizzato'],
-                                 'NET GAMMA': row['NET GAMMA'],
-                                 'Lettura operativa': row['Lettura operativa']}
-                                for row in role_rows
-                            ]
-                            st.dataframe(future_first_rows, width="stretch", hide_index=True)
-                            render_payoff_charts(
-                                study_chosen, offset, computed_profiles.get('0DTE'))
-                            left, right = st.columns(2)
-                            with left:
-                                st.markdown('**Scenario rialzista — Vertical Call**')
-                                st.write('Call acquistata: C1 · Call venduta che finanzia: C2')
-                                st.write('Target principale ipotizzato: **C2** · target esteso: **C3**')
-                            with right:
-                                st.markdown('**Scenario ribassista — Vertical Put**')
-                                st.write('Put acquistata: P1 · Put venduta che finanzia: P2')
-                                st.write('Target principale ipotizzato: **P2** · target esteso: **P3**')
-                            st.caption('Distanze fra livelli (punti ES, identiche in SPX con differenziale costante): '
-                                       + ' · '.join(f'{k}: {v:g}' for k,v in measures.items()))
-                            st.caption('Il superamento dei livelli esterni richiede lettura del contesto e conferme; '
-                                       'qui non si calcolano segnali, volatilità attesa o probabilità.')
-            st.download_button('Scarica graduatoria barre NET GAMMA 0DTE (CSV)',
-                               candidate_csv(candidate_0dte, offset),
-                               file_name=f'Candidati_Top3_Gamma_{day.isoformat()}_{choice}.csv',
-                               mime='text/csv', key=f'v9_candidates_{choice}')
+        from option_structure_lab import render_lab
+        snapshot_description = (
+            'Ultimo rilevamento' if choice == names[0] else acquisition_label
+        )
+        # Un unico laboratorio: selezione Cboe O simulazione manuale, non
+        # due tabelle ripetute. La funzione restituisce SOLTANTO le scelte
+        # automatiche, mai gli strike ipotetici della simulazione.
+        chosen = render_lab(
+            candidate_0dte, computed_profiles.get('0DTE'), offset,
+            day, choice, ref, snapshot_description, download_clock,
+        )
+        if chosen:
+            asia_c1 = (chosen['C1']['strike_spx'] + offset
+                       if offset is not None else None)
+            asia_p1 = (chosen['P1']['strike_spx'] + offset
+                       if offset is not None else None)
+            # Il QUADRO 09:00 non usa dati futuri, anche se il laboratorio
+            # viene aperto dopo il rilevamento.
+            if download_clock is None or download_clock > '09:00':
+                asia_c1 = None
+                asia_p1 = None
+                st.caption(
+                    'Quadro 09:00: livello 0DTE corrente successivo alle 09:00 '
+                    'o senza timestamp verificato: non usato retroattivamente.'
+                )
+            st.session_state[f'asia_levels_{day.isoformat()}'] = {
+                'snapshot': choice, 'reference_spx': float(ref),
+                'basis': offset, 'c1_spx': chosen['C1']['strike_spx'],
+                'p1_spx': chosen['P1']['strike_spx'],
+                'selection': 'candidati Cboe selezionati · nessuna simulazione',
+            }
     # Quadro storico delle 09:00 indipendente dallo snapshot selezionato.
     # Se il selezionato è successivo alle 09:00, recupera SOLTANTO il 07:30
     # ufficiale, verificandone il log con data/ora completa e scadenza 0DTE.
