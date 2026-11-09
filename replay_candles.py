@@ -51,8 +51,8 @@ def _time_window_rome(day, last_download):
 
 def combined_graph(gamma_graph, available, day, kind, offset, gamma_bounds, gamma_ybounds):
     """Crea un grafico animato 5m ES=F (sinistra) + NET GAMMA (destra)."""
-    data = load_es_candles(day)
     end_of_last_slot = max(_frame_download_rome(day, item) for _, item in available)
+    data = load_es_candles(day, required_until=end_of_last_slot)
     chart_time_window = _time_window_rome(day, end_of_last_slot)
     relevant = candles_up_to(data, end_of_last_slot)
     if relevant.empty:
@@ -141,4 +141,10 @@ def combined_graph(gamma_graph, available, day, kind, offset, gamma_bounds, gamm
         range=[min_y, max_y], tickformat=",.0f",
         fixedrange=True, row=1, col=2,
     )
+    # Fornisci visibilità della provenienza senza alterare tracciati/gamma.
+    fig.update_layout(meta={
+        "candle_source": data.attrs.get("candle_source", "Fonte ES N/D"),
+        "excluded": data.attrs.get("excluded", []),
+        "fallback_reason": data.attrs.get("massive_fallback_reason", ""),
+    })
     return fig
