@@ -14,7 +14,7 @@ import streamlit as st
 from net_gamma import profile, read_snapshot, visual_profile
 from feed_quality import summarize_timeline
 from replay_scale import dynamic_gamma_bounds
-from replay_profiles import choose_rows
+from replay_profiles import choose_rows, gamma_bar_trace
 from spx_market_clock import classify_0dte_download, cash_open_rome, spxw_expiry_close_rome
 
 ROME = ZoneInfo("Europe/Rome")
@@ -321,18 +321,10 @@ def render(store, week, logs, view_mode=None):
     def frame_data(slot, item):
         vals = {float(r["strike_spx"]): float(r["net_gamma"])
                 for r in display_rows(item)}
-        # Uno strike presente in altri frame ma ASSENTE in questo non ha
-        # Gamma zero: None impedisce di trasformare una lacuna in un dato.
-        xs = [vals.get(strike) for strike in strikes]
-        colors = ["#22c55e" if v is not None and v >= 0
-                  else "#ef4444" if v is not None else "#00000000"
-                  for v in xs]
-        bars = go.Bar(
-            x=xs, y=yvalues, orientation="h", width=3.6,
-            marker_color=colors,
-            hovertemplate="Livello %{y:,.2f}<br>NET Gamma %{x:+.3f}<extra></extra>",
-            name=f"NET Gamma {slot}",
-        )
+        # Il helper crea realmente il go.Bar per il Replay (e i frame).
+        # Nessun gamma=0 inventato per strike assenti: usa x=None con un
+        # colore trasparente Plotly valido, rgba(0,0,0,0).
+        bars = gamma_bar_trace(slot, strikes, yvalues, vals)
         # Le etichette visualizzano la STESSA coordinata verticale delle barre:
         # prezzo ES (strike SPX + basis), oppure strike SPX se manca il basis.
         # Non si mostra il valore numerico NET GAMMA come etichetta:
