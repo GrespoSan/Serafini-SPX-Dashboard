@@ -176,7 +176,7 @@ def show_replay(week, store, plotter):
         # ufficiale: il colore interessa il VALORE, non solo l'eventuale delta.
         from edge_triptych import _colored_edge_metric, _format_edge_quality
         _colored_edge_metric(
-            st, "Regime Edge",
+            cols[4], "Regime Edge",
             str(edge.get("regime", "N/D")) if good else "N/D",
             edge.get("regime") if good else None,
         )
