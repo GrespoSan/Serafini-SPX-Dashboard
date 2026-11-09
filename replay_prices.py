@@ -1,10 +1,7 @@
-"""Candele futures ES per Replay: Massive 5m se completo; fallback Yahoo verificato.
+"""Replay ES: soltanto barre Massive Futures 5m verificate.
 
-- Il Net Gamma Cboe resta completamente separato.
-- Non si fondono barre di due provider nello stesso grafico.
-- Barre Yahoo con grave salto di apertura DOPO una lacuna temporale vengono
-  escluse (non inventate, interpolate o sostituite con prezzi non verificati).
-- Timestamp aware Europe/Rome e filtro solo barre CHIUSE entro lo snapshot.
+Se Massive non copre il periodo selezionato, il grafico con candele
+non viene disegnato. Nessuna interpolazione o modifica ai dati NET GAMMA.
 """
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -12,7 +9,6 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import requests
 import streamlit as st
-import yfinance as yf
 
 ROME = ZoneInfo("Europe/Rome")
 UTC = timezone.utc
@@ -54,63 +50,6 @@ def _validated_candles(frame, day):
     return out.reset_index(drop=True)
 
 
-def remove_suspect_gap_bars(frame):
-    """Esclude solo evidenti buchi+anomalie, senza consultare barre FUTURE.
-
-    Caso osservato: Yahoo 09/11/2026 11:50 Roma, dopo una barra 11:45
-    mancante, Open -34.75 dal precedente Close e chiusura quasi invariata.
-    L'identificazione è generale, puramente sui dati già chiusi, non legata
-    a uno specifico orario o al prezzo della giornata.
-    """
-    keep = [True] * len(frame)
-    warnings = []
-    for i in range(1, len(frame)):
-        previous, current = frame.iloc[i - 1], frame.iloc[i]
-        gap = (current["bar_close"] - previous["bar_close"]).total_seconds() / 60
-        open_jump = abs(float(current["open"]) - float(previous["close"]))
-        close_distance = abs(float(current["close"]) - float(previous["close"]))
-        bar_range = float(current["high"]) - float(current["low"])
-        if (5.1 < gap <= 30 and open_jump >= 15.0 and
-                close_distance <= 6.0 and bar_range >= open_jump * 0.8):
-            keep[i] = False
-            warnings.append(current["bar_close"].strftime("%H:%M"))
-    result = frame.loc[keep].reset_index(drop=True)
-    if result.empty:
-        raise ValueError("Tutte le candele Yahoo sospette: grafico non disponibile.")
-    return result, warnings
-
-
-@st.cache_data(ttl=240, show_spinner=False, max_entries=12)
-def _yahoo_candles(day):
-    start, end = _day_window(day)
-    if (datetime.now(UTC) - start.astimezone(UTC)).days > 59:
-        raise ValueError("Yahoo 5m non conserva normalmente questa giornata (>59 giorni)")
-    raw = yf.download(
-        "ES=F", start=(day - timedelta(days=1)).isoformat(),
-        end=(day + timedelta(days=2)).isoformat(),
-        interval="5m", auto_adjust=False, progress=False,
-        prepost=True, threads=False,
-    )
-    if raw is None or raw.empty:
-        raise ValueError("Candele ES=F 5m non disponibili da Yahoo")
-    if isinstance(raw.columns, pd.MultiIndex):
-        raw.columns = raw.columns.get_level_values(0)
-    if any(k not in raw for k in ("Open", "High", "Low", "Close")):
-        raise ValueError("OHLC mancanti da Yahoo.")
-    if raw.index.tz is None:
-        raise ValueError("Yahoo senza fuso orario: non utilizzabile.")
-    # Yahoo indicizza per apertura: convertire a CHIUSURA per il cutoff.
-    frame = pd.DataFrame({
-        "bar_close": raw.index.tz_convert(ROME) + pd.Timedelta(minutes=5),
-        "open": raw["Open"].to_numpy(),
-        "high": raw["High"].to_numpy(),
-        "low": raw["Low"].to_numpy(),
-        "close": raw["Close"].to_numpy(),
-    })
-    cleaned, exclusions = remove_suspect_gap_bars(_validated_candles(frame, day))
-    cleaned.attrs["candle_source"] = "Yahoo ES=F · 5m verificato"
-    cleaned.attrs["excluded"] = exclusions
-    return cleaned
 
 
 @st.cache_data(ttl=180, show_spinner=False, max_entries=12)
@@ -156,7 +95,6 @@ def _massive_candles(day, contract, _api_key):
             continue
     frame = _validated_candles(pd.DataFrame(records), day)
     frame.attrs["candle_source"] = f"Massive Futures {contract} · CME 5m"
-    frame.attrs["excluded"] = []
     return frame
 
 
@@ -187,34 +125,29 @@ def massive_covers_requested_interval(frame, snapshot_at):
 
 
 def load_es_candles(day, required_until=None):
-    """Massive se copre l'intero Replay; fallback Yahoo con controllo qualità.
-
-    La scelta della fonte si applica al grafico INTERO, mai a singole barre.
-    """
+    """Sola fonte Massive ES 5m: rifiuta dati mancanti o non aggiornati."""
     _day_window(day)
-    if required_until is not None and required_until.tzinfo is None:
-        raise ValueError("Snapshot Replay privo di fuso orario")
+    if required_until is None or required_until.tzinfo is None:
+        raise ValueError("Massive: orario snapshot assente o privo di fuso.")
     try:
-        key = str(st.secrets.get("MASSIVE_API_KEY", "")).strip()
+        api_key = str(st.secrets.get("MASSIVE_API_KEY", "")).strip()
         contract = str(st.secrets.get("MASSIVE_ES_CONTRACT", "")).strip().upper()
     except Exception:
-        key, contract = "", ""
-    reason = ""
-    if key and contract and required_until is not None:
-        try:
-            massive = _massive_candles(day, contract, key)
-            if massive_covers_requested_interval(massive, required_until):
-                return massive
-            latest = massive["bar_close"].max().strftime("%H:%M")
-            reason = f"Massive {contract} non copre ancora lo snapshot (ultima candela {latest} Roma)"
-        except (requests.RequestException, ValueError, KeyError, TypeError, OverflowError) as exc:
-            # Non mostrare token o URL autenticati nell'interfaccia.
-            reason = f"Massive {contract} non disponibile per il Replay ({type(exc).__name__})"
-    else:
-        reason = "Massive Futures non configurato per il Replay"
-    yahoo = _yahoo_candles(day)
-    yahoo.attrs["massive_fallback_reason"] = reason
-    return yahoo
+        api_key, contract = "", ""
+    if not api_key or not contract:
+        raise ValueError("Massive Futures ES non configurato nel Replay.")
+    try:
+        massive = _massive_candles(day, contract, api_key)
+    except requests.RequestException as exc:
+        raise ValueError("Massive Futures ES non raggiungibile o non autorizzato.") from exc
+    if not massive_covers_requested_interval(massive, required_until):
+        latest = massive["bar_close"].max().strftime("%H:%M")
+        requested = required_until.astimezone(ROME).strftime("%H:%M")
+        raise ValueError(
+            f"Massive {contract}: ultima candela {latest} Roma; "
+            f"rilevamento {requested}. Grafico candele non disponibile."
+        )
+    return massive
 
 
 def candles_up_to(data, downloaded_at):
