@@ -18,7 +18,7 @@ from pine_sources import load_export_profiles
 from gamma_scale import profile_gamma_bounds, gamma_components
 from serafini_sigma import serafini_cash_levels, add_sigma_markers
 from operational_levels import find_candidates, proposed_levels, candidate_csv
-from option_structure import build_structure, make_study_levels
+from option_structure import build_structure, make_study_levels, future_es_to_spx_strikes
 from payoff_charts import render_payoff_charts
 from asia_range import download_asia_range
 from es_spx_basis import download_and_calculate
@@ -1234,28 +1234,39 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                              'Il NET GAMMA Cboe non viene modificato.',
                     )
                     if study_enabled:
-                        st.caption('Modifica gli strike SPX; i prezzi ES si '
-                                   'aggiornano con il differenziale della fotografia. '
-                                   'Il payoff è intrinseco teorico, senza premi '
-                                   'né commissioni. Nessun dato viene salvato nei feed.')
+                        st.caption(
+                            'Inserisci i sei prezzi sul future ES. '
+                            'Per la simulazione degli spread su opzioni SPX '
+                            'ogni livello viene convertito sottraendo il '
+                            'differenziale ES−SPX della fotografia. '
+                            'Le posizioni e i premi NON sono osservati.'
+                        )
                         labels = ('C1', 'C2', 'C3', 'P1', 'P2', 'P3')
-                        if not all(label in chosen for label in labels):
+                        if offset is None or not math.isfinite(offset):
+                            study_error = (
+                                'Per modificare i livelli in ES occorre prima '
+                                'un differenziale ES−SPX valido, nel campo in alto.'
+                            )
+                        elif not all(label in chosen for label in labels):
                             study_error = (
                                 'Prima assegna tutti e sei i livelli nei selettori '
                                 'della sezione STRUTTURA OPZIONI SPERIMENTALE.'
                             )
                         else:
-                            # Il reset avviene PRIMA dell'istanziazione dei campi
-                            # Streamlit, senza mutare stati di widget già disegnati.
+                            # Una modifica al differenziale non deve lasciare
+                            # valori ES vecchi in un nuovo scenario di prezzo.
+                            es_key_prefix = f'{lab_root}_es_basis_{offset:+.6f}'
+                            # Reset PRIMA dei widget Streamlit, nel contesto
+                            # della fotografia e del differenziale selezionati.
                             if st.button(
-                                'Ripristina i sei livelli dai selettori',
-                                key=f'{lab_root}_reset',
+                                'Ripristina i sei prezzi ES dai selettori',
+                                key=f'{es_key_prefix}_reset',
                             ):
                                 for label in labels:
                                     st.session_state.pop(
-                                        f'{lab_root}_strike_{label}', None)
+                                        f'{es_key_prefix}_price_{label}', None)
                                 st.rerun()
-                            manual_strikes = {}
+                            future_prices = {}
                             for heading, group in (
                                 ('Call — Vertical + Strangle', ('C1', 'C2', 'C3')),
                                 ('Put — Vertical + Strangle', ('P1', 'P2', 'P3')),
@@ -1264,30 +1275,35 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                                 columns = st.columns(3)
                                 for column, label in zip(columns, group):
                                     with column:
-                                        manual_strikes[label] = st.number_input(
-                                            f'{label} · strike SPX',
+                                        future_prices[label] = st.number_input(
+                                            f'{label} · livello future ES',
                                             min_value=0.25,
-                                            value=float(chosen[label]['strike_spx']),
-                                            step=5.0, format='%.2f',
-                                            key=f'{lab_root}_strike_{label}',
+                                            value=float(chosen[label]['strike_spx']) + float(offset),
+                                            step=0.25, format='%.2f',
+                                            key=f'{es_key_prefix}_price_{label}',
                                         )
                             try:
+                                # Conversione reversibile ES -> SPX per payoff.
+                                # La struttura candidata originale rimane isolata.
+                                manual_strikes_spx = future_es_to_spx_strikes(
+                                    future_prices, offset)
                                 study_chosen = make_study_levels(
-                                    chosen, manual_strikes,
+                                    chosen, manual_strikes_spx,
                                     computed_profiles.get('0DTE'))
-                            except (ValueError, TypeError) as exc:
+                            except (ValueError, TypeError, OverflowError) as exc:
                                 study_error = str(exc)
                             if study_error is None:
                                 changed = [
                                     label for label in labels
                                     if abs(study_chosen[label]['strike_spx'] -
-                                           float(chosen[label]['strike_spx'])) > 1e-8
+                                           float(chosen[label]['strike_spx'])) > 1e-6
                                 ]
                                 st.caption(
-                                    'Simulazione attiva · strike modificati: ' +
+                                    'Simulazione ES attiva · livelli modificati: ' +
                                     (', '.join(changed) if changed else 'nessuno') +
-                                    '. NET GAMMA N/D quando lo strike non '
-                                    'esiste nel profilo Cboe 0DTE.'
+                                    f' · differenziale {offset:+.2f} punti. '
+                                    'Il NET GAMMA è N/D quando lo strike SPX '
+                                    'convertito non compare nel profilo Cboe 0DTE.'
                                 )
                     if study_error is not None:
                         st.warning(study_error)
@@ -1298,7 +1314,19 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                                     'sei livelli distinti e ordinati.')
                         else:
                             role_rows, measures = structure
-                            st.dataframe(role_rows, width="stretch", hide_index=True)
+                            # Prezzi future ES in primo piano. Strike delle
+                            # opzioni SPX in seconda colonna per tracciabilità.
+                            future_first_rows = [
+                                {'Livello': row['Livello'],
+                                 'Livello future ES': row['Prezzo ES'],
+                                 'Strike opzione SPX': row['Strike SPX'],
+                                 'Struttura ipotizzata': row['Struttura ipotizzata'],
+                                 'Ruolo ipotizzato': row['Ruolo ipotizzato'],
+                                 'NET GAMMA': row['NET GAMMA'],
+                                 'Lettura operativa': row['Lettura operativa']}
+                                for row in role_rows
+                            ]
+                            st.dataframe(future_first_rows, width="stretch", hide_index=True)
                             render_payoff_charts(
                                 study_chosen, offset, computed_profiles.get('0DTE'))
                             left, right = st.columns(2)
@@ -1310,7 +1338,7 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                                 st.markdown('**Scenario ribassista — Vertical Put**')
                                 st.write('Put acquistata: P1 · Put venduta che finanzia: P2')
                                 st.write('Target principale ipotizzato: **P2** · target esteso: **P3**')
-                            st.caption('Ampiezze strike SPX (uguali in punti ES con differenziale costante): '
+                            st.caption('Distanze fra livelli (punti ES, identiche in SPX con differenziale costante): '
                                        + ' · '.join(f'{k}: {v:g}' for k,v in measures.items()))
                             st.caption('Il superamento dei livelli esterni richiede lettura del contesto e conferme; '
                                        'qui non si calcolano segnali, volatilità attesa o probabilità.')
