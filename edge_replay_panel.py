@@ -172,7 +172,14 @@ def show_replay(week, store, plotter):
             _metric_price(title, edge.get(field), shift,
                           previous_edge.get(field) if previous_edge else None)
     with cols[4]:
-        st.metric("Regime Edge", str(edge.get("regime", "N/D")) if good else "N/D")
+        # Riutilizza la formattazione semantica già adottata nel confronto
+        # ufficiale: il colore interessa il VALORE, non solo l'eventuale delta.
+        from edge_triptych import _colored_edge_metric
+        _colored_edge_metric(
+            st, "Regime Edge",
+            str(edge.get("regime", "N/D")) if good else "N/D",
+            edge.get("regime") if good else None,
+        )
     metrics = st.columns(4)
     for col, title, key in zip(metrics[:3],
                                ("NET GEX", "Call GEX", "Put GEX"),
@@ -184,9 +191,13 @@ def show_replay(week, store, plotter):
                       delta=(f"{(amount - old)/1e9:+.2f} mld"
                              if old is not None else None))
     with metrics[3]:
-        st.metric("Segno modellato",
-                  {"Negative":"Negativo","Positive":"Positivo","Zero":"Zero"}.get(
-                      edge.get("modeled_gamma_sign"),"N/D") if good else "N/D")
+        # Il segno modellato è già rappresentato dal Regime Edge:
+        # mostra qui una misura indipendente sulla qualità dell'analisi.
+        quality = edge.get("quality_pct")
+        st.metric(
+            "Qualità Edge",
+            f"{float(quality):.2f}%" if quality is not None else "N/D",
+        )
     if previous_edge is not None:
         st.caption(
             f"Δ rispetto al Replay {compare} · stesso modello e scadenza "
