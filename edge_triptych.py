@@ -119,9 +119,58 @@ def _plot(e, serafini_rows, candles, shift, bounds, reading_clock=None):
     fig.update_xaxes(title_text="GEX mld USD/1%",row=1,col=3)
     return fig
 
+def _publish_official_header_unchanged(week, store, logs, on_valid_gex):
+    """Conserva il GEX di Trend Daily dalla selezione UFFICIALE Serafini.
+
+    Il pannello Replay può essere scelto senza sostituire silenziosamente i
+    KPI del Daily con uno snapshot intraday NON ufficiale.
+    """
+    if on_valid_gex is None:
+        return
+    ctx = st.session_state.get(f"gamma_compare_context_{week}") or {}
+    snapshot = ctx.get("snapshot")
+    if not snapshot or ctx.get("offset") is None:
+        return
+    try:
+        day = ctx["day"]
+        if isinstance(day, str):
+            day = date.fromisoformat(day)
+        raw = store.download(f"{week}/snapshots/{snapshot}")
+        from edge_auto import result_from_snapshot
+        from edge_daily_gex import prepare_daily_gex
+        e = result_from_snapshot(raw, float(ctx["offset"]))
+        if (e.get("sha256") != hashlib.sha256(raw).hexdigest()
+                or e.get("mode") != "0DTE"
+                or e.get("expiries") != [day.isoformat()]):
+            return
+        from gamma_section import _snapshot_download_clock
+        clock = _snapshot_download_clock(store, week, logs or [], snapshot)
+        on_valid_gex(prepare_daily_gex(e, day, clock))
+    except (RuntimeError, ValueError, KeyError, TypeError, OverflowError,
+            OSError, ImportError):
+        return
+
+
 def show(week, store, logs=None, *, on_valid_gex=None):
-    with st.expander("GEX EDGE — CONFRONTO",expanded=False):
-        st.caption("Candele ES=F e profili aggiornati all'apertura o al ricaricamento della pagina. GEX e Serafini restano riferiti alla fotografia indicata.")
+    with st.expander("GEX EDGE — CONFRONTO", expanded=False):
+        source_mode = st.radio(
+            "Fonte dei rilevamenti GEX",
+            ("Replay intraday", "Download ufficiali"),
+            horizontal=True, key=f"edge_compare_source_{week}",
+            help="Replay: report Edge indipendenti calcolati dalla stessa catena "
+                 "Cboe e archiviati agli orari intraday. Ufficiali: metodo "
+                 "preesistente, che rimane disponibile.",
+        )
+        if source_mode == "Replay intraday":
+            # GEX Trend Daily resta basato sulla fotografia UFFICIALE
+            # selezionata nel pannello Serafini (nessuna contaminazione).
+            _publish_official_header_unchanged(
+                week, store, logs or [], on_valid_gex)
+            from edge_replay_panel import show_replay
+            show_replay(week, store, _plot)
+            return
+        st.caption("Download ufficiali: calcolo Edge e NET GAMMA sulla stessa "
+                   "catena Cboe verificata. La selezione precedente è preservata.")
         reading_clock = None
         ctx=st.session_state.get(f"gamma_compare_context_{week}")
         reading=st.radio("Rilevamento da confrontare",("Ultimo rilevamento","Mattina 07:30"),horizontal=True,key=f"edge_compare_reading_{week}")
