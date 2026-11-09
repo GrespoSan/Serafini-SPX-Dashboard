@@ -269,8 +269,9 @@ def render(store, week, logs, view_mode=None):
 
     all_rows = [r for _, f in available for r in f["profiles"][kind]["rows"]]
     strikes = sorted({float(r["strike_spx"]) for r in all_rows})
-    # La scala non deve essere dominata dal massimo finale della giornata.
-    # Ciascuno snapshot ha i propri limiti orizzontali; i valori restano gli stessi.
+    # Scala adattiva per frame, ma simmetrica: il NET GAMMA zero rimane
+    # esattamente al centro della stessa posizione in ogni rilevamento.
+    # I valori NET GAMMA originali restano invariati.
     def frame_bounds(item):
         return dynamic_gamma_bounds(
             [r["net_gamma"] for r in item["profiles"][kind]["rows"]])
@@ -416,15 +417,16 @@ def render(store, week, logs, view_mode=None):
             file_name=f"NET_GAMMA_{kind}_{day:%Y-%m-%d}.gif",
             mime="image/gif", key=f"gif_download_{week}_{day}_{kind}",
         )
-    st.caption("GIF manuale 0DTE: scala NET GAMMA dinamica per rilevamento, "
+    st.caption("GIF manuale 0DTE: scala NET GAMMA dinamica e zero centrale fisso, "
                "nessuna interpolazione dei profili. Le candele ES includono "
                "solo barre chiuse al momento del download.")
     st.caption("Il prezzo SPX Cboe e l'eventuale ES stimato rimangono nel titolo "
                "e nella tabella dei rilevamenti; non sono tracciati come linea "
                "sull'istogramma. Il timestamp Cboe non dichiara il fuso orario.")
 
-    st.caption("Scala NET GAMMA dinamica per rilevamento: le lunghezze delle barre "
-               "fra frame NON sono direttamente confrontabili; usare i valori "
+    st.caption("Asse verticale NET GAMMA zero sempre al centro; scala simmetrica "
+               "e dinamica per rilevamento: le barre fra frame NON sono "
+               "direttamente confrontabili; usare i valori 
                "numerici e l'asse corrente. Barre verdi: NET positivo; "
                "rosse: NET negativo. Le etichette accanto all'asse zero mostrano "
                "il PREZZO ES se il differenziale ES−SPX è disponibile; "
