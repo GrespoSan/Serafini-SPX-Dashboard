@@ -50,3 +50,39 @@ jobs:
                     'LOW',row.low,'CLOSE',row.close,'GAP',float(diffs.loc[ix]),
                     'RANGE',float(ranges.loc[ix]))
           PY
+
+      - name: Inspect Yahoo 1m and reconstruct 5m 11:45 / 11:50
+        run: |
+          python - <<'PY'
+          from datetime import date, timedelta
+          from zoneinfo import ZoneInfo
+          import pandas as pd
+          import yfinance as yf
+          day=date(2026,11,9)
+          raw=yf.download("ES=F", start=(day-timedelta(days=1)).isoformat(),
+                          end=(day+timedelta(days=2)).isoformat(),
+                          interval="1m", auto_adjust=False, progress=False,
+                          prepost=True, threads=False)
+          if raw is None or raw.empty:
+              print("ONE_MIN_EMPTY")
+              raise SystemExit(0)
+          if isinstance(raw.columns, pd.MultiIndex):
+              raw.columns=raw.columns.get_level_values(0)
+          if raw.index.tz is None:
+              print("ONE_MIN_UNVERIFIED_TZ")
+              raise SystemExit(0)
+          raw.index=raw.index.tz_convert(ZoneInfo("Europe/Rome"))
+          block=raw.between_time("11:35", "12:00")
+          print("ONE_MIN_BARS",len(block))
+          for stamp,row in block.iterrows():
+              print("ONE_MIN",stamp.isoformat(),*[f'{row[k]:.2f}' for k in ["Open","High","Low","Close"]])
+          for open_hhmm in ("11:40","11:45","11:50"):
+              start=pd.Timestamp(f"{day} {open_hhmm}:00",tz="Europe/Rome")
+              part=raw[(raw.index>=start)&(raw.index<start+pd.Timedelta(minutes=5))]
+              if len(part)==5:
+                  print("REBUILT_5MIN", open_hhmm,
+                        float(part.Open.iloc[0]),float(part.High.max()),
+                        float(part.Low.min()),float(part.Close.iloc[-1]))
+              else:
+                  print("REBUILT_INCOMPLETE",open_hhmm,len(part))
+          PY
