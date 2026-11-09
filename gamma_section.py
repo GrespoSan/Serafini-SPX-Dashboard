@@ -1118,6 +1118,16 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
         with st.expander('STRUTTURA OPZIONI SPERIMENTALE', expanded=False):
             st.warning('Questi sono CANDIDATI basati sulle tre barre NET GAMMA più intense per lato, NON livelli C1–C3/P1–P3 confermati da Serafini. Non sono segnali automatici. Il calcolo NET GAMMA resta invariato.')
             st.caption('Criterio fisso di prova: tra i 25 strike sopra la chiusura SPX, le tre barre NET GAMMA positive più lunghe; tra i 25 sotto, le tre barre negative con valore assoluto maggiore. Nessun confronto con le barre vicine. C1→C3 in ordine crescente di prezzo, P1→P3 in ordine decrescente.')
+            # Le opzioni restano SPX; l'operativita' visualizza i livelli ES.
+            # Il differenziale è quello della fotografia selezionata.
+            if offset is not None and math.isfinite(offset):
+                st.caption(f'Livelli visualizzati sul future ES · '
+                           f'ES = strike SPX + differenziale {offset:+.2f}. '
+                           'Il NET GAMMA Cboe resta associato allo strike SPX reale.')
+            else:
+                st.info('Differenziale ES − SPX non disponibile: i selettori '
+                        'mostrano temporaneamente gli strike SPX originali. '
+                        'Inserisci il differenziale in alto per usare i livelli ES.')
             suggestions = proposed_levels(candidate_0dte)
             chosen = {}
             for side, prefix, direction in [('call', 'C', 'Call'), ('put', 'P', 'Put')]:
@@ -1135,8 +1145,13 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                     idx = options.index(default) if default in options else 0
                     with cols[n-1]:
                         selected = st.selectbox(
-                            f'{label} (selezione manuale)', options=options, index=idx,
-                            format_func=lambda v: 'Non assegnato' if v is None else f'{v:g} SPX',
+                            (f'{label} · livello future ES' if offset is not None
+                             and math.isfinite(offset) else f'{label} · strike SPX'),
+                            options=options, index=idx,
+                            format_func=lambda v: ('Non assegnato' if v is None
+                                else (f'{v + offset:,.2f} ES'
+                                      if offset is not None and math.isfinite(offset)
+                                      else f'{v:g} SPX')),
                             key=f'v9_{choice}_{label}_{ref}',
                         )
                     if selected is not None:
@@ -1159,8 +1174,8 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                     if label in chosen:
                         item = chosen[label]
                         ordered.append({'Livello candidato': label,
-                                        'Strike SPX': item['strike_spx'],
-                                        'Prezzo ES': None if offset is None else item['strike_spx'] + offset,
+                                        'Livello future ES': None if offset is None else item['strike_spx'] + offset,
+                                        'Strike opzione SPX': item['strike_spx'],
                                         'NET GAMMA': round(item['net_gamma'], 4),
                                         'Origine': 'top 3 per intensità / selezione modificabile'})
                 st.dataframe(ordered, hide_index=True, width="stretch")
@@ -1211,11 +1226,12 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                     study_error = None
                     lab_root = f'opt_study_{day.isoformat()}_{choice}'
                     study_enabled = st.checkbox(
-                        'Studio manuale — modifica i sei strike della struttura',
+                        'Studio manuale — modifica i sei livelli future ES',
                         value=False, key=f'{lab_root}_enabled',
-                        help='I prezzi inseriti sono strike SPX ipotetici. '
-                             'Il payoff aggiorna tutte le sei gambe; '
-                             'il NET GAMMA Cboe non viene modificato.',
+                        help='Inserisci direttamente i prezzi del future ES. '
+                             'Il programma calcola internamente gli strike SPX '
+                             'sottraendo il differenziale ES−SPX selezionato. '
+                             'Il NET GAMMA Cboe non viene modificato.',
                     )
                     if study_enabled:
                         st.caption('Modifica gli strike SPX; i prezzi ES si '
