@@ -119,6 +119,12 @@ def _plot(e, serafini_rows, candles, shift, bounds, reading_clock=None):
     fig.update_xaxes(title_text="GEX mld USD/1%",row=1,col=3)
     return fig
 
+@st.cache_data(ttl=120, show_spinner=False, max_entries=18)
+def _cached_official_snapshot(week, snapshot, _store):
+    """Evita riscaricare il file Cboe completo solo per i KPI Trend Daily."""
+    return _store.download(f"{week}/snapshots/{snapshot}")
+
+
 def _publish_official_header_unchanged(week, store, logs, on_valid_gex):
     """Conserva il GEX di Trend Daily dalla selezione UFFICIALE Serafini.
 
@@ -135,7 +141,7 @@ def _publish_official_header_unchanged(week, store, logs, on_valid_gex):
         day = ctx["day"]
         if isinstance(day, str):
             day = date.fromisoformat(day)
-        raw = store.download(f"{week}/snapshots/{snapshot}")
+        raw = _cached_official_snapshot(week, snapshot, store)
         from edge_auto import result_from_snapshot
         from edge_daily_gex import prepare_daily_gex
         e = result_from_snapshot(raw, float(ctx["offset"]))
