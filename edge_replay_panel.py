@@ -174,7 +174,7 @@ def show_replay(week, store, plotter):
     with cols[4]:
         # Riutilizza la formattazione semantica già adottata nel confronto
         # ufficiale: il colore interessa il VALORE, non solo l'eventuale delta.
-        from edge_triptych import _colored_edge_metric
+        from edge_triptych import _colored_edge_metric, _format_edge_quality
         _colored_edge_metric(
             st, "Regime Edge",
             str(edge.get("regime", "N/D")) if good else "N/D",
@@ -196,7 +196,7 @@ def show_replay(week, store, plotter):
         quality = edge.get("quality_pct")
         st.metric(
             "Qualità Edge",
-            f"{float(quality):.2f}%" if quality is not None else "N/D",
+            _format_edge_quality(quality),
         )
     if previous_edge is not None:
         st.caption(
