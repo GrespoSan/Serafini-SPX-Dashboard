@@ -96,7 +96,7 @@ def generate_gif(available, day, kind, offset):
                   font=font_sub, fill=MUTED)
 
         # Entrambi i pannelli condividono la scala verticale dei prezzi ES.
-        draw.text((candle_left, 79), "ES futures Massive - candele 5 minuti (chiuse allo snapshot)",
+        draw.text((candle_left, 79), "ES futures - candele 5 minuti (chiuse allo snapshot)",
                   font=font_caption, fill=WHITE)
         current = {float(row["strike_spx"]): float(row["net_gamma"])
                    for row in item["profiles"][kind]["rows"]}
