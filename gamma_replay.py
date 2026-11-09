@@ -288,8 +288,10 @@ def render(store, week, logs, view_mode=None):
     counts = [len(display_rows(frame)) for _, frame in available]
     st.caption(f"Livelli reali NET GAMMA {kind}: {len(strikes)} strike distinti "
                f"nella sequenza; {min(counts)}–{max(counts)} per rilevamento. "
-               "Etichette sui 32 livelli più intensi per frame, tutti i "
-               "livelli disponibili nel tooltip. Il calcolo Serafini non cambia.")
+               + ("Etichette sui 32 livelli più intensi; tutti disponibili "
+                  "nel tooltip. " if show_extended else
+                  "Etichette su tutti gli strike reali. ")
+               + "Il calcolo Serafini non cambia.")
     missing_extended = [slot for slot, frame in available
                         if show_extended and not frame["profiles"][kind].get("visual_rows")]
     if missing_extended:
@@ -342,7 +344,8 @@ def render(store, week, logs, view_mode=None):
             ((strike, gamma) for strike, gamma in vals.items() if gamma != 0),
             key=lambda p: (-abs(p[1]), p[0]),
         )
-        selected = sorted(ranked[:32], key=lambda pair: pair[0])
+        selected = sorted((ranked[:32] if show_extended else ranked),
+                          key=lambda pair: pair[0])
         current_bounds = frame_bounds(item)
         label_gap = (current_bounds[1] - current_bounds[0]) * 0.012
         labels = go.Scatter(
