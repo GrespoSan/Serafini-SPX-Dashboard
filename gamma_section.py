@@ -1285,19 +1285,19 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                             st.dataframe(role_rows, width="stretch", hide_index=True)
                             render_payoff_charts(
                                 study_chosen, offset, computed_profiles.get('0DTE'))
-                        left, right = st.columns(2)
-                        with left:
-                            st.markdown('**Scenario rialzista — Vertical Call**')
-                            st.write('Call acquistata: C1 · Call venduta che finanzia: C2')
-                            st.write('Target principale ipotizzato: **C2** · target esteso: **C3**')
-                        with right:
-                            st.markdown('**Scenario ribassista — Vertical Put**')
-                            st.write('Put acquistata: P1 · Put venduta che finanzia: P2')
-                            st.write('Target principale ipotizzato: **P2** · target esteso: **P3**')
-                        st.caption('Ampiezze strike SPX (uguali in punti ES con differenziale costante): '
-                                   + ' · '.join(f'{k}: {v:g}' for k,v in measures.items()))
-                        st.caption('Il superamento dei livelli esterni richiede lettura del contesto e conferme; '
-                                   'qui non si calcolano segnali, volatilità attesa o probabilità.')
+                            left, right = st.columns(2)
+                            with left:
+                                st.markdown('**Scenario rialzista — Vertical Call**')
+                                st.write('Call acquistata: C1 · Call venduta che finanzia: C2')
+                                st.write('Target principale ipotizzato: **C2** · target esteso: **C3**')
+                            with right:
+                                st.markdown('**Scenario ribassista — Vertical Put**')
+                                st.write('Put acquistata: P1 · Put venduta che finanzia: P2')
+                                st.write('Target principale ipotizzato: **P2** · target esteso: **P3**')
+                            st.caption('Ampiezze strike SPX (uguali in punti ES con differenziale costante): '
+                                       + ' · '.join(f'{k}: {v:g}' for k,v in measures.items()))
+                            st.caption('Il superamento dei livelli esterni richiede lettura del contesto e conferme; '
+                                       'qui non si calcolano segnali, volatilità attesa o probabilità.')
             st.download_button('Scarica graduatoria barre NET GAMMA 0DTE (CSV)',
                                candidate_csv(candidate_0dte, offset),
                                file_name=f'Candidati_Top3_Gamma_{day.isoformat()}_{choice}.csv',
