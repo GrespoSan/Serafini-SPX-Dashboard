@@ -9,6 +9,7 @@ on:
       - 'edge_triptych.py'
       - 'tests/test_edge_replay_data.py'
       - 'tests/test_edge_replay_chart.py'
+      - 'tests/test_edge_metric_ui.py'
       - '.github/workflows/edge-replay-dashboard-tests.yml'
   workflow_dispatch:
 
@@ -32,3 +33,4 @@ jobs:
         run: |
           python -m unittest discover -s tests -p 'test_edge_replay_data.py' -v
           python -m unittest discover -s tests -p 'test_edge_replay_chart.py' -v
+          python -m unittest discover -s tests -p 'test_edge_metric_ui.py' -v
