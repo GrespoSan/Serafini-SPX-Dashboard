@@ -288,7 +288,8 @@ def render(store, week, logs, view_mode=None):
     counts = [len(display_rows(frame)) for _, frame in available]
     st.caption(f"Livelli reali NET GAMMA {kind}: {len(strikes)} strike distinti "
                f"nella sequenza; {min(counts)}–{max(counts)} per rilevamento. "
-               "Il calcolo originale Serafini 50 strike non cambia.")
+               "Etichette sui 32 livelli più intensi per frame, tutti i "
+               "livelli disponibili nel tooltip. Il calcolo Serafini non cambia.")
     missing_extended = [slot for slot, frame in available
                         if show_extended and not frame["profiles"][kind].get("visual_rows")]
     if missing_extended:
@@ -318,8 +319,12 @@ def render(store, week, logs, view_mode=None):
     def frame_data(slot, item):
         vals = {float(r["strike_spx"]): float(r["net_gamma"])
                 for r in display_rows(item)}
-        xs = [vals.get(strike, 0.0) for strike in strikes]
-        colors = ["#22c55e" if v >= 0 else "#ef4444" for v in xs]
+        # Uno strike presente in altri frame ma ASSENTE in questo non ha
+        # Gamma zero: None impedisce di trasformare una lacuna in un dato.
+        xs = [vals.get(strike) for strike in strikes]
+        colors = ["#22c55e" if v is not None and v >= 0
+                  else "#ef4444" if v is not None else "#00000000"
+                  for v in xs]
         bars = go.Bar(
             x=xs, y=yvalues, orientation="h", width=3.6,
             marker_color=colors,
@@ -330,8 +335,14 @@ def render(store, week, logs, view_mode=None):
         # prezzo ES (strike SPX + basis), oppure strike SPX se manca il basis.
         # Non si mostra il valore numerico NET GAMMA come etichetta:
         # rimane disponibile passando il mouse sulla barra.
-        selected = [(strike, vals[strike]) for strike in strikes
-                    if strike in vals and vals[strike] != 0]
+        # Su 100-140 barre le etichette complete si sovrapporrebbero:
+        # privilegiare i 32 livelli per |NET Gamma|, tutte le barre restano
+        # leggibili dal tooltip e i valori originali NON sono modificati.
+        ranked = sorted(
+            ((strike, gamma) for strike, gamma in vals.items() if gamma != 0),
+            key=lambda p: (-abs(p[1]), p[0]),
+        )
+        selected = sorted(ranked[:32], key=lambda pair: pair[0])
         current_bounds = frame_bounds(item)
         label_gap = (current_bounds[1] - current_bounds[0]) * 0.012
         labels = go.Scatter(
