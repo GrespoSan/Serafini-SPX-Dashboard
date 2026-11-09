@@ -306,13 +306,13 @@ def show(week, store, logs=None, *, on_valid_gex=None):
                 else:
                     on_valid_gex(duplicate)
             columns = st.columns(4)
-            labels = {
-                "Negative": "Negativo", "Positive": "Positivo",
-                "Zero": "Zero",
-            }
-            _colored_edge_metric(
-                columns[0], "Segno Gamma modellato",
-                labels.get(sign_label, "N/D") + " allo spot Cboe", sign_label)
+            # Il segno modellato è già mostrato da "Regime Edge".
+            # Qui forniamo invece la qualità effettiva del modello.
+            quality = e.get("quality_pct")
+            columns[0].metric(
+                "Qualità Edge",
+                f"{float(quality):.2f}%" if quality is not None else "N/D",
+            )
             _colored_edge_metric(
                 columns[1], "NET GEX",
                 format_gex_billions(e["net_gex"], signed=True), e.get("net_gex"))
