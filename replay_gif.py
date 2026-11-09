@@ -10,6 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from replay_prices import candles_up_to, load_es_candles
 from replay_scale import dynamic_gamma_bounds
+from replay_profiles import choose_rows
 
 ROME = ZoneInfo("Europe/Rome")
 SIZE = (1440, 810)
@@ -51,10 +52,7 @@ def generate_gif(available, day, kind, offset, show_extended=True):
         raise ValueError("Nessuna candela ES chiusa disponibile fino all'ultimo snapshot.")
 
     def display_rows(item):
-        profile = item["profiles"][kind]
-        core = profile.get("rows") or []
-        extra = profile.get("visual_rows") or []
-        return extra if show_extended and len(extra) >= len(core) else core
+        return choose_rows(item["profiles"][kind], show_extended)
 
     rows = [row for _, item in available for row in display_rows(item)]
     strikes = sorted({float(row["strike_spx"]) for row in rows})
