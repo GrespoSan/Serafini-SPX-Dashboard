@@ -185,6 +185,8 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
     close_text = f'{result["last_close"]:,.2f}'.replace(",", "X").replace(".", ",").replace("X", ".")
     state_color = ("#56d49e" if result["midpoint_state"] == "SOPRA" else
                    "#ff676d" if result["midpoint_state"] == "SOTTO" else "#b6bcc5")
+    direction_color = ("#ff676d" if result["direction"] == "RIBASSISTA" else
+                       "#56d49e" if result["direction"] == "RIALZISTA" else "#b6bcc5")
     baricentro_text = (
         f'Daily {pd.Timestamp(result["last_day"]):%d/%m/%Y} — '
         f'Close {close_text} · candela {result["bar_color"].lower()} · '
@@ -274,7 +276,7 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
 </style>
 <div class="spx-trend-card">
   <div class="spx-trend-grid">
-    <div class="spx-trend-kpi"><div class="spx-trend-label">Struttura Daily</div><div class="spx-trend-value">{escape(result["direction"])}</div></div>
+    <div class="spx-trend-kpi"><div class="spx-trend-label">Struttura Daily</div><div class="spx-trend-value" style="color:{direction_color}">{escape(result["direction"])}</div></div>
     <div class="spx-trend-kpi"><div class="spx-trend-label">Chiusura vs baricentro</div><div class="spx-trend-value" style="color:{state_color}">{escape(result["midpoint_state"])}</div><div class="spx-trend-sub">{escape(delta_text)} dal baricentro</div></div>
     <div class="spx-trend-kpi"><div class="spx-trend-label">Baricentro Daily</div><div class="spx-trend-value">{escape(center_text)}</div></div>
     <div class="spx-trend-kpi"><div class="spx-trend-label">Barre stesso colore</div><div class="spx-trend-value" style="color:{count_color}">{result["same_color"]}</div></div>
