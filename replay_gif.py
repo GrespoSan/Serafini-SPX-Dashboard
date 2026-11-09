@@ -133,8 +133,8 @@ def generate_gif(available, day, kind, offset):
             draw.rectangle((px - bar_width // 2, top, px + bar_width // 2,
                             max(top + 1, bottom)), fill=color)
 
-        # Zero e limiti gamma adattivi al frame: non sono grandezze
-        # confrontabili a colpo d'occhio fra orari differenti.
+        # Limiti simmetrici adattivi: lo zero resta fisso al centro del pannello.
+        # Le lunghezze delle barre NON sono confrontabili fra orari differenti.
         draw.line((round(gamma_zero), chart_top, round(gamma_zero), chart_bottom),
                   fill="#607080", width=2)
         draw.text((gamma_left, chart_bottom + 8), f"{gmin:+.0f}",
@@ -172,7 +172,7 @@ def generate_gif(available, day, kind, offset):
         draw.text((90, 731), "Snapshot disponibili, senza interpolazione dei profili gamma",
                   font=font_caption, fill=MUTED)
         draw.text((950, 731), "Fonte prezzi: Yahoo ES=F 5m", font=font_caption, fill=MUTED)
-        draw.text((30, 787), "Studio storico 0DTE. Scala Gamma dinamica per frame: confronta i valori, non le lunghezze delle barre.",
+        draw.text((30, 787), "Studio storico 0DTE. Zero al centro in ogni frame; barre a scala dinamica, ampiezze non confrontabili.",
                   font=font_small, fill=MUTED)
         images.append(im.convert("P", palette=Image.Palette.ADAPTIVE, colors=80))
 
