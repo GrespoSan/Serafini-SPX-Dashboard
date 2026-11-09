@@ -4,7 +4,7 @@ from copy import deepcopy
 
 import numpy as np
 
-from option_structure import build_structure, make_study_levels
+from option_structure import build_structure, make_study_levels, future_es_to_spx_strikes
 from payoff_charts import intrinsic_payoff
 
 
@@ -81,6 +81,40 @@ class StructureStudyTests(unittest.TestCase):
                     make_study_levels(choices(), dict(BASE, **change), profile())
         with self.assertRaisesRegex(ValueError, "sei"):
             make_study_levels(choices(), {"C1": 7485}, profile())
+
+    def test_manual_future_prices_convert_back_to_option_strikes(self):
+        original = choices()
+        prices_es = {key: value + 24 for key, value in BASE.items()}
+        self.assertEqual(future_es_to_spx_strikes(prices_es, 24), BASE)
+        self.assertEqual(prices_es['C1'], 7509)
+        prices_es['C1'] = 7506.5  # esempio: prezzo visto sul future ES
+        study = make_study_levels(
+            original, future_es_to_spx_strikes(prices_es, 24), profile())
+        self.assertEqual(study['C1']['strike_spx'], 7482.5)
+        self.assertIsNone(study['C1']['net_gamma'])
+        self.assertEqual(original, choices())
+        rows, widths = build_structure(study, 24)
+        self.assertEqual(rows[0]['Prezzo ES'], 7506.5)
+        self.assertEqual(widths['Vertical Call (punti)'], 7.5)
+
+    def test_noninteger_offset_is_not_rounded_when_converting_es(self):
+        basis = 24.32
+        prices_es = {key: value + basis for key, value in BASE.items()}
+        converted = future_es_to_spx_strikes(prices_es, basis)
+        self.assertEqual(converted, BASE)
+        self.assertEqual(make_study_levels(choices(), converted, profile())['C1']['net_gamma'],
+                         GAMMA['C1'])
+
+    def test_missing_basis_or_invalid_future_inputs_rejected(self):
+        prices_es = {key: value + 24 for key, value in BASE.items()}
+        for basis in (None, float('nan'), float('inf')):
+            with self.subTest(basis=basis), self.assertRaises(ValueError):
+                future_es_to_spx_strikes(prices_es, basis)
+        for value in (-5., float('nan'), float('inf')):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                future_es_to_spx_strikes(dict(prices_es, P2=value), 24)
+        with self.assertRaisesRegex(ValueError, 'sei'):
+            future_es_to_spx_strikes({'C1': 7509.}, 24)
 
     def test_none_gamma_for_off_grid_manual_level_is_not_modified_on_rebuild(self):
         study = make_study_levels(choices(), dict(BASE, P2=7342.5), profile())
