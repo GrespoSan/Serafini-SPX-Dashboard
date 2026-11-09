@@ -76,3 +76,31 @@ def make_study_levels(chosen, manual_strikes, profile_0dte):
               'net_gamma': gamma_by_strike.get(round(value, 6))}
         for key, value in strikes.items()
     }
+
+
+def future_es_to_spx_strikes(future_prices, offset):
+    """Converti livelli letti sul future ES in strike SPX ipotetici.
+
+    La conversione avviene SOLO nel laboratorio di studio. NET GAMMA Cboe,
+    selezione automatica e livelli salvati restano sul sottostante SPX.
+    Il future ES ha tick di 0.25; i valori fuori griglia sono rifiutati.
+    """
+    import math
+    keys = ('C1', 'C2', 'C3', 'P1', 'P2', 'P3')
+    if not all(key in future_prices for key in keys):
+        raise ValueError('Servono tutti e sei i prezzi ES.')
+    if offset is None or not math.isfinite(float(offset)):
+        raise ValueError('Differenziale ES − SPX non disponibile.')
+    basis = float(offset)
+    converted = {}
+    for key in keys:
+        price = float(future_prices[key])
+        if not math.isfinite(price) or price <= 0:
+            raise ValueError(f'{key}: prezzo ES non valido.')
+        if not math.isclose(price * 4, round(price * 4), rel_tol=0, abs_tol=1e-6):
+            raise ValueError(f'{key}: il future ES usa incrementi di 0,25 punti.')
+        strike = round(price - basis, 6)
+        if strike <= 0:
+            raise ValueError(f'{key}: strike SPX convertito non valido.')
+        converted[key] = strike
+    return converted
