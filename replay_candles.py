@@ -122,7 +122,7 @@ def combined_graph(gamma_graph, available, day, kind, offset, gamma_bounds, gamm
     # Tick e range sono orari CIVILI di Roma senza timezone: Plotly/browser
     # non possono traslare la data né ampliare l'asse al giorno precedente.
     fig.update_xaxes(
-        title_text=f"ES=F · 5 minuti · ora Roma {day:%d/%m/%Y}",
+        title_text=f"ES Massive · 5 minuti · ora Roma {day:%d/%m/%Y}",
         type="date", range=chart_time_window, autorange=False,
         tick0=chart_time_window[0], dtick=3 * 60 * 60 * 1000,
         tickformat="%H:%M", showgrid=True,
