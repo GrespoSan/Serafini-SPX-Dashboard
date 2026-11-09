@@ -36,11 +36,16 @@ def generate_gif(available, day, kind, offset):
         raise ValueError("Inserisci un differenziale ES - SPX valido prima di esportare.")
 
     offset = float(offset)
-    prices = load_es_candles(day)
-    download_times = [
-        datetime.combine(day, time.fromisoformat(item["clock"]), tzinfo=ROME)
-        for _, item in available
-    ]
+    download_times = []
+    for _, item in available:
+        stamp = item.get("download_rome")
+        if not stamp:
+            raise ValueError("GIF: timestamp download Replay non disponibile")
+        recorded = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+        if recorded.tzinfo is None:
+            raise ValueError("GIF: timestamp download Replay senza fuso")
+        download_times.append(recorded.astimezone(ROME))
+    prices = load_es_candles(day, required_until=max(download_times))
     prices_last = candles_up_to(prices, max(download_times))
     if prices_last.empty:
         raise ValueError("Nessuna candela ES chiusa disponibile fino all'ultimo snapshot.")
@@ -171,7 +176,8 @@ def generate_gif(available, day, kind, offset):
                   fill=GOLD, width=7)
         draw.text((90, 731), "Snapshot disponibili, senza interpolazione dei profili gamma",
                   font=font_caption, fill=MUTED)
-        draw.text((950, 731), "Fonte prezzi: Yahoo ES=F 5m", font=font_caption, fill=MUTED)
+        source_label = prices.attrs.get("candle_source", "Prezzi ES · fonte N/D")
+        draw.text((950, 731), f"Fonte: {source_label[:45]}", font=font_caption, fill=MUTED)
         draw.text((30, 787), "Studio storico 0DTE. Zero al centro in ogni frame; barre a scala dinamica, ampiezze non confrontabili.",
                   font=font_small, fill=MUTED)
         images.append(im.convert("P", palette=Image.Palette.ADAPTIVE, colors=80))
