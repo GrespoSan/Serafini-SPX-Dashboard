@@ -40,6 +40,17 @@ def _colored_edge_metric(column, label, value, sign):
     )
 
 
+def _format_edge_quality(value):
+    """Show real 0-100% Edge completeness, or N/D for an invalid reading."""
+    try:
+        quality = float(value)
+    except (ValueError, TypeError, OverflowError):
+        return "N/D"
+    if not math.isfinite(quality) or quality < 0 or quality > 100:
+        return "N/D"
+    return f"{quality:.2f}%"
+
+
 def _matching_serafini(store, week, digest, day, reference):
     # Exact snapshot match: no comparing readings from different times.
     for item in store.list(f"{week}/snapshots/"):
@@ -311,7 +322,7 @@ def show(week, store, logs=None, *, on_valid_gex=None):
             quality = e.get("quality_pct")
             columns[0].metric(
                 "Qualità Edge",
-                f"{float(quality):.2f}%" if quality is not None else "N/D",
+                _format_edge_quality(quality),
             )
             _colored_edge_metric(
                 columns[1], "NET GEX",
