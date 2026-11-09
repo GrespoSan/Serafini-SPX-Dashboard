@@ -383,8 +383,20 @@ def render(store, week, logs, view_mode=None):
                            "i dati 5m Yahoo hanno uno storico limitato.")
             except Exception as exc:
                 st.warning(f"Candele ES non disponibili ({exc}). Resta visibile il Replay NET GAMMA originale.")
+    # Un reset esplicito ripristina la finestra Roma, lo zoom e lo slider
+    # ricreando il widget Plotly; NON richiede nuovi snapshot e non tocca
+    # dati NET GAMMA, offset o giornata selezionata.
+    view_reset_key = f"replay_view_reset_{week}_{day}_{kind}_{view_mode}"
+    if st.button("↺ Ripristina vista grafico",
+                 key=f"replay_reset_button_{week}_{day}_{kind}_{view_mode}",
+                 help="Ripristina asse orario Roma, zoom e rilevamento iniziale, senza cambiare i dati."):
+        st.session_state[view_reset_key] = st.session_state.get(view_reset_key, 0) + 1
+        st.rerun()
+    view_reset_number = st.session_state.get(view_reset_key, 0)
+    graph.update_layout(uirevision=f"replay_view_{week}_{day}_{view_reset_number}")
     st.plotly_chart(graph, width="stretch",
-                    key=f"replay_chart_{week}_{day}_{kind}_{view_mode}")
+                    config={"displayModeBar": True, "doubleClick": "reset"},
+                    key=f"replay_chart_{week}_{day}_{kind}_{view_mode}_{view_reset_number}")
 
     # GIF solo su richiesta: nessuna generazione nei normali rerun del replay.
     # Conserviamo una sola GIF in memoria per sessione e invalidiamo la cache
