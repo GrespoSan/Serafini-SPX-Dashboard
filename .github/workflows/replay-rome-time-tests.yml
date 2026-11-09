@@ -10,6 +10,7 @@ on:
       - 'replay_scale.py'
       - 'tests/test_replay_candles_timeaxis.py'
       - 'tests/test_replay_scale.py'
+      - 'tests/test_replay_price_sources.py'
       - '.github/workflows/replay-rome-time-tests.yml'
   workflow_dispatch:
 
@@ -33,3 +34,4 @@ jobs:
         run: |
           python -m unittest discover -s tests -p 'test_replay_candles_timeaxis.py' -v
           python -m unittest discover -s tests -p 'test_replay_scale.py' -v
+          python -m unittest discover -s tests -p 'test_replay_price_sources.py' -v
