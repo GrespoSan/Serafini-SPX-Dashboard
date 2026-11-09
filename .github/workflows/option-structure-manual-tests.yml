@@ -1,0 +1,31 @@
+name: SPX option structure manual study regression
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'option_structure.py'
+      - 'payoff_charts.py'
+      - 'gamma_section.py'
+      - 'tests/test_option_structure_lab.py'
+      - '.github/workflows/option-structure-manual-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  structure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile changed modules
+        run: python -m compileall -q option_structure.py payoff_charts.py gamma_section.py
+      - name: Install independent test dependencies
+        run: python -m pip install 'numpy>=2,<3' 'plotly>=5.20,<7' 'streamlit>=1.42,<2'
+      - name: Check manual option legs and unchanged market data
+        run: python -m unittest discover -s tests -p 'test_option_structure_lab.py' -v
