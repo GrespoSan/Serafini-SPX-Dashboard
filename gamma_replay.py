@@ -426,7 +426,7 @@ def render(store, week, logs, view_mode=None):
 
     st.caption("Asse verticale NET GAMMA zero sempre al centro; scala simmetrica "
                "e dinamica per rilevamento: le barre fra frame NON sono "
-               "direttamente confrontabili; usare i valori 
+               "direttamente confrontabili; usare i valori "
                "numerici e l'asse corrente. Barre verdi: NET positivo; "
                "rosse: NET negativo. Le etichette accanto all'asse zero mostrano "
                "il PREZZO ES se il differenziale ES−SPX è disponibile; "
