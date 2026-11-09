@@ -377,10 +377,26 @@ def render(store, week, logs, view_mode=None):
             try:
                 from replay_candles import combined_graph
                 graph = combined_graph(graph, available, day, kind, offset, bounds, ybounds)
-                st.caption("Sinistra: candele ES=F Yahoo 5m, soltanto barre chiuse entro l'ora "
-                           "di download di ciascun frame. Destra: identico istogramma NET GAMMA "
-                           "Cboe. Le due fonti possono differire; "
-                           "i dati 5m Yahoo hanno uno storico limitato.")
+                candle_meta = graph.layout.meta or {}
+                st.caption(
+                    f"Sinistra: {candle_meta.get('candle_source', 'ES · fonte N/D')}; "
+                    "solo candele già chiuse allo snapshot. "
+                    "Destra: NET GAMMA Cboe invariato. I prezzi ES e SPX "
+                    "possono differire per feed e differenziale applicato."
+                )
+                if candle_meta.get("fallback_reason"):
+                    st.info("Fonte alternativa per le candele ES: " +
+                            str(candle_meta["fallback_reason"]) +
+                            ". Nessuna fusione di barre Massive e Yahoo.")
+                excluded = candle_meta.get("excluded") or []
+                if excluded:
+                    st.warning(
+                        "Candele Yahoo sospette NON disegnate: " +
+                        ", ".join(str(clock) + " Roma" for clock in excluded) +
+                        ". Criterio: barra mancante prima dell'evento, "
+                        "apertura discontinua ≥15 punti e ritorno vicino "
+                        "alla chiusura precedente. Nessun OHLC ricostruito."
+                    )
             except Exception as exc:
                 st.warning(f"Candele ES non disponibili ({exc}). Resta visibile il Replay NET GAMMA originale.")
     # Un reset esplicito ripristina la finestra Roma, lo zoom e lo slider
