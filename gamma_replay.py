@@ -232,6 +232,24 @@ def render(store, week, logs, view_mode=None):
                    "e' stato attivato successivamente.")
 
 
+    # I profili compatti conservano 50 strike di calcolo in rows e fino a
+    # 140 strike autentici della stessa fotografia Cboe in visual_rows.
+    display_mode = st.radio(
+        "Copertura NET GAMMA nel Replay",
+        ("Estesa · strike Cboe disponibili", "Originale Serafini · 50 strike"),
+        horizontal=True, index=0,
+        key=f"replay_gamma_coverage_{week}_{day}_{kind}",
+        help="Estesa usa solo le barre archiviate nella medesima fotografia Cboe. "
+             "Il calcolo standard resta sempre 25 sopra + 25 sotto.",
+    )
+    show_extended = display_mode.startswith("Estesa")
+
+    def display_rows(item):
+        prof = item["profiles"][kind]
+        core = prof.get("rows") or []
+        extra = prof.get("visual_rows") or []
+        return extra if show_extended and len(extra) >= len(core) else core
+
     # Unica fonte: differenziale della medesima data gia' calcolato/impostato
     # in ANALISI NET GAMMA. Nessun input o calcolo parallelo nel Replay.
     offset_key = f"basis_override_{day.isoformat()}"
@@ -267,14 +285,28 @@ def render(store, week, logs, view_mode=None):
         except (TypeError, ValueError, OverflowError):
             return None
 
-    all_rows = [r for _, f in available for r in f["profiles"][kind]["rows"]]
+    all_rows = [r for _, f in available for r in display_rows(f)]
     strikes = sorted({float(r["strike_spx"]) for r in all_rows})
+    counts = [len(display_rows(frame)) for _, frame in available]
+    st.caption(f"Livelli reali NET GAMMA {kind}: {len(strikes)} strike distinti "
+               f"nella sequenza; {min(counts)}–{max(counts)} per rilevamento. "
+               "Il calcolo originale Serafini 50 strike non cambia.")
+    missing_extended = [slot for slot, frame in available
+                        if show_extended and not frame["profiles"][kind].get("visual_rows")]
+    if missing_extended:
+        st.caption("Estensione non archiviata: " + ", ".join(missing_extended) +
+                   ". Per questi rilevamenti restano soltanto i 50 strike originali.")
+    incomplete = [slot for slot, frame in available
+                  if show_extended and frame["profiles"][kind].get("visual_coverage_complete") is False]
+    if incomplete:
+        st.caption("Copertura estesa non completa negli snapshot: " +
+                   ", ".join(incomplete) + ". Nessun livello ricostruito.")
     # Scala adattiva per frame, ma simmetrica: il NET GAMMA zero rimane
     # esattamente al centro della stessa posizione in ogni rilevamento.
     # I valori NET GAMMA originali restano invariati.
     def frame_bounds(item):
         return dynamic_gamma_bounds(
-            [r["net_gamma"] for r in item["profiles"][kind]["rows"]])
+            [r["net_gamma"] for r in display_rows(item)])
 
     bounds = frame_bounds(available[0][1])
 
@@ -287,7 +319,7 @@ def render(store, week, logs, view_mode=None):
 
     def frame_data(slot, item):
         vals = {float(r["strike_spx"]): float(r["net_gamma"])
-                for r in item["profiles"][kind]["rows"]}
+                for r in display_rows(item)}
         xs = [vals.get(strike, 0.0) for strike in strikes]
         colors = ["#22c55e" if v >= 0 else "#ef4444" for v in xs]
         bars = go.Bar(
@@ -404,10 +436,11 @@ def render(store, week, logs, view_mode=None):
     # GIF solo su richiesta: nessuna generazione nei normali rerun del replay.
     # Conserviamo una sola GIF in memoria per sessione e invalidiamo la cache
     # se cambiano giorno, scadenza, differenziale o gli snapshot disponibili.
-    gif_signature = ("dynamic_gamma_scale_v3_es_labels", day.isoformat(), kind, offset,
+    gif_signature = ("visual_extension_v4_es_labels", day.isoformat(), kind, offset,
+                     show_extended,
                      tuple((slot, item.get("clock"),
                             tuple((float(x["strike_spx"]), float(x["net_gamma"]))
-                                  for x in item["profiles"][kind]["rows"]))
+                                  for x in display_rows(item)))
                            for slot, item in available))
     gif_key = "replay_gif_last"
     if st.button("Esporta GIF giornata", key=f"gif_prepare_{week}_{day}_{kind}",
@@ -417,7 +450,8 @@ def render(store, week, logs, view_mode=None):
         try:
             from replay_gif import generate_gif
             with st.spinner("Creazione GIF dai rilevamenti disponibili..."):
-                gif_data, gif_frames = generate_gif(available, day, kind, offset)
+                gif_data, gif_frames = generate_gif(
+                    available, day, kind, offset, show_extended=show_extended)
             st.session_state[gif_key] = {
                 "signature": gif_signature, "data": gif_data, "count": gif_frames
             }
