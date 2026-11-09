@@ -384,19 +384,6 @@ def render(store, week, logs, view_mode=None):
                     "Destra: NET GAMMA Cboe invariato. I prezzi ES e SPX "
                     "possono differire per feed e differenziale applicato."
                 )
-                if candle_meta.get("fallback_reason"):
-                    st.info("Fonte alternativa per le candele ES: " +
-                            str(candle_meta["fallback_reason"]) +
-                            ". Nessuna fusione di barre Massive e Yahoo.")
-                excluded = candle_meta.get("excluded") or []
-                if excluded:
-                    st.warning(
-                        "Candele Yahoo sospette NON disegnate: " +
-                        ", ".join(str(clock) + " Roma" for clock in excluded) +
-                        ". Criterio: barra mancante prima dell'evento, "
-                        "apertura discontinua ≥15 punti e ritorno vicino "
-                        "alla chiusura precedente. Nessun OHLC ricostruito."
-                    )
             except Exception as exc:
                 st.warning(f"Candele ES non disponibili ({exc}). Resta visibile il Replay NET GAMMA originale.")
     # Un reset esplicito ripristina la finestra Roma, lo zoom e lo slider
