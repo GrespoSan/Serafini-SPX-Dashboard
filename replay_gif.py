@@ -25,7 +25,7 @@ def _font(size, bold=False):
         return ImageFont.load_default()
 
 
-def generate_gif(available, day, kind, offset):
+def generate_gif(available, day, kind, offset, show_extended=True):
     """Crea una GIF leggibile usando gli stessi frame Cboe e OHLC del replay.
     Le barre 5m devono essere chiuse al momento del download dello snapshot.
     Restituisce (gif_bytes, numero_frame).
@@ -50,8 +50,13 @@ def generate_gif(available, day, kind, offset):
     if prices_last.empty:
         raise ValueError("Nessuna candela ES chiusa disponibile fino all'ultimo snapshot.")
 
-    rows = [row for _, item in available
-            for row in item["profiles"][kind]["rows"]]
+    def display_rows(item):
+        profile = item["profiles"][kind]
+        core = profile.get("rows") or []
+        extra = profile.get("visual_rows") or []
+        return extra if show_extended and len(extra) >= len(core) else core
+
+    rows = [row for _, item in available for row in display_rows(item)]
     strikes = sorted({float(row["strike_spx"]) for row in rows})
     gammas = [float(row["net_gamma"]) for row in rows]
     if not strikes or not all(math.isfinite(x) for x in gammas):
@@ -99,7 +104,7 @@ def generate_gif(available, day, kind, offset):
         draw.text((candle_left, 79), "ES futures - candele 5 minuti (chiuse allo snapshot)",
                   font=font_caption, fill=WHITE)
         current = {float(row["strike_spx"]): float(row["net_gamma"])
-                   for row in item["profiles"][kind]["rows"]}
+                   for row in display_rows(item)
         gmin, gmax = dynamic_gamma_bounds(list(current.values()))
         def xgamma(value):
             return gamma_left + (float(value) - gmin) / (gmax - gmin) * (gamma_right - gamma_left)
