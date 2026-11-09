@@ -61,9 +61,15 @@ def _plot(e, serafini_rows, candles, shift, bounds, reading_clock=None):
                         "SERAFINI NET GAMMA · " + (reading_clock or "ora n.d."),
                         "GEX 0DTE · " + (reading_clock or "ora n.d.")))
     if candles is not None and not candles.empty:
-        fig.add_trace(go.Candlestick(x=candles["bar_close"], open=candles["open"],
+        # Lo stesso asse civile Europe/Rome verificato nel Replay candele:
+        # i timestamp originali aware servono per il cutoff, ma l'asse Plotly
+        # non deve dipendere dal fuso del browser.
+        from replay_candles import _plot_rome_clock
+        chart_x = [_plot_rome_clock(stamp) for stamp in candles["bar_close"]]
+        source_name = candles.attrs.get("candle_source", "ES futures · 5m")
+        fig.add_trace(go.Candlestick(x=chart_x, open=candles["open"],
             high=candles["high"], low=candles["low"], close=candles["close"],
-            name="ES=F Yahoo", increasing_line_color="#21b77c",
+            name=source_name, increasing_line_color="#21b77c",
             decreasing_line_color="#e65353", showlegend=False),row=1,col=1)
     if serafini_rows:
         y = [float(r["strike_spx"])+shift for r in serafini_rows]
@@ -114,7 +120,9 @@ def _plot(e, serafini_rows, candles, shift, bounds, reading_clock=None):
     fig.update_yaxes(range=list(bounds),row=1,col=3)
     fig.update_layout(height=690,barmode="relative",
         margin=dict(l=40,r=20,t=65,b=50),showlegend=False)
-    fig.update_xaxes(rangeslider_visible=False,row=1,col=1)
+    fig.update_xaxes(type="date", tickformat="%H:%M",
+                     title_text="Orario Roma",
+                     rangeslider_visible=False, row=1, col=1)
     fig.update_xaxes(title_text="NET Serafini",row=1,col=2)
     fig.update_xaxes(title_text="GEX mld USD/1%",row=1,col=3)
     return fig
