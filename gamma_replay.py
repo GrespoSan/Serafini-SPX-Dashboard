@@ -17,7 +17,7 @@ from replay_scale import dynamic_gamma_bounds
 from spx_market_clock import classify_0dte_download, cash_open_rome, spxw_expiry_close_rome
 
 ROME = ZoneInfo("Europe/Rome")
-SLOTS = ("07:30", "11:00", "13:30", "15:50", "16:01", "16:16",
+SLOTS = ("07:30", "11:00", "13:30", "14:31", "15:50", "16:01", "16:16",
          "16:31", "16:46", "17:30", "18:00", "18:30", "20:00",
          "20:30", "21:30")
 OFFICIAL = {"07:30": "30 7 * * 1-5", "15:50": "50 15 * * 1-5",
@@ -148,7 +148,7 @@ def _study_frames(store, week, day):
 def render(store, week, logs, view_mode=None):
     st.subheader("Replay / History — evoluzione NET GAMMA")
     st.caption("Ufficiali: 07:30 Roma; 08:50 e 13:30 Chicago (ora Roma indicata per ogni frame). "
-               "13:30 e altri orari: studio intraday compatto (circa 30 giorni). "
+               "13:30, 14:31 e altri orari: studio intraday compatto (circa 30 giorni). "
                "Le vecchie catene complete delle 13:30 restano leggibili come storico.")
     iso_year, iso_week = map(int, week.split("-W"))
     from datetime import timedelta
