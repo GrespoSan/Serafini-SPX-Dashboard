@@ -1,83 +1,84 @@
-"""Massive vs Yahoo Replay: no source blending and no invented OHLC."""
-
+"""Regressioni Replay ES: solo Massive; dati parziali non visualizzati."""
 import unittest
 from datetime import date, datetime, timedelta
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 import pandas as pd
-
-from replay_prices import (load_es_candles, massive_covers_requested_interval,
-                           remove_suspect_gap_bars)
+import replay_prices
+from replay_prices import load_es_candles, massive_covers_requested_interval
 
 ROME = ZoneInfo("Europe/Rome")
 DAY = date(2026, 11, 9)
 
 
-def _moment(hour, minute):
-    return datetime(2026, 11, 9, hour, minute, tzinfo=ROME)
+def moment(h, m):
+    return datetime(2026, 11, 9, h, m, tzinfo=ROME)
 
 
-def _frame_times(start, end):
-    ticks = pd.date_range(start=start, end=end, freq="5min", tz=ROME)
-    return pd.DataFrame({
-        "bar_close": ticks,
-        "open": [7435.] * len(ticks), "high": [7437.] * len(ticks),
-        "low": [7434.] * len(ticks), "close": [7436.] * len(ticks),
+def candles(first, last):
+    times = pd.date_range(start=first, end=last, freq="5min", tz=ROME)
+    data = pd.DataFrame({
+        "bar_close": times,
+        "open": [7435.] * len(times),
+        "high": [7437.] * len(times),
+        "low": [7434.] * len(times),
+        "close": [7436.] * len(times),
     })
+    data.attrs["candle_source"] = "Massive Futures ESZ6 · CME 5m"
+    return data
 
 
-class ReplayPriceSourceTests(unittest.TestCase):
-    def test_yahoo_spurious_1150_is_excluded_without_creating_new_bar(self):
-        rows = pd.DataFrame({
-            "bar_close": [_moment(11, 35), _moment(11, 40),
-                          _moment(11, 50), _moment(11, 55)],
-            "open": [7438., 7438.5, 7402., 7438.5],
-            "high": [7440., 7438.5, 7440.75, 7440.],
-            "low": [7435.75, 7436.75, 7402., 7436.75],
-            "close": [7438.75, 7436.75, 7438.25, 7438.],
-        })
-        cleaned, excluded = remove_suspect_gap_bars(rows)
-        self.assertEqual(excluded, ["11:50"])
-        self.assertEqual(cleaned["bar_close"].dt.strftime("%H:%M").tolist(),
-                         ["11:35", "11:40", "11:55"])
+class ReplayMassiveOnlyTests(unittest.TestCase):
+    def test_no_yahoo_fetcher_exists(self):
+        self.assertFalse(hasattr(replay_prices, "_yahoo_candles"))
+        self.assertFalse(hasattr(replay_prices, "remove_suspect_gap_bars"))
 
-    def test_normal_candle_or_normal_five_minute_sequence_is_preserved(self):
-        rows = pd.DataFrame({
-            "bar_close": [_moment(11, 40), _moment(11, 45), _moment(11, 50)],
-            "open": [7438., 7402., 7438.5],
-            "high": [7438.5, 7440.75, 7440.],
-            "low": [7436., 7402., 7436.75],
-            "close": [7436.75, 7438.25, 7438.],
-        })
-        cleaned, excluded = remove_suspect_gap_bars(rows)
-        self.assertEqual(len(cleaned), 3)
-        self.assertEqual(excluded, [])
+    def test_full_massive_coverage_is_required(self):
+        complete = candles(moment(1, 5), moment(15, 50))
+        snapshot = moment(15, 50) + timedelta(seconds=9)
+        self.assertTrue(massive_covers_requested_interval(complete, snapshot))
+        partial = complete.loc[complete.bar_close <= moment(8, 30)]
+        self.assertFalse(massive_covers_requested_interval(partial, snapshot))
+        with_gap = complete.loc[complete.bar_close != moment(11, 45)]
+        self.assertFalse(massive_covers_requested_interval(with_gap, snapshot))
 
-    def test_massive_full_snapshot_coverage_is_required(self):
-        all_bars = _frame_times(_moment(1, 5), _moment(15, 50))
-        self.assertTrue(massive_covers_requested_interval(
-            all_bars, _moment(15, 50) + timedelta(seconds=9)))
-        partial = all_bars.loc[all_bars["bar_close"] <= _moment(8, 10)]
-        self.assertFalse(massive_covers_requested_interval(
-            partial, _moment(15, 50) + timedelta(seconds=9)))
-        with_gap = all_bars.loc[all_bars["bar_close"] != _moment(11, 45)]
-        self.assertFalse(massive_covers_requested_interval(
-            with_gap, _moment(15, 50) + timedelta(seconds=9)))
-
-    def test_source_never_blended_with_yahoo(self):
-        partial_massive = _frame_times(_moment(1, 5), _moment(8, 10))
-        yahoo = _frame_times(_moment(1, 5), _moment(15, 50))
-        yahoo.attrs["candle_source"] = "Yahoo ES=F · 5m verificato"
+    def test_full_massive_is_returned_unchanged(self):
+        complete = candles(moment(1, 5), moment(15, 50))
         with patch("replay_prices.st.secrets", {
-                "MASSIVE_API_KEY": "dummy", "MASSIVE_ES_CONTRACT": "ESZ6"}), \
-             patch("replay_prices._massive_candles", return_value=partial_massive), \
-             patch("replay_prices._yahoo_candles", return_value=yahoo):
+            "MASSIVE_API_KEY": "demo-test-key",
+            "MASSIVE_ES_CONTRACT": "ESZ6",
+        }), patch("replay_prices._massive_candles", return_value=complete) as source:
             result = load_es_candles(
-                DAY, required_until=_moment(15, 50) + timedelta(seconds=9))
-        self.assertEqual(result.attrs["candle_source"], "Yahoo ES=F · 5m verificato")
-        self.assertIn("ultima candela 08:10", result.attrs["massive_fallback_reason"])
-        self.assertEqual(len(result), len(yahoo))
+                DAY, required_until=moment(15, 50) + timedelta(seconds=9))
+        self.assertIs(result, complete)
+        self.assertEqual(result.attrs["candle_source"],
+                         "Massive Futures ESZ6 · CME 5m")
+        source.assert_called_once_with(DAY, "ESZ6", "demo-test-key")
+
+    def test_partial_massive_does_not_silently_fallback(self):
+        partial = candles(moment(1, 5), moment(8, 30))
+        with patch("replay_prices.st.secrets", {
+            "MASSIVE_API_KEY": "demo-test-key",
+            "MASSIVE_ES_CONTRACT": "ESZ6",
+        }), patch("replay_prices._massive_candles", return_value=partial):
+            with self.assertRaisesRegex(ValueError, "ultima candela 08:30"):
+                load_es_candles(
+                    DAY, required_until=moment(15, 50) + timedelta(seconds=9))
+
+    def test_missing_key_fails_without_fetching_other_sources(self):
+        with patch("replay_prices.st.secrets", {}), patch(
+            "replay_prices._massive_candles"
+        ) as source:
+            with self.assertRaisesRegex(ValueError, "non configurato"):
+                load_es_candles(DAY, required_until=moment(7, 30))
+        source.assert_not_called()
+
+    def test_naive_or_missing_snapshot_time_rejected(self):
+        with self.assertRaisesRegex(ValueError, "privo di fuso"):
+            load_es_candles(DAY, required_until=datetime(2026, 11, 9, 7, 30))
+        with self.assertRaisesRegex(ValueError, "assente"):
+            load_es_candles(DAY)
 
 
 if __name__ == "__main__":
