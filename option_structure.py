@@ -32,7 +32,11 @@ def build_structure(chosen, offset=None):
                      'Ruolo ipotizzato': position,
                      'Strike SPX': strikes[key],
                      'Prezzo ES': None if offset is None else strikes[key] + float(offset),
-                     'NET GAMMA': round(float(chosen[key]['net_gamma']), 4),
+                     # Gli strike simulati possono non comparire nel profilo Cboe.
+                     # In quel caso il NET GAMMA e' N/D: non riusare quello
+                     # del precedente strike selezionato.
+                     'NET GAMMA': ('N/D' if chosen[key].get('net_gamma') is None
+                                   else round(float(chosen[key]['net_gamma']), 4)),
                      'Lettura operativa': use})
     stats = {
         'Vertical Call (punti)': strikes['C2'] - strikes['C1'],
@@ -40,3 +44,35 @@ def build_structure(chosen, offset=None):
         'Strangle esterno C3-P3 (punti)': strikes['C3'] - strikes['P3'],
     }
     return rows, stats
+
+
+def make_study_levels(chosen, manual_strikes, profile_0dte):
+    """Deriva gambe ipotetiche senza alterare i candidati Cboe originali.
+
+    Il NET GAMMA e' letto SOLO se lo strike manuale coincide esattamente
+    con uno strike presente nel profilo 0DTE della stessa fotografia.
+    Valori manuali fra strike reali ottengono NET GAMMA N/D, mai inventato.
+    """
+    import math
+    keys = ('C1', 'C2', 'C3', 'P1', 'P2', 'P3')
+    if not all(key in chosen and key in manual_strikes for key in keys):
+        raise ValueError('Servono tutti e sei i livelli per la simulazione.')
+    strikes = {key: float(manual_strikes[key]) for key in keys}
+    if not all(math.isfinite(value) and value > 0 for value in strikes.values()):
+        raise ValueError('Gli strike manuali devono essere numeri positivi e finiti.')
+    if not (strikes['C1'] < strikes['C2'] < strikes['C3'] and
+            strikes['P1'] > strikes['P2'] > strikes['P3']):
+        raise ValueError('Ordine non valido: C1 < C2 < C3 e P1 > P2 > P3.')
+    rows = (profile_0dte or {}).get('rows') or []
+    gamma_by_strike = {
+        round(float(row['strike_spx']), 6): float(row['net_gamma'])
+        for row in rows
+        if math.isfinite(float(row['strike_spx']))
+        and math.isfinite(float(row['net_gamma']))
+    }
+    # Copia nuova e separata, NON modifica chosen, candidati o NET GAMMA.
+    return {
+        key: {'strike_spx': value,
+              'net_gamma': gamma_by_strike.get(round(value, 6))}
+        for key, value in strikes.items()
+    }
