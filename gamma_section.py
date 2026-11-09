@@ -18,7 +18,7 @@ from pine_sources import load_export_profiles
 from gamma_scale import profile_gamma_bounds, gamma_components
 from serafini_sigma import serafini_cash_levels, add_sigma_markers
 from operational_levels import find_candidates, proposed_levels, candidate_csv
-from option_structure import build_structure
+from option_structure import build_structure, make_study_levels
 from payoff_charts import render_payoff_charts
 from asia_range import download_asia_range
 from es_spx_basis import download_and_calculate
@@ -1203,16 +1203,88 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                     )
                     st.warning('Schema di lettura dalle slide: NON è una prova di opzioni comprate o vendute. '
                                'Il NET GAMMA aggregato non identifica il lato effettivo delle operazioni.')
-                    st.caption('Prima seleziona/correggi C1–C3 e P1–P3 sopra. '
-                               'I ruoli qui sotto rappresentano la struttura didattica descritta da Serafini, '
-                               'non un riconoscimento certo del vertical principale.')
-                    structure = build_structure(chosen, offset)
-                    if structure is None:
-                        st.info('Per visualizzare la struttura completa, assegna sei livelli distinti e ordinati.')
+                    st.caption('I sei livelli derivano inizialmente dai selettori C1–C3 '
+                               'e P1–P3 sopra. Per studiare alternative, attiva la '
+                               'modifica manuale: la simulazione NON cambia i '
+                               'livelli ufficiali, il NET GAMMA o le altre analisi.')
+                    study_chosen = chosen
+                    study_error = None
+                    lab_root = f'opt_study_{day.isoformat()}_{choice}'
+                    study_enabled = st.checkbox(
+                        'Studio manuale — modifica i sei strike della struttura',
+                        value=False, key=f'{lab_root}_enabled',
+                        help='I prezzi inseriti sono strike SPX ipotetici. '
+                             'Il payoff aggiorna tutte le sei gambe; '
+                             'il NET GAMMA Cboe non viene modificato.',
+                    )
+                    if study_enabled:
+                        st.caption('Modifica gli strike SPX; i prezzi ES si '
+                                   'aggiornano con il differenziale della fotografia. '
+                                   'Il payoff è intrinseco teorico, senza premi '
+                                   'né commissioni. Nessun dato viene salvato nei feed.')
+                        labels = ('C1', 'C2', 'C3', 'P1', 'P2', 'P3')
+                        if not all(label in chosen for label in labels):
+                            study_error = (
+                                'Prima assegna tutti e sei i livelli nei selettori '
+                                'della sezione STRUTTURA OPZIONI SPERIMENTALE.'
+                            )
+                        else:
+                            # Il reset avviene PRIMA dell'istanziazione dei campi
+                            # Streamlit, senza mutare stati di widget già disegnati.
+                            if st.button(
+                                'Ripristina i sei livelli dai selettori',
+                                key=f'{lab_root}_reset',
+                            ):
+                                for label in labels:
+                                    st.session_state.pop(
+                                        f'{lab_root}_strike_{label}', None)
+                                st.rerun()
+                            manual_strikes = {}
+                            for heading, group in (
+                                ('Call — Vertical + Strangle', ('C1', 'C2', 'C3')),
+                                ('Put — Vertical + Strangle', ('P1', 'P2', 'P3')),
+                            ):
+                                st.markdown(f'**{heading}**')
+                                columns = st.columns(3)
+                                for column, label in zip(columns, group):
+                                    with column:
+                                        manual_strikes[label] = st.number_input(
+                                            f'{label} · strike SPX',
+                                            min_value=0.25,
+                                            value=float(chosen[label]['strike_spx']),
+                                            step=5.0, format='%.2f',
+                                            key=f'{lab_root}_strike_{label}',
+                                        )
+                            try:
+                                study_chosen = make_study_levels(
+                                    chosen, manual_strikes,
+                                    computed_profiles.get('0DTE'))
+                            except (ValueError, TypeError) as exc:
+                                study_error = str(exc)
+                            if study_error is None:
+                                changed = [
+                                    label for label in labels
+                                    if abs(study_chosen[label]['strike_spx'] -
+                                           float(chosen[label]['strike_spx'])) > 1e-8
+                                ]
+                                st.caption(
+                                    'Simulazione attiva · strike modificati: ' +
+                                    (', '.join(changed) if changed else 'nessuno') +
+                                    '. NET GAMMA N/D quando lo strike non '
+                                    'esiste nel profilo Cboe 0DTE.'
+                                )
+                    if study_error is not None:
+                        st.warning(study_error)
                     else:
-                        role_rows, measures = structure
-                        st.dataframe(role_rows, width="stretch", hide_index=True)
-                        render_payoff_charts(chosen, offset, computed_profiles.get('0DTE'))
+                        structure = build_structure(study_chosen, offset)
+                        if structure is None:
+                            st.info('Per visualizzare la struttura completa, assegna '
+                                    'sei livelli distinti e ordinati.')
+                        else:
+                            role_rows, measures = structure
+                            st.dataframe(role_rows, width="stretch", hide_index=True)
+                            render_payoff_charts(
+                                study_chosen, offset, computed_profiles.get('0DTE'))
                         left, right = st.columns(2)
                         with left:
                             st.markdown('**Scenario rialzista — Vertical Call**')
