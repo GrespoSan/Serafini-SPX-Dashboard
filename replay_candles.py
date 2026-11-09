@@ -81,7 +81,7 @@ def combined_graph(gamma_graph, available, day, kind, offset, gamma_bounds, gamm
             low=subset["low"].tolist(), close=subset["close"].tolist(),
             increasing_line_color="#22c55e", decreasing_line_color="#ef4444",
             increasing_fillcolor="#22c55e", decreasing_fillcolor="#ef4444",
-            name="ES futures · Massive 5m", showlegend=False,
+            name=data.attrs.get("candle_source", "ES futures · 5m"), showlegend=False,
         )
 
     first_item = available[0][1]
@@ -122,7 +122,7 @@ def combined_graph(gamma_graph, available, day, kind, offset, gamma_bounds, gamm
     # Tick e range sono orari CIVILI di Roma senza timezone: Plotly/browser
     # non possono traslare la data né ampliare l'asse al giorno precedente.
     fig.update_xaxes(
-        title_text=f"ES Massive · 5 minuti · ora Roma {day:%d/%m/%Y}",
+        title_text=f"ES futures · 5 minuti · ora Roma {day:%d/%m/%Y}",
         type="date", range=chart_time_window, autorange=False,
         tick0=chart_time_window[0], dtick=3 * 60 * 60 * 1000,
         tickformat="%H:%M", showgrid=True,
@@ -143,6 +143,6 @@ def combined_graph(gamma_graph, available, day, kind, offset, gamma_bounds, gamm
     )
     # Fornisci visibilità della provenienza senza alterare tracciati/gamma.
     fig.update_layout(meta={
-        "candle_source": data.attrs.get("candle_source", "Massive Futures ES · 5m"),
+        "candle_source": data.attrs.get("candle_source", "ES futures · 5m"),
     })
     return fig
