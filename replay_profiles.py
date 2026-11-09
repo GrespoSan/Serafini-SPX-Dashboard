@@ -45,3 +45,26 @@ def union_strikes(profiles, extended=True):
         for prof in profiles
         for row in choose_rows(prof, extended)
     })
+
+
+def gamma_bar_trace(slot, strikes, price_levels, gamma_by_strike):
+    """Costruisci davvero la barra Plotly per ogni rilevamento Replay.
+
+    Strike assenti nel singolo frame rimangono None, NON zero. Plotly accetta
+    colori trasparenti in formato rgba(...), NON '#00000000'.
+    """
+    import plotly.graph_objects as go
+
+    values = [gamma_by_strike.get(strike) for strike in strikes]
+    colors = [
+        "#22c55e" if value is not None and value >= 0
+        else "#ef4444" if value is not None
+        else "rgba(0,0,0,0)"
+        for value in values
+    ]
+    return go.Bar(
+        x=values, y=price_levels, orientation="h", width=3.6,
+        marker_color=colors,
+        hovertemplate="Livello %{y:,.2f}<br>NET Gamma %{x:+.3f}<extra></extra>",
+        name=f"NET Gamma {slot}",
+    )
