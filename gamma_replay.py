@@ -14,6 +14,7 @@ import streamlit as st
 from net_gamma import profile, read_snapshot, visual_profile
 from feed_quality import summarize_timeline
 from replay_scale import dynamic_gamma_bounds
+from replay_profiles import choose_rows
 from spx_market_clock import classify_0dte_download, cash_open_rome, spxw_expiry_close_rome
 
 ROME = ZoneInfo("Europe/Rome")
@@ -245,10 +246,7 @@ def render(store, week, logs, view_mode=None):
     show_extended = display_mode.startswith("Estesa")
 
     def display_rows(item):
-        prof = item["profiles"][kind]
-        core = prof.get("rows") or []
-        extra = prof.get("visual_rows") or []
-        return extra if show_extended and len(extra) >= len(core) else core
+        return choose_rows(item["profiles"][kind], show_extended)
 
     # Unica fonte: differenziale della medesima data gia' calcolato/impostato
     # in ANALISI NET GAMMA. Nessun input o calcolo parallelo nel Replay.
