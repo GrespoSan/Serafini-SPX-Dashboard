@@ -19,6 +19,18 @@ from spx_market_clock import classify_0dte_download
 ROME = ZoneInfo("Europe/Rome")
 
 
+@st.cache_data(ttl=90, show_spinner=False, max_entries=40)
+def _cached_slots(week, day, _store):
+    # Il parametro privato _store non diventa parte della chiave cache.
+    # Una sessione Streamlit usa un solo backend Supabase configurato.
+    return list_edge_slots(_store, week, day)
+
+
+@st.cache_data(ttl=90, show_spinner=False, max_entries=80)
+def _cached_pair(week, day, slot, _store):
+    return read_pair(_store, week, day, slot)
+
+
 def _basis(week, day):
     context = st.session_state.get(f"gamma_compare_context_{week}") or {}
     if str(context.get("day")) == day.isoformat():
@@ -72,8 +84,14 @@ def show_replay(week, store, plotter):
         format_func=lambda value: value.strftime("%d/%m/%Y"),
         key=f"edge_replay_day_{week}",
     )
+    if st.button("Aggiorna rilevamenti Edge",
+                 key=f"edge_replay_refresh_{week}_{day}",
+                 help="Aggiorna solo l'elenco e i report Edge della giornata."):
+        _cached_slots.clear()
+        _cached_pair.clear()
+        st.rerun()
     try:
-        slots = list_edge_slots(store, week, day)
+        slots = _cached_slots(week, day, store)
     except (RuntimeError, ValueError, TypeError) as exc:
         st.warning(f"Archivio Edge Replay non disponibile: {type(exc).__name__}.")
         return
@@ -99,7 +117,7 @@ def show_replay(week, store, plotter):
         help="Solo orari precedenti della stessa giornata e stesso modello Edge.",
     )
     try:
-        compact, sidecar, edge, clock = read_pair(store, week, day, current)
+        compact, sidecar, edge, clock = _cached_pair(week, day, current, store)
     except (RuntimeError, ValueError, TypeError, KeyError, OverflowError) as exc:
         st.warning(f"Fotografia Edge {current} non verificabile: {exc}")
         return
@@ -117,8 +135,8 @@ def show_replay(week, store, plotter):
     previous_edge = None
     if compare != "Nessuno":
         try:
-            _, previous_sidecar, previous_edge, previous_clock = read_pair(
-                store, week, day, compare)
+            _, previous_sidecar, previous_edge, previous_clock = _cached_pair(
+                week, day, compare, store)
             if not same_model(sidecar, previous_sidecar):
                 st.warning("Confronto numerico fra i due orari sospeso: versione "
                            "Edge, scadenza o qualità non coerenti.")
