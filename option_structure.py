@@ -83,7 +83,8 @@ def future_es_to_spx_strikes(future_prices, offset):
 
     La conversione avviene SOLO nel laboratorio di studio. NET GAMMA Cboe,
     selezione automatica e livelli salvati restano sul sottostante SPX.
-    Il future ES ha tick di 0.25; i valori fuori griglia sono rifiutati.
+    Il widget usa step di 0,25; non arrotondare automaticamente i valori
+    convertiti perché il differenziale ES−SPX può essere decimale.
     """
     import math
     keys = ('C1', 'C2', 'C3', 'P1', 'P2', 'P3')
@@ -97,8 +98,6 @@ def future_es_to_spx_strikes(future_prices, offset):
         price = float(future_prices[key])
         if not math.isfinite(price) or price <= 0:
             raise ValueError(f'{key}: prezzo ES non valido.')
-        if not math.isclose(price * 4, round(price * 4), rel_tol=0, abs_tol=1e-6):
-            raise ValueError(f'{key}: il future ES usa incrementi di 0,25 punti.')
         strike = round(price - basis, 6)
         if strike <= 0:
             raise ValueError(f'{key}: strike SPX convertito non valido.')
