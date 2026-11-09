@@ -54,7 +54,7 @@ class StructureStudyTests(unittest.TestCase):
     def test_payoff_changes_with_hypothetical_levels_without_premiums(self):
         x = np.asarray([7480., 7492., 7520.])
         original = intrinsic_payoff(BASE, "combined", x)
-        changed_strikes = dict(BASE, C2=7510)
+        changed_strikes = dict(BASE, C2=7495)
         study = make_study_levels(choices(), changed_strikes, profile())
         current = intrinsic_payoff(
             {key: study[key]["strike_spx"] for key in NAMES}, "combined", x
