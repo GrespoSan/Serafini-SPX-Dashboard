@@ -358,10 +358,10 @@ if not offline and not storage_unavailable:
     with st.expander('REPLAY E CONFRONTO', expanded=False):
         mode = st.radio(
             'Modalità di analisi',
-            ('Confronto diretto tra due rilevamenti',
-             'Replay con candele'),
+            ('Replay con candele',
+             'Confronto diretto tra due rilevamenti'),
             index=0,
-            key='gamma_analysis_mode',
+            key='gamma_analysis_mode_v2',
         )
         if mode == 'Confronto diretto tra due rilevamenti':
             from gamma_section import render_comparison
