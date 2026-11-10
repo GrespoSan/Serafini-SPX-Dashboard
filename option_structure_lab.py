@@ -52,7 +52,7 @@ def render_lab(candidate, original_profile, offset, day, choice, reference,
     suggestions = proposed_levels(candidate)
     prefix = f"option_lab_v2_{day.isoformat()}_{choice}_{reference}"
     with st.expander("STRUTTURA OPZIONI — Laboratorio · 2 Vertical + Strangle",
-                     expanded=True):
+                     expanded=False):
         st.caption(
             f"{snapshot_description} · {day:%d/%m/%Y} · download Roma "
             f"{download_clock or 'N/D'} · "
