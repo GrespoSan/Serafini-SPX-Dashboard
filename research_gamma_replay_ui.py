@@ -135,7 +135,7 @@ def render(available, kind, day):
                    "non certificano la freschezza dei dati.")
         def csv_bytes(rows):
             out = io.StringIO()
-            writer = csv.DictWriter(out, fieldnames=list(rows[0]), extrasaction="ignore")
+            writer = csv.DictWriter(out, fieldnames=list(dict.fromkeys(\n                key for row in rows for key in row)), extrasaction="ignore")
             writer.writeheader()
             writer.writerows(rows)
             return out.getvalue().encode("utf-8-sig")
