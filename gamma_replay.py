@@ -582,6 +582,10 @@ def render(store, week, logs, view_mode=None):
                       "Tipo": item["origin"], "Top 3 positivo": fmt(upper),
                       "Top 3 negativo": fmt(lower)})
     st.dataframe(table, hide_index=True, width="stretch")
+    # Laboratorio opzionale: riusa i frame gia' caricati, senza nuovo storage.
+    from research_gamma_replay_ui import render as render_gamma_research
+    render_gamma_research(available, kind, day)
+
     st.caption("I tre frame ufficiali provengono dall'archivio invariato. "
                "I frame intermedi NON entrano nei report ufficiali. "
                "L'orario di download non garantisce la freschezza della chain Cboe.")
