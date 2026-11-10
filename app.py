@@ -87,7 +87,7 @@ def describe_slot(slot):
     if name == '30 7 * * 1-5':
         return 'Mattina 07:30'
     if name == '30 13 * * 1-5':
-        return 'Pre-USA 13:30 (verificare data: storico precedente 11/11)'
+        return 'Pre-USA 13:30 · ufficiale dal 11/11/2026'
     if name == '0 17 * * 1-5':
         return 'USA · 10:00 Chicago (17:00 ordinario)'
     if name == '30 15 * * 1-5':
@@ -311,7 +311,10 @@ with st.expander('ANALISI NET GAMMA', expanded=True):
                             'Test manuale'
                             if str(value.get('scheduled_slot') or '') == '30 13 * * 1-5'
                             and str(value.get('download_rome') or '').startswith('2026-10-22T17:57:')
-                            else describe_slot(value.get('scheduled_slot'))
+                            else ('13:30 (studio storico)'
+                                  if str(value.get('scheduled_slot') or '') == '30 13 * * 1-5'
+                                  and str(value.get('rome_date') or '') < '2026-11-11'
+                                  else describe_slot(value.get('scheduled_slot')))
                         ),
                         'Stato': value.get('status', ''),
                         'Qualità dati': describe_quality(value, store),
