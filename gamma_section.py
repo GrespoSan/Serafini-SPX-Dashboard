@@ -1282,6 +1282,6 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                 key=f'pine_view_{week}_{day}')
             st.code(scripts[selected_code], language='pine')
     st.caption('TradingView → Pine Editor → Nuovo indicatore → incolla il codice '
-               '→ Salva → Aggiungi al grafico ES. I quattro file usano soltanto '
+               '→ Salva → Aggiungi al grafico ES. I cinque file usano soltanto '
                'i rilevamenti realmente disponibili; nessuna opzione live viene scaricata in TradingView.')
     st.caption('NET GAMMA(K) = (OI Call + VOL Call) × Gamma Call − (OI Put + VOL Put) × Gamma Put. Nessun fattore monetario aggiunto.')
