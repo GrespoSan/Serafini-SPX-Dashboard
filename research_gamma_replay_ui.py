@@ -75,6 +75,24 @@ def render(available, kind, day):
             st.info("Nessun confronto utilizzabile negli snapshot selezionati.")
             return
         st.dataframe(results, hide_index=True, width="stretch")
+        # Persistenza descrittiva: due confronti consecutivi idonei, non un segnale.
+        streaks = []
+        for idx in range(1, len(results)):
+            previous, current = results[idx - 1], results[idx]
+            p = previous.get("Gamma positivo sopra SPX, var. %")
+            q = current.get("Gamma positivo sopra SPX, var. %")
+            if (previous["Confronto esplorativo idoneo"]
+                    and current["Confronto esplorativo idoneo"]
+                    and previous["A"] == current["Da"]
+                    and p is not None and q is not None and p < 0 and q < 0):
+                streaks.append(f'{previous["Da"]} → {previous["A"]} → {current["A"]}')
+        st.caption("Contrazione consecutiva del gamma positivo sopra SPX "
+                   f"(due intervalli idonei): {len(streaks)} sequenze. "
+                   "È una descrizione ex-post, NON un segnale o una prova "
+                   "di anticipazione del prezzo ES.")
+        if streaks:
+            st.write("; ".join(streaks))
+
         n_eligible = sum(1 for row in results if row["Confronto esplorativo idoneo"])
         st.caption(f"Confronti esplorativi idonei: {n_eligible}/{len(results)}. "
                    "Idoneo significa: stessa copertura, riferimento coerente, "
