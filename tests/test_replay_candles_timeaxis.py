@@ -19,6 +19,7 @@ DAY = date(2026, 11, 9)
 def _frame(slot, download):
     return (slot, {
         "clock": download[11:19], "download_rome": download,
+        "reference_spx": 7450.0, "spot": 7430.0,
         "profiles": {"0DTE": {"rows": [{"strike_spx": 7400, "net_gamma": 3}]}}
     })
 
