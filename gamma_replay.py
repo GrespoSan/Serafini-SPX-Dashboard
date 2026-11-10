@@ -139,8 +139,9 @@ def _study_frames(_store, week, day):
                     or item.get("kind") != "STUDIO_INTRADAY_NON_UFFICIALE"):
                 continue
             slot = item.get("slot_rome")
-            if slot not in SLOTS or (slot in OFFICIAL and
-                    not (slot == "13:30" and day < OFFICIAL_1330_START)):
+            # 13:30 Replay resta fallback esplicitamente STUDIO anche
+            # dopo la promozione ufficiale, se lo snapshot raw non arriva.
+            if slot not in SLOTS or (slot in OFFICIAL and slot != "13:30"):
                 continue
             dt = _download_clock(item)
             if dt is None:
