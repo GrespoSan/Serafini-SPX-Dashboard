@@ -63,8 +63,16 @@ def render(available, kind, day):
                 "Strike prima": result["before_count"],
                 "Strike dopo": result["after_count"],
                 "SPX riferimento iniziale": spot,
+                "Gamma positivo sopra SPX, prima": result.get("positive_above_before"),
+                "Gamma positivo sopra SPX, dopo": result.get("positive_above_after"),
+                "Gamma positivo sopra SPX, var. assoluta": result.get("positive_above_change_abs"),
                 "Gamma positivo sopra SPX, var. %": result.get("positive_above_change_pct"),
+                "Gamma positivo sopra SPX, stato": result.get("positive_above_status"),
+                "Gamma negativo sotto SPX, prima (modulo)": result.get("negative_below_before_abs"),
+                "Gamma negativo sotto SPX, dopo (modulo)": result.get("negative_below_after_abs"),
+                "Gamma negativo sotto SPX, var. assoluta (modulo)": result.get("negative_below_change_abs"),
                 "Gamma negativo sotto SPX, var. %": result.get("negative_below_change_pct"),
+                "Gamma negativo sotto SPX, stato": result.get("negative_below_status"),
                 "Somma |gamma| prima": result["total_abs_before"],
                 "Somma |gamma| dopo": result["total_abs_after"],
             }
@@ -75,6 +83,15 @@ def render(available, kind, day):
             st.info("Nessun confronto utilizzabile negli snapshot selezionati.")
             return
         st.dataframe(results, hide_index=True, width="stretch")
+        valid = [r for r in results if r["Confronto esplorativo idoneo"]]
+        n_down = sum(r["Gamma positivo sopra SPX, stato"] == "DIMINUZIONE" for r in valid)
+        n_zero = sum(r["Gamma positivo sopra SPX, stato"] == "BASE ZERO · % N/D" for r in valid)
+        st.caption(
+            f"Su {len(valid)} confronti idonei: {n_down} diminuzioni misurabili; "
+            f"{n_zero} con base iniziale zero (percentuale N/D, NON classificati "
+            "come aumento o assenza di diminuzione). "
+            "I confronti non idonei restano visibili ma esclusi da questo conteggio."
+        )
         # Persistenza su TRE frame: stessa soglia spot del primo frame e
         # stesso universo di strike in tutte e tre le osservazioni.
         # Non concatenare due variazioni con soglie spot differenti.
@@ -129,6 +146,10 @@ def render(available, kind, day):
                    "Idoneo significa: stessa copertura, riferimento coerente, "
                    "download distinti e timestamp Cboe diversi. "
                    "NON certifica dati indipendenti o capacità predittiva.")
+        st.caption("Variazione assoluta = valore dopo − valore prima. "
+                   "La variazione percentuale è N/D quando il valore iniziale "
+                   "è zero; in tal caso NON è un segnale di contrazione. "
+                   "I valori negativi sotto SPX sono riportati in modulo.")
         st.caption("Le variazioni sopra/sotto il prezzo usano lo SPX del frame INIZIALE "
                    "come soglia fissa. Copertura parziale = strike mancanti; "
                    "non interpretarli come gamma zero. I timestamp ripetuti "
