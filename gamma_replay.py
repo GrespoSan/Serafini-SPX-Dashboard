@@ -210,6 +210,10 @@ def render(store, week, logs, view_mode=None):
                 frames[slot] = item
     all_available = [(slot, frames[slot]) for slot in SLOTS if slot in frames
                      and frames[slot].get("profiles", {}).get(kind, {}).get("rows")]
+    # Ordinare secondo il download EFFETTIVO e non secondo la stringa dello
+    # slot: nei disallineamenti DST il 17:00 logico USA cade alle 16:00 Roma.
+    all_available.sort(key=lambda pair: _download_clock(pair[1]) or
+                       datetime.max.replace(tzinfo=ROME))
     post_expiry = [
         (slot, frame) for slot, frame in all_available
         if classify_0dte_download(day, frame.get("download_rome"))["post_expiry"]
