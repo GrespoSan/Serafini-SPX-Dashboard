@@ -48,12 +48,13 @@ def _download_clock(record):
         return None
 
 
-def _official_frames(store, week, day, logs):
+@st.cache_data(ttl=90, show_spinner=False, max_entries=12)
+def _official_frames(_store, week, day, logs):
     """Preferisci il primo evento valido nello slot ufficiale."""
     by_slot = {}
     for log in logs:
         try:
-            item = json.loads(store.download(f"{week}/logs/{log['name']}"))
+            item = json.loads(_store.download(f"{week}/logs/{log['name']}"))
             slot = next((k for k, v in (OFFICIAL | LEGACY_STUDY).items()
                          if item.get("scheduled_slot") == v), None)
             if (not slot or item.get("rome_date") != day.isoformat()
@@ -73,7 +74,7 @@ def _official_frames(store, week, day, logs):
     for slot, candidates in by_slot.items():
         for clock, item in sorted(candidates, key=lambda pair: pair[0]):
             try:
-                snap = read_snapshot(store.download(item["file"]))
+                snap = read_snapshot(_store.download(item["file"]))
                 ref = float(snap["data"].get("prev_day_close") or 0)
                 if ref <= 0:
                     continue
@@ -122,14 +123,15 @@ def _official_frames(store, week, day, logs):
     return result
 
 
-def _study_frames(store, week, day):
+@st.cache_data(ttl=90, show_spinner=False, max_entries=12)
+def _study_frames(_store, week, day):
     data = {}
-    for obj in store.list(f"replay/{week}/"):
+    for obj in _store.list(f"replay/{week}/"):
         name = str(obj.get("name", ""))
         if not name.startswith(day.isoformat() + "_") or not name.endswith(".json"):
             continue
         try:
-            item = json.loads(store.download(f"replay/{week}/{name}"))
+            item = json.loads(_store.download(f"replay/{week}/{name}"))
             if (item.get("schema") != "serafini_replay_v1"
                     or item.get("rome_date") != day.isoformat()
                     or item.get("kind") != "STUDIO_INTRADAY_NON_UFFICIALE"):
@@ -189,6 +191,10 @@ def render(store, week, logs, view_mode=None):
     elif view_mode not in ("Solo NET GAMMA", "Candele ES + NET GAMMA"):
         raise ValueError("Modalità Replay non valida")
     if st.button("Aggiorna replay", key=f"replay_reload_{week}"):
+        # I pool grafici Cboe sono piu' ampi: cache corta per evitare
+        # egress Supabase a ogni selezione dello zoom, con refresh esplicito.
+        _study_frames.clear()
+        _official_frames.clear()
         st.rerun()
     with st.spinner("Caricamento profili compatti e snapshot ufficiali..."):
         frames = _study_frames(store, week, day)
