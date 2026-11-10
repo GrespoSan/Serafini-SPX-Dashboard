@@ -15,6 +15,7 @@ from net_gamma import profile, read_snapshot, visual_profile
 from feed_quality import summarize_timeline
 from replay_scale import dynamic_gamma_bounds
 from replay_profiles import choose_rows, gamma_bar_trace
+from replay_view import plotted_rows, price_zoom_bounds, coverage_note
 from spx_market_clock import classify_0dte_download, cash_open_rome, spxw_expiry_close_rome
 
 ROME = ZoneInfo("Europe/Rome")
@@ -161,9 +162,12 @@ def render(store, week, logs, view_mode=None):
                        index=weekdays.index(default_day),
                        format_func=lambda d: d.strftime("%d/%m/%Y"),
                        key=f"replay_day_{week}")
-    # Il Replay rimane dedicato al solo 0DTE.
-    # Weekly resta disponibile nella sezione NET GAMMA 0DTE / Weekly.
-    kind = "0DTE"
+    # Ogni profilo conserva scadenza e catena Cboe proprie. Weekly è
+    # visualizzabile ma NON deve usare il filtro post-scadenza 0DTE.
+    kind = st.radio(
+        "Scadenza Replay", ("0DTE", "Weekly"), horizontal=True,
+        key=f"replay_expiry_{week}_{day}", index=0,
+    )
     st.caption(f"Orario USA per {day:%d/%m/%Y}: apertura 09:30 NY = "
                f"{cash_open_rome(day):%H:%M} Roma; "
                f"stop SPXW 0DTE 16:00 NY = "
@@ -188,15 +192,16 @@ def render(store, week, logs, view_mode=None):
         (slot, frame) for slot, frame in all_available
         if classify_0dte_download(day, frame.get("download_rome"))["post_expiry"]
     ]
-    # Esclusione solo dalla visualizzazione 0DTE e dalla GIF:
-    # l'archivio e il report mantengono INTEGRO il dato post-scadenza.
+    # Il filtro di scadenza è applicato SOLO al 0DTE.
+    # Weekly resta valida anche dopo il close SPXW 0DTE.
     available = [(slot, frame) for slot, frame in all_available
-                 if not classify_0dte_download(
+                 if kind == "Weekly" or not classify_0dte_download(
                      day, frame.get("download_rome"))["post_expiry"]]
     missing = [slot for slot in SLOTS if slot not in frames]
-    st.caption(f"Frame 0DTE pre-scadenza: {len(available)}/{len(SLOTS)} · "
+    st.caption(f"Frame {kind} {'pre-scadenza' if kind == '0DTE' else 'disponibili'}: "
+               f"{len(available)}/{len(SLOTS)} · "
                f"Assenti: {', '.join(missing) if missing else 'nessuno'}")
-    if post_expiry:
+    if kind == "0DTE" and post_expiry:
         ignored = ', '.join(slot for slot, _ in post_expiry)
         limit = classify_0dte_download(
             day, post_expiry[0][1]["download_rome"])["expiry_close_rome"][11:16]
@@ -233,20 +238,49 @@ def render(store, week, logs, view_mode=None):
                    "e' stato attivato successivamente.")
 
 
-    # I profili compatti conservano 50 strike di calcolo in rows e fino a
-    # 140 strike autentici della stessa fotografia Cboe in visual_rows.
+    # I 50 strike Serafini, i 140 legacy e il nuovo pool grafico Cboe
+    # restano dati distinti. Questa fascia cambia SOLO il Replay e la GIF.
     display_mode = st.radio(
         "Copertura NET GAMMA nel Replay",
         ("Estesa · strike Cboe disponibili", "Originale Serafini · 50 strike"),
         horizontal=True, index=0,
         key=f"replay_gamma_coverage_{week}_{day}_{kind}",
-        help="Estesa usa solo le barre archiviate nella medesima fotografia Cboe. "
-             "Il calcolo standard resta sempre 25 sopra + 25 sotto.",
+        help="Gli strike estesi provengono dalla stessa fotografia Cboe; "
+             "nessun calcolo dei 50 Serafini viene alterato.",
     )
     show_extended = display_mode.startswith("Estesa")
+    band_pct = st.number_input(
+        "Fascia strike ± % dal Close precedente (0DTE e Weekly)",
+        min_value=0.5, max_value=10.0, value=3.0, step=0.5,
+        key=f"replay_strike_band_{week}_{day}_{kind}",
+        disabled=not show_extended,
+        help="Sceglie fra i veri strike archiviati. Per vecchi Replay compatti "
+             "non può recuperare dati Cboe mai salvati.",
+    )
+    auto_extend = st.checkbox(
+        "Estensione automatica NET GAMMA — solo grafici e GIF",
+        value=True, disabled=not show_extended,
+        key=f"replay_auto_extend_{week}_{day}_{kind}",
+        help="Se lo spot della fotografia esce dalla fascia, include "
+             "un margine di ±0,6% del close precedente attorno allo spot. "
+             "Non cambia i 50 strike Serafini né il Pine ufficiale.",
+    )
+    zoom_mode = st.radio(
+        "Zoom verticale del Replay",
+        ("Automatico · segue il prezzo", "Fascia completa · mostra gli strike"),
+        horizontal=True, index=0,
+        key=f"replay_price_zoom_{week}_{day}_{kind}",
+        help="Automatico: segue la giornata e mantiene la scala identica "
+             "durante Play. Fascia completa: visualizza tutta la "
+             "copertura degli strike selezionati.",
+    )
+    show_full_band = zoom_mode.startswith("Fascia completa")
 
     def display_rows(item):
-        return choose_rows(item["profiles"][kind], show_extended)
+        return plotted_rows(
+            item["profiles"][kind], item["reference_spx"], item.get("spot"),
+            band_pct, auto_extend, show_extended,
+        )
 
     # Unica fonte: differenziale della medesima data gia' calcolato/impostato
     # in ANALISI NET GAMMA. Nessun input o calcolo parallelo nel Replay.
@@ -292,16 +326,27 @@ def render(store, week, logs, view_mode=None):
                   "nel tooltip. " if show_extended else
                   "Etichette su tutti gli strike reali. ")
                + "Il calcolo Serafini non cambia.")
-    missing_extended = [slot for slot, frame in available
-                        if show_extended and not frame["profiles"][kind].get("visual_rows")]
-    if missing_extended:
-        st.caption("Estensione non archiviata: " + ", ".join(missing_extended) +
-                   ". Per questi rilevamenti restano soltanto i 50 strike originali.")
-    incomplete = [slot for slot, frame in available
-                  if show_extended and frame["profiles"][kind].get("visual_coverage_complete") is False]
-    if incomplete:
-        st.caption("Copertura estesa non completa negli snapshot: " +
-                   ", ".join(incomplete) + ". Nessun livello ricostruito.")
+    if show_extended:
+        notes = [
+            (slot, coverage_note(frame["profiles"][kind],
+             frame["reference_spx"], band_pct, auto_extend, frame.get("spot")))
+            for slot, frame in available
+        ]
+        legacy = [slot for slot, note in notes
+                  if note["origin"] == "profilo storico limitato"]
+        capped = [slot for slot, note in notes if note.get("capped")]
+        if legacy:
+            st.caption(
+                "Archivio storico senza pool ampio: " + ", ".join(legacy) +
+                ". La fascia è applicata ai livelli realmente salvati; "
+                "non può generare nuovi strike. I nuovi Replay avranno "
+                "un pool Cboe fino a ±10% del close precedente."
+            )
+        if capped:
+            st.caption(
+                "Pool Cboe troncato per limite di archiviazione (600 strike): "
+                + ", ".join(capped) + ". Nessun livello interpolato."
+            )
     # Scala adattiva per frame, ma simmetrica: il NET GAMMA zero rimane
     # esattamente al centro della stessa posizione in ogni rilevamento.
     # I valori NET GAMMA originali restano invariati.
@@ -316,7 +361,10 @@ def render(store, week, logs, view_mode=None):
     yvalues = [strike + (offset or 0) for strike in strikes]
     prices = [(numeric_spot(item) + (offset or 0))
               for _, item in available if numeric_spot(item) is not None]
-    ybounds = [min(yvalues + prices) - 8, max(yvalues + prices) + 8]
+    reference_price = float(available[0][1]["reference_spx"]) + (offset or 0)
+    ybounds = price_zoom_bounds(
+        prices, [], [], yvalues, reference_price, complete=show_full_band,
+    )
 
     def frame_data(slot, item):
         vals = {float(r["strike_spx"]): float(r["net_gamma"])
@@ -412,7 +460,10 @@ def render(store, week, logs, view_mode=None):
         else:
             try:
                 from replay_candles import combined_graph
-                graph = combined_graph(graph, available, day, kind, offset, bounds, ybounds)
+                graph = combined_graph(
+                    graph, available, day, kind, offset, bounds, ybounds,
+                    zoom_complete=show_full_band,
+                )
                 candle_meta = graph.layout.meta or {}
                 st.caption(
                     f"Sinistra: {candle_meta.get('candle_source', 'ES · fonte N/D')}; "
@@ -440,8 +491,8 @@ def render(store, week, logs, view_mode=None):
     # GIF solo su richiesta: nessuna generazione nei normali rerun del replay.
     # Conserviamo una sola GIF in memoria per sessione e invalidiamo la cache
     # se cambiano giorno, scadenza, differenziale o gli snapshot disponibili.
-    gif_signature = ("visual_extension_v4_es_labels", day.isoformat(), kind, offset,
-                     show_extended,
+    gif_signature = ("replay_band_v5", day.isoformat(), kind, offset,
+                     show_extended, band_pct, auto_extend, show_full_band,
                      tuple((slot, item.get("clock"),
                             tuple((float(x["strike_spx"]), float(x["net_gamma"]))
                                   for x in display_rows(item)))
@@ -455,7 +506,9 @@ def render(store, week, logs, view_mode=None):
             from replay_gif import generate_gif
             with st.spinner("Creazione GIF dai rilevamenti disponibili..."):
                 gif_data, gif_frames = generate_gif(
-                    available, day, kind, offset, show_extended=show_extended)
+                    available, day, kind, offset, show_extended=show_extended,
+                    band_pct=band_pct, auto_extend=auto_extend,
+                    zoom_complete=show_full_band)
             st.session_state[gif_key] = {
                 "signature": gif_signature, "data": gif_data, "count": gif_frames
             }
