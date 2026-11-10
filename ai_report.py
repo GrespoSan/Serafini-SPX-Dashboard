@@ -721,11 +721,16 @@ def export_zip(report):
         day=report['report_date']
         z.writestr(f'SPX_AI_{day}.json',json_data)
         z.writestr(f'SPX_Report_{day}.pdf',pdf_data)
-        z.writestr('LEGGIMI.txt', 'Report derivato dagli snapshot Cboe archiviati in Supabase.\n'
-                   'Il JSON contiene 50 strike per profilo di ogni acquisizione completa o Replay disponibile.\n'
-                   'Ufficiali e Replay di studio restano separati; cronologia senza slot doppi.\n'
-                   'Le chain Cboe originali complete non sono incluse; scarica lo ZIP settimanale.\n'
-                   'Valori senza interpretazione dei flussi: NET GAMMA non prova acquisti o vendite reali.\n')
+        z.writestr(f'SPX_Allerte_Volume_{day}.csv', volume_alerts_csv(report))
+        z.writestr(f'SPX_Freschezza_Dati_{day}.csv', freshness_csv(report))
+        z.writestr('LEGGIMI.txt', "Report derivato dagli snapshot Cboe archiviati in Supabase.\n" +
+                       "JSON: 50 strike per profilo di ogni fotografia, quando disponibile.\n" +
+                       "PDF: sintesi, allerte Volume ufficiali + Replay, freschezza download Cboe.\n" +
+                       "CSV Allerte Volume: anomalie per rilevamento, NON segnali di trading.\n" +
+                       "CSV Freschezza Dati: download Roma e timestamp Cboe grezzo separati.\n" +
+                       "ETA CBOE: non verificabile senza timezone dichiarato dal provider.\n" +
+                       "Catene Cboe complete non incluse: consultare backup separato.\n" +
+                       "NET GAMMA Serafini, GEX Edge e regola Buffer NON sono modificati.\n")
     return out.getvalue()
 
 
