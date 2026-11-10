@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from replay_prices import candles_up_to, load_es_candles
+from replay_view import price_zoom_bounds
 
 ROME = ZoneInfo("Europe/Rome")
 
@@ -49,7 +50,8 @@ def _time_window_rome(day, last_download):
     return [start.isoformat(timespec="seconds"), end.isoformat(timespec="seconds")]
 
 
-def combined_graph(gamma_graph, available, day, kind, offset, gamma_bounds, gamma_ybounds):
+def combined_graph(gamma_graph, available, day, kind, offset, gamma_bounds, gamma_ybounds,
+                   zoom_complete=False):
     """Crea un grafico animato 5m ES=F (sinistra) + NET GAMMA (destra)."""
     end_of_last_slot = max(_frame_download_rome(day, item) for _, item in available)
     data = load_es_candles(day, required_until=end_of_last_slot)
@@ -61,8 +63,20 @@ def combined_graph(gamma_graph, available, day, kind, offset, gamma_bounds, gamm
     # Stesso intervallo prezzi per entrambe le colonne e tutti i frame.
     lows = relevant["low"].astype(float).tolist()
     highs = relevant["high"].astype(float).tolist()
-    min_y = min(gamma_ybounds[0], min(lows) - 5)
-    max_y = max(gamma_ybounds[1], max(highs) + 5)
+    spots = []
+    for _, frame in available:
+        try:
+            value = float(frame.get("spot"))
+            if value > 0:
+                spots.append(value + float(offset))
+        except (TypeError, ValueError, OverflowError):
+            pass
+    plotted_strikes = list(gamma_graph.data[0].y)
+    min_y, max_y = price_zoom_bounds(
+        spots, lows, highs, plotted_strikes,
+        float(available[0][1]["reference_spx"]) + float(offset),
+        complete=zoom_complete,
+    )
 
     fig = make_subplots(
         rows=1, cols=2, shared_yaxes=True, horizontal_spacing=0.035,
