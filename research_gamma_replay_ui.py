@@ -145,6 +145,40 @@ def render(available, kind, day):
         st.download_button("Esporta strike CSV", csv_bytes(details),
                            file_name=f"gamma_research_{day}_{kind}_strikes.csv",
                            mime="text/csv", key=f"research_csv_strikes_{day}_{kind}")
+        st.divider()
+        st.caption("ES successivo: etichette osservazionali, NON simulazione "
+                   "di ingressi/uscite. Embargo di 15 minuti dopo il download "
+                   "e primo close ES 5m successivo; niente interpolazione.")
+        if st.button("Calcola ES successivo · 15/30/60 minuti",
+                     key=f"research_es_forward_{day}_{kind}"):
+            try:
+                from datetime import datetime
+                from zoneinfo import ZoneInfo
+                from replay_prices import load_es_candles
+                from research_gamma_es_outcomes import forward_outcomes
+                last = datetime.fromisoformat(
+                    available[-1][1]["download_rome"].replace("Z", "+00:00"))
+                es_data = load_es_candles(day, required_until=last)
+                labelled = []
+                for row in results:
+                    item = dict(row)
+                    outcome = forward_outcomes(es_data, row["Download finale"])
+                    item.update(outcome)
+                    labelled.append(item)
+                st.caption("Fonte ES: " + es_data.attrs.get("candle_source", "N/D"))
+                st.dataframe(labelled, hide_index=True, width="stretch")
+                st.download_button(
+                    "Esporta gamma + ES successivo CSV", csv_bytes(labelled),
+                    file_name=f"gamma_es_forward_{day}_{kind}.csv",
+                    mime="text/csv", key=f"research_forward_export_{day}_{kind}")
+                st.caption("Le etichette future NON erano disponibili al "
+                           "momento del rilevamento. Non usare per filtrare "
+                           "segnali ex ante. Giorni/ore senza dati = N/D.")
+            except (ValueError, TypeError, KeyError, RuntimeError,
+                    ImportError, OSError) as exc:
+                st.warning(f"ES successivo non disponibile: {type(exc).__name__}: "
+                           f"{str(exc)[:140]}")
+
         st.caption("Nessuna verifica predittiva ES eseguita: serviranno prezzi futuri "
                    "allineati temporalmente, costi e baseline. "
                    "Il NET GAMMA Serafini include volume cumulato.")
