@@ -16,6 +16,10 @@ from zoneinfo import ZoneInfo
 import streamlit as st
 from net_gamma import profile, read_snapshot
 from ai_replay import attach_replay
+from ai_quality_export import (
+    attach_freshness_audit, merge_volume_alerts,
+    volume_alerts_csv, freshness_csv,
+)
 from spx_market_clock import cash_open_rome, spxw_expiry_close_rome
 from volume_audit import compare_volume_profiles, inspect_raw_expiry, raw_transition_diagnostic
 
@@ -243,7 +247,7 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
         report['warnings'].append('Differenziale ES–SPX assente: strike_es=null; usare soltanto strike SPX.')
     report['warnings'].append('Le concentrazioni e le variazioni sono descrittive, non dimostrano acquisti/vendite reali di opzioni.')
     # Contesto indipendente: non modifica la formula NET GAMMA.
-    report['schema_version'] = 'serafini_spx_ai_report_v9'
+    report['schema_version'] = 'serafini_spx_ai_report_v10'
     report['market_context'] = {'vix_curve': {'status': 'NON DISPONIBILE'},
                                 'asia_session': {'status': 'NON DISPONIBILE'}}
     # Identico motore di volatilita del quadro operativo: VX + range Daily ES.
@@ -349,9 +353,12 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
         'asia_verdict_0900': report['market_context']['asia_session'].get('verdict_0900'),
         'note': 'La zona asiatica è contesto, non segnale LONG/SHORT. NET GAMMA e VX non bastano per un ingresso.'}
     report['sources']['vix_curve'] = 'Cboe VX mensili: settlement seduta precedente, se disponibile'
+    # Attribuire la fonte Daily effettiva, senza modificare buffer o Gamma.
+    daily_source = (report['market_context'].get('previous_daily_range') or {}).get('source')
     report['sources']['previous_daily_range'] = (
-        'Yahoo Finance ES=F, candela Daily della seduta precedente; '
-        'range=(High-Low)/Close * 100, non necessariamente identico a ES1! TradingView')
+        (str(daily_source) + '; range=(High-Low)/Close * 100; '
+         'sessione/contratto da confrontare con ES1! TradingView')
+        if daily_source else 'NON DISPONIBILE - fonte Daily non verificata')
     report['sources']['asia_session'] = (
         report['market_context']['asia_session'].get('source')
         or 'Yahoo ES=F 5m; recupero da Yahoo 1m soltanto se verificabile')
@@ -391,6 +398,15 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
         }
         report['warnings'].append(
             'Replay non accessibile; gli snapshot ufficiali restano nel report.')
+    # Le allerte Replay sono nelle transitions: il riepilogo precedente
+    # conteggiava soltanto le acquisizioni ufficiali.
+    merge_volume_alerts(report)
+    attach_freshness_audit(report)
+    if (report['freshness_audit']['official']['timezone_undeclared']
+            or report['freshness_audit']['replay_timeline']['timezone_undeclared']):
+        report['warnings'].append(
+            'Timestamp Cboe senza fuso dichiarato: eta del dato N/D. '
+            'Nessuna assunzione arbitraria UTC/NY/Roma.')
     return report
 
 
@@ -724,7 +740,7 @@ def render(store, week, snaps, logs):
     # Firma del formato: impedisce il download del vecchio ZIP v2 salvato
     # nella sessione dopo l'aggiornamento di codice, a parita di parametri.
     report_key = (week, day.isoformat(), ref, offset,
-                  json.dumps(levels, sort_keys=True), 'serafini_spx_ai_report_v9_official_2030')
+                  json.dumps(levels, sort_keys=True), 'serafini_spx_ai_report_v10_quality_replay_freshness')
     if st.button('Prepara report per analisi AI',key=f'ai_build_{week}',type='primary'):
         try:
             with st.spinner('Lettura snapshot Cboe e preparazione report...'):
