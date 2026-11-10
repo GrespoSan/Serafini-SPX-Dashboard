@@ -68,6 +68,15 @@ def compare_profiles(before_rows, after_rows, *, spot=None):
     def change(old, new):
         return 100.0 * (new - old) / old if old > 0 else None
 
+    def change_status(old, new):
+        if old == 0:
+            return "BASE ZERO · % N/D"
+        if new < old:
+            return "DIMINUZIONE"
+        if new > old:
+            return "AUMENTO"
+        return "INVARIATO"
+
     result = {
         "status": "OK" if len(common) == len(before) == len(after) else "COPERTURA PARZIALE",
         "common_count": len(common), "before_count": len(before), "after_count": len(after),
@@ -85,8 +94,12 @@ def compare_profiles(before_rows, after_rows, *, spot=None):
         result["fixed_spot_spx"] = spot
         result["positive_above_before"] = up_b
         result["positive_above_after"] = up_a
+        result["positive_above_change_abs"] = up_a - up_b
         result["positive_above_change_pct"] = change(up_b, up_a)
+        result["positive_above_status"] = change_status(up_b, up_a)
         result["negative_below_before_abs"] = down_b
         result["negative_below_after_abs"] = down_a
+        result["negative_below_change_abs"] = down_a - down_b
         result["negative_below_change_pct"] = change(down_b, down_a)
+        result["negative_below_status"] = change_status(down_b, down_a)
     return result
