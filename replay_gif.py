@@ -164,6 +164,19 @@ def generate_gif(available, day, kind, offset, show_extended=True,
             draw.rectangle((px - bar_width // 2, top, px + bar_width // 2,
                             max(top + 1, bottom)), fill=color)
 
+        # Con la fascia estesa le barre rimangono tutte reali; etichettiamo
+        # solo le 32 più intense DENTRO lo zoom per evitare sovrapposizioni.
+        # Nella modalità Serafini 50 restano le etichette tradizionali.
+        visible_labels = [
+            (strike, gamma) for strike, gamma in current.items()
+            if gamma != 0 and low <= strike + offset <= high
+        ]
+        label_strikes = {
+            strike for strike, _ in (
+                sorted(visible_labels, key=lambda x: -abs(x[1]))[:32]
+                if show_extended else visible_labels)
+        }
+
         # Limiti simmetrici adattivi: lo zero resta fisso al centro del pannello.
         # Le lunghezze delle barre NON sono confrontabili fra orari differenti.
         draw.line((round(gamma_zero), chart_top, round(gamma_zero), chart_bottom),
@@ -187,6 +200,8 @@ def generate_gif(available, day, kind, offset, show_extended=True,
             z = round(gamma_zero)
             color = GREEN if net > 0 else RED
             draw.rectangle((min(px, z), py - 3, max(px, z) + 1, py + 3), fill=color)
+            if strike not in label_strikes:
+                continue
             # Stessa coordinata ES della barra. Strike SPX solo nei dati sorgente.
             label = f"{strike + offset:,.0f}"
             if net > 0:
