@@ -1,14 +1,14 @@
-"""Selezione dei rilevamenti reali per i quattro export Pine.
+"""Selezione dei rilevamenti reali per i cinque export Pine.
 
 Usa ESATTAMENTE i lettori ufficiali/di studio gia' validati dal Replay.
-I frame storici delle 13:30 sono un fallback di STUDIO, mai ufficiali.
+I frame 13:30 anteriori all 11/11/2026 restano STUDIO; successivi ufficiali.
 """
 from datetime import date
 
-from gamma_replay import _official_frames, _study_frames, weekly_expiry
+from gamma_replay import _official_frames, _study_frames, weekly_expiry, OFFICIAL_1330_START
 
 
-EXPORT_SLOTS = ("07:30", "13:30", "15:50", "20:30")
+EXPORT_SLOTS = ("07:30", "13:30", "15:50", "17:00", "20:30")
 
 
 def load_export_profiles(store, week, day: date, logs):
@@ -17,9 +17,9 @@ def load_export_profiles(store, week, day: date, logs):
     recorded = _official_frames(store, week, day, logs)
     frames = {slot: frame for slot, frame in study.items() if slot in EXPORT_SLOTS}
     for slot, frame in recorded.items():
-        # Precedenza al formato compatto 13:30. Se manca, manteniamo
-        # la vecchia acquisizione raw delle 13:30 come studio storico.
-        if slot != "13:30" or slot not in frames:
+        # Il vecchio compact delle 13:30 prevale SOLO prima della
+        # promozione a rilevamento ufficiale; dopo prevale il raw.
+        if not (slot == "13:30" and day < OFFICIAL_1330_START and slot in frames):
             frames[slot] = frame
 
     expected = {"0DTE": day.isoformat(), "Weekly": weekly_expiry(day).isoformat()}
