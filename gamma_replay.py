@@ -257,6 +257,10 @@ def render(store, week, logs, view_mode=None):
         st.info("Nessun frame replay disponibile per questa data. I frame futuri "
                 "non possono essere ricostruiti retroattivamente.")
         return
+    # Laboratorio subito dopo selezione data e scadenza.
+    from research_gamma_replay_ui import render as render_gamma_research
+    render_gamma_research(available, kind, day)
+
     if len(available) == 1:
         st.warning("Replay non animabile: e' disponibile soltanto il frame "
                    f"{available[0][0]}. Play richiede almeno due acquisizioni "
@@ -582,10 +586,6 @@ def render(store, week, logs, view_mode=None):
                       "Tipo": item["origin"], "Top 3 positivo": fmt(upper),
                       "Top 3 negativo": fmt(lower)})
     st.dataframe(table, hide_index=True, width="stretch")
-    # Laboratorio opzionale: riusa i frame gia' caricati, senza nuovo storage.
-    from research_gamma_replay_ui import render as render_gamma_research
-    render_gamma_research(available, kind, day)
-
     st.caption("I frame ufficiali disponibili provengono dall'archivio invariato. "
                "I frame intermedi NON entrano nei report ufficiali. "
                "L'orario di download non garantisce la freschezza della chain Cboe.")
