@@ -778,7 +778,8 @@ def render(store, week, snaps, logs):
         st.info('Per includere C1/P1, apri NET GAMMA 0DTE / Weekly e seleziona i livelli per questa data.')
     st.caption('Include le catene originali archiviate e tutti i rilevamenti Replay '
                'disponibili per questa data. JSON: 50 strike 0DTE e Weekly '
-               'per ciascun frame; PDF: sintesi cronologica. '
+               'per ciascun frame; PDF: sintesi e allerte Volume. '
+               'CSV: anomalie e freschezza (fuso Cboe non presunto). '
                'I Replay di studio restano separati dagli originali Cboe.')
     # Firma del formato: impedisce il download del vecchio ZIP v2 salvato
     # nella sessione dopo l'aggiornamento di codice, a parita di parametri.
@@ -793,14 +794,20 @@ def render(store, week, snaps, logs):
                                                   'data':binary,'valid':sum(x['status']=='VALIDO' for x in report['snapshots']),
                                                   'total':len(report['snapshots']),
                                                   'timeline':len(report.get('intraday_replay', {}).get('timeline', [])),
-                                                  'study':report.get('intraday_replay', {}).get('study_files_total', 0)}
+                                                  'study':report.get('intraday_replay', {}).get('study_files_total', 0),
+                                                   'volume_alerts':report.get('volume_integrity', {}).get('alert_count', 0),
+                                                   'volume_official':report.get('volume_integrity', {}).get('official_alert_count', 0),
+                                                   'volume_replay':report.get('volume_integrity', {}).get('replay_alert_count', 0)}
         except Exception as exc:
             st.error(f'Impossibile preparare il report: {type(exc).__name__}: {str(exc)[:180]}')
     ready=st.session_state.get('ai_report_ready')
     if ready and ready['key']==report_key:
         st.success(f"Report pronto: {ready['valid']} snapshot completi validi "
                    f"su {ready['total']} · {ready['timeline']} rilevamenti "
-                   f"nella cronologia · {ready['study']} Replay di studio.")
-        st.download_button('Scarica report JSON + PDF (ZIP)',data=ready['data'],
+                   f"nella cronologia · {ready['study']} Replay di studio · "
+                   f"allerte Volume {ready.get('volume_alerts', 0)} "
+                   f"(ufficiali {ready.get('volume_official', 0)}, "
+                   f"Replay {ready.get('volume_replay', 0)}).")
+        st.download_button('Scarica report JSON + PDF + CSV audit (ZIP)',data=ready['data'],
                            file_name=f'Serafini_SPX_AI_{day.isoformat()}.zip',mime='application/zip',
                            key=f'ai_download_{day}', on_click="ignore")
