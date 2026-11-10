@@ -39,7 +39,7 @@ def _snapshot_cboe_stamp(week, file_name, _store):
 
 @st.cache_data(ttl=3600, max_entries=50, show_spinner=False)
 def _pine_export_data(week, day, logs_count, _store, _logs):
-    """Cache breve per non riscaricare i 3 snapshot raw a ogni rerun."""
+    """Cache breve per non riscaricare i 5 snapshot raw a ogni rerun."""
     return load_export_profiles(_store, week, day, _logs)
 
 
@@ -142,14 +142,17 @@ def _snapshot_log_index(week, log_names, _store):
     for path, (dt,slot) in earliest.items():
         if slot == '30 7 * * 1-5':
             label='Mattina 07:30'
+        elif slot == '30 13 * * 1-5':
+            label=('Pre-USA 13:30 · ufficiale' if dt.date() >= date(2026, 11, 11)
+                   else '13:30 (studio storico)')
+        elif slot == '0 17 * * 1-5':
+            label='USA · 10:00 Chicago (17:00 ordinario)'
         elif slot == '46 15 * * 1-5':
             label='Pomeriggio 15:46'
         elif slot == '50 15 * * 1-5':
             label='Pomeriggio · 08:50 Chicago'
         elif slot == '30 20 * * 1-5':
             label='Sera · 13:30 Chicago'
-        elif slot == '30 13 * * 1-5':
-            label='13:30 (studio storico)'
         elif slot == '30 15 * * 1-5':
             label='Pomeriggio 15:30 (storico)'
         elif slot == '45 7 * * 1-5':
@@ -1176,7 +1179,7 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
         # Nessuna modifica a calcoli Gamma, C1/P1 o analisi asiatica.
         from asia_gamma import render_auto as render_asia_gamma
         render_asia_gamma(day, asia_c1, asia_p1, level_context=asia_level_context)
-    st.subheader('Esporta i profili su TradingView — 4 situazioni')
+    st.subheader('Esporta i profili su TradingView — 5 situazioni')
     scripts = {}
     export_issues = {}
     if offset is None or not math.isfinite(offset):
@@ -1188,7 +1191,8 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                 ('07:30', None),
                 ('13:30', '07:30'),
                 ('15:50', '07:30'),
-                ('20:30', '15:50'),
+                ('17:00', '15:50'),
+                ('20:30', '17:00' if sources.get('17:00') else '15:50'),
             )
             for slot, preceding_slot in plans:
                 current = sources.get(slot)
@@ -1246,12 +1250,13 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
             st.caption("News Pine non disponibili: calendario non verificabile. "
                        "Le esportazioni NET GAMMA restano utilizzabili.")
 
-    columns = st.columns(4, gap='small')
+    columns = st.columns(5, gap='small')
     descriptions = (
         ('07:30', '07:30 · 0DTE + Weekly'),
         ('13:30', '07:30 0DTE → 13:30 0DTE + Weekly'),
         ('15:50', '07:30 0DTE → 15:50 0DTE + Weekly'),
-        ('20:30', '15:50 0DTE → 20:30 0DTE + Weekly'),
+        ('17:00', '15:50 0DTE → 17:00 0DTE + Weekly'),
+        ('20:30', '17:00 0DTE → 20:30 0DTE + Weekly; fallback 15:50 se 17:00 assente'),
     )
     for index, (slot, description) in enumerate(descriptions, 1):
         with columns[index - 1]:
