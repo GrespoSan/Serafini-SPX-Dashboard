@@ -75,21 +75,52 @@ def render(available, kind, day):
             st.info("Nessun confronto utilizzabile negli snapshot selezionati.")
             return
         st.dataframe(results, hide_index=True, width="stretch")
-        # Persistenza descrittiva: due confronti consecutivi idonei, non un segnale.
+        # Persistenza su TRE frame: stessa soglia spot del primo frame e
+        # stesso universo di strike in tutte e tre le osservazioni.
+        # Non concatenare due variazioni con soglie spot differenti.
         streaks = []
-        for idx in range(1, len(results)):
-            previous, current = results[idx - 1], results[idx]
-            p = previous.get("Gamma positivo sopra SPX, var. %")
-            q = current.get("Gamma positivo sopra SPX, var. %")
-            if (previous["Confronto esplorativo idoneo"]
-                    and current["Confronto esplorativo idoneo"]
-                    and previous["A"] == current["Da"]
-                    and p is not None and q is not None and p < 0 and q < 0):
-                streaks.append(f'{previous["Da"]} → {previous["A"]} → {current["A"]}')
-        st.caption("Contrazione consecutiva del gamma positivo sopra SPX "
-                   f"(due intervalli idonei): {len(streaks)} sequenze. "
-                   "È una descrizione ex-post, NON un segnale o una prova "
-                   "di anticipazione del prezzo ES.")
+        for i in range(len(available) - 2):
+            (slot0, f0), (slot1, f1), (slot2, f2) = available[i:i + 3]
+            frames = (f0, f1, f2)
+            try:
+                fixed_spot = float(f0["spot"])
+                if not math.isfinite(fixed_spot) or fixed_spot <= 0:
+                    continue
+                values = []
+                for frame in frames:
+                    mapping = {}
+                    for r in frame["profiles"][kind].get(key, []):
+                        k, v = float(r["strike_spx"]), float(r["net_gamma"])
+                        if k in mapping or not math.isfinite(k) or not math.isfinite(v):
+                            raise ValueError("Dati strike invalidi")
+                        mapping[k] = v
+                    values.append(mapping)
+                common = set(values[0]) & set(values[1]) & set(values[2])
+                # Evita che il cambio di copertura produca false contrazioni.
+                if not common or any(set(v) != common for v in values):
+                    continue
+                if any(not frame.get("cboe_timestamp_original") for frame in frames):
+                    continue
+                stamps = [frame["cboe_timestamp_original"] for frame in frames]
+                if len(set(stamps)) != 3:
+                    continue
+                clocks = [frame.get("download_rome") for frame in frames]
+                if any(not clock for clock in clocks) or len(set(clocks)) != 3:
+                    continue
+                if len({frame.get("reference_spx") for frame in frames}) != 1:
+                    continue
+                strengths = [
+                    sum(max(v[k], 0.0) for k in common if k > fixed_spot)
+                    for v in values
+                ]
+                if strengths[0] > strengths[1] > strengths[2]:
+                    streaks.append(f"{slot0} → {slot1} → {slot2}")
+            except (ValueError, TypeError, KeyError):
+                continue
+        st.caption("Persistenza: contrazione strettamente consecutiva del "
+                   "gamma positivo sopra uno SPX FISSO (primo frame), "
+                   "con gli stessi strike e tre timestamp Cboe distinti. "
+                   f"Sequenze: {len(streaks)}. Solo descrizione, non segnale.")
         if streaks:
             st.write("; ".join(streaks))
 
