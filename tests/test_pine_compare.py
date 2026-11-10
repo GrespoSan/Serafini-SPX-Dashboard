@@ -51,6 +51,8 @@ class PineComparisons(unittest.TestCase):
         for previous, current in [
             ("07:30", "13:30"),
             ("07:30", "15:50"),
+            ("15:50", "17:00"),
+            ("17:00", "20:30"),
             ("15:50", "20:30"),
         ]:
             with self.subTest(previous=previous, current=current):
