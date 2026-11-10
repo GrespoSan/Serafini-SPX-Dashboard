@@ -130,3 +130,73 @@ def coverage_note(profile, reference, band_pct, automatic, spot):
         "capped": bool(profile.get("visual_pool_truncated")) if
                   origin == "pool Cboe esteso" else False,
     }
+
+
+def full_pool_from_archived_cboe(snapshot, expiry, reference, core, spot):
+    """Grafica Replay per le acquisizioni UFFICIALI con chain Cboe completa.
+
+    Stesso criterio del pool creato in replay_capture: max 600 strike reali.
+    Non sostituisce o modifica il core Serafini già calcolato.
+    """
+    from net_gamma import parse_contract
+    reference = float(reference)
+    spot = float(spot) if spot is not None else reference
+    if not math.isfinite(spot) or spot <= 0:
+        spot = reference
+    if not (math.isfinite(reference) and reference > 0):
+        raise ValueError("Close SPX non valido")
+    grouped = {}
+    for option in snapshot["data"]["options"]:
+        parsed = parse_contract(str(option.get("option", "")))
+        if parsed is None or parsed[0] != expiry:
+            continue
+        _, side, strike = parsed
+        gamma = float(option.get("gamma") or 0)
+        oi = float(option.get("open_interest") or 0)
+        volume = float(option.get("volume") or 0)
+        if not all(math.isfinite(x) and x >= 0 for x in (gamma, oi, volume)):
+            raise ValueError("Componenti Gamma Cboe non validi")
+        val = grouped.setdefault(float(strike), [0.0, 0.0])
+        val[0 if side == "C" else 1] += (oi + volume) * gamma
+    core_values = {float(row["strike_spx"]): float(row["net_gamma"])
+                   for row in core}
+    if len(core_values) != 50:
+        raise ValueError("Pool richiede il core Serafini 25+25")
+    candidate = sorted(
+        k for k in grouped
+        if abs(k - reference) <= reference * 0.10
+        or abs(k - spot) <= reference * 0.01
+    )
+    chosen = set(core_values)
+    truncated = len(set(candidate) | chosen) > POOL_LIMIT
+    if truncated:
+        extras = [k for k in candidate if k not in chosen]
+        near = sorted(extras, key=lambda k: (abs(k - spot), k))[:220]
+        strong = sorted(extras, key=lambda k: (
+            -abs(grouped[k][0] - grouped[k][1]), k))[:160]
+        chosen.update(near)
+        chosen.update(strong)
+        remainder = [k for k in extras if k not in chosen]
+        budget = POOL_LIMIT - len(chosen)
+        if budget > 0 and remainder:
+            if len(remainder) <= budget:
+                chosen.update(remainder)
+            elif budget == 1:
+                chosen.add(remainder[len(remainder)//2])
+            else:
+                chosen.update(remainder[
+                    round(i * (len(remainder)-1)/(budget-1))
+                ] for i in range(budget))
+    else:
+        chosen.update(candidate)
+    # I 50 valori originali restano identici anche in presenza di un diverso
+    # ordine di aggregazione o precisione numerica del JSON.
+    return {
+        "visual_pool_rows": [
+            {"strike_spx": k, "net_gamma": core_values.get(
+                k, round(grouped[k][0] - grouped[k][1], 7))}
+            for k in sorted(chosen)
+        ],
+        "visual_pool_truncated": truncated,
+        "visual_pool_max_pct": MAX_BAND_PCT,
+    }
