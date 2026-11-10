@@ -89,12 +89,22 @@ def _official_frames(store, week, day, logs):
                         "rows": [
                             {"strike_spx": r["strike_spx"], "net_gamma": r["net_gamma"]}
                             for r in calculated["rows"]],
-                        # Profilo extra separato: Replay / C1-P1 leggono sempre rows.
+                        # 140 strike legacy conservati per trasparenza.
                         "visual_rows": [
                             {"strike_spx": r["strike_spx"], "net_gamma": r["net_gamma"]}
                             for r in expanded["rows"]],
                         "visual_coverage_complete": expanded["coverage_complete"],
                     }
+                    # Catena ufficiale completa già caricata: il Replay può
+                    # estendere lo zoom ±10% senza un secondo download.
+                    # In caso di problemi del pool, preserva i 50+140 originali.
+                    try:
+                        from replay_view import full_pool_from_archived_cboe
+                        profiles[kind].update(full_pool_from_archived_cboe(
+                            snap, expiry, ref, profiles[kind]["rows"],
+                            snap["data"].get("current_price")))
+                    except (ValueError, TypeError, KeyError, OverflowError):
+                        pass
                 if not any(abs(r["net_gamma"]) > 0 for r in profiles["0DTE"]["rows"]):
                     continue
                 result[slot] = {
