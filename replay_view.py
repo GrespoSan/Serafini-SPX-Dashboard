@@ -193,8 +193,9 @@ def full_pool_from_archived_cboe(snapshot, expiry, reference, core, spot):
     # ordine di aggregazione o precisione numerica del JSON.
     return {
         "visual_pool_rows": [
-            {"strike_spx": k, "net_gamma": core_values.get(
-                k, round(grouped[k][0] - grouped[k][1], 7))}
+            {"strike_spx": k,
+             "net_gamma": (core_values[k] if k in core_values else
+                           round(grouped[k][0] - grouped[k][1], 7))}
             for k in sorted(chosen)
         ],
         "visual_pool_truncated": truncated,
