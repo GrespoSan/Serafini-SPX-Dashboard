@@ -34,6 +34,22 @@ class GammaDistributionTests(unittest.TestCase):
         self.assertFalse(strike["sign_flip"])
         self.assertIsNone(result["positive_above_change_pct"])
 
+    def test_zero_baseline_is_not_classified_as_no_decrease(self):
+        result = compare_profiles(rows([(7500, 0)]), rows([(7500, 4)]), spot=7490)
+        self.assertEqual(result["positive_above_status"], "BASE ZERO · % N/D")
+        self.assertIsNone(result["positive_above_change_pct"])
+        self.assertEqual(result["positive_above_change_abs"], 4)
+
+    def test_measurable_contraction(self):
+        result = compare_profiles(rows([(7500, 10)]), rows([(7500, 3)]), spot=7490)
+        self.assertEqual(result["positive_above_status"], "DIMINUZIONE")
+        self.assertEqual(result["positive_above_change_abs"], -7)
+        self.assertAlmostEqual(result["positive_above_change_pct"], -70)
+
+    def test_unchanged_gamma(self):
+        result = compare_profiles(rows([(7500, 10)]), rows([(7500, 10)]), spot=7490)
+        self.assertEqual(result["positive_above_status"], "INVARIATO")
+
     def test_positive_to_negative(self):
         result = compare_profiles(rows([(7500, 2)]), rows([(7500, -2)]))
         self.assertTrue(result["strikes"][0]["sign_flip"])
