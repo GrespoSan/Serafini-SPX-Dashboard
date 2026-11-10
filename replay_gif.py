@@ -11,6 +11,7 @@ from PIL import Image, ImageDraw, ImageFont
 from replay_prices import candles_up_to, load_es_candles
 from replay_scale import dynamic_gamma_bounds
 from replay_profiles import choose_rows
+from replay_view import plotted_rows, price_zoom_bounds
 
 ROME = ZoneInfo("Europe/Rome")
 SIZE = (1440, 810)
@@ -26,7 +27,8 @@ def _font(size, bold=False):
         return ImageFont.load_default()
 
 
-def generate_gif(available, day, kind, offset, show_extended=True):
+def generate_gif(available, day, kind, offset, show_extended=True,
+                 band_pct=3.0, auto_extend=True, zoom_complete=False):
     """Crea una GIF leggibile usando gli stessi frame Cboe e OHLC del replay.
     Le barre 5m devono essere chiuse al momento del download dello snapshot.
     Restituisce (gif_bytes, numero_frame).
@@ -52,7 +54,10 @@ def generate_gif(available, day, kind, offset, show_extended=True):
         raise ValueError("Nessuna candela ES chiusa disponibile fino all'ultimo snapshot.")
 
     def display_rows(item):
-        return choose_rows(item["profiles"][kind], show_extended)
+        return plotted_rows(
+            item["profiles"][kind], item["reference_spx"], item.get("spot"),
+            band_pct, auto_extend, show_extended,
+        )
 
     rows = [row for _, item in available for row in display_rows(item)]
     strikes = sorted({float(row["strike_spx"]) for row in rows})
@@ -60,10 +65,19 @@ def generate_gif(available, day, kind, offset, show_extended=True):
     if not strikes or not all(math.isfinite(x) for x in gammas):
         raise ValueError("Profilo NET GAMMA incompleto.")
     levels = [strike + offset for strike in strikes]
-    low = min(min(levels), float(prices_last["low"].min())) - 8.0
-    high = max(max(levels), float(prices_last["high"].max())) + 8.0
-    if high <= low:
-        raise ValueError("Intervallo prezzi non valido.")
+    all_spots = []
+    for _, frame in available:
+        try:
+            v = float(frame.get("spot"))
+            if math.isfinite(v) and v > 0:
+                all_spots.append(v + offset)
+        except (ValueError, TypeError, OverflowError):
+            continue
+    low, high = price_zoom_bounds(
+        all_spots, prices_last["low"].tolist(), prices_last["high"].tolist(),
+        levels, float(available[0][1]["reference_spx"]) + offset,
+        complete=zoom_complete,
+    )
     # Scala orizzontale ricalcolata per ogni singolo fotogramma.
     # Non normalizza i NET GAMMA e non cambia i valori sottostanti.
 
@@ -95,7 +109,8 @@ def generate_gif(available, day, kind, offset, show_extended=True):
                   font=font_title, fill=WHITE)
         draw.text((30, 57),
                   f"Download {item['clock']} Roma  |  {item.get('origin', 'fonte non indicata')}  |  "
-                  f"ES-SPX {offset:+g}  |  {index+1}/{len(available)} rilevamenti",
+                  f"ES-SPX {offset:+g}  |  fascia ±{band_pct:g}%  |  "
+                  f"{index+1}/{len(available)} rilevamenti",
                   font=font_sub, fill=MUTED)
 
         # Entrambi i pannelli condividono la scala verticale dei prezzi ES.
@@ -134,10 +149,18 @@ def generate_gif(available, day, kind, offset, show_extended=True):
                 continue
             px = round(xtime(candle.bar_close))
             op, hi, lo, cl = values
+            # Clip esplicito al riquadro: lo zoom automatico non deve
+            # disegnare fuori dal grafico in presenza di prezzi fuori scala.
+            if hi < low or lo > high:
+                continue
             color = GREEN if cl >= op else RED
-            draw.line((px, round(yprice(hi)), px, round(yprice(lo))), fill=color, width=1)
-            top = round(min(yprice(op), yprice(cl)))
-            bottom = round(max(yprice(op), yprice(cl)))
+            wick_top = round(max(chart_top, min(chart_bottom, yprice(hi))))
+            wick_bottom = round(max(chart_top, min(chart_bottom, yprice(lo))))
+            draw.line((px, wick_top, px, wick_bottom), fill=color, width=1)
+            top = round(max(chart_top, min(chart_bottom,
+                            min(yprice(op), yprice(cl)))))
+            bottom = round(max(chart_top, min(chart_bottom,
+                               max(yprice(op), yprice(cl)))))
             draw.rectangle((px - bar_width // 2, top, px + bar_width // 2,
                             max(top + 1, bottom)), fill=color)
 
@@ -158,6 +181,8 @@ def generate_gif(available, day, kind, offset, show_extended=True):
             if net == 0.:
                 continue
             py = round(yprice(strike + offset))
+            if py < chart_top or py > chart_bottom:
+                continue
             px = round(xgamma(net))
             z = round(gamma_zero)
             color = GREEN if net > 0 else RED
