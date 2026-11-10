@@ -44,6 +44,11 @@ def render(available, kind, day):
             t0, t1 = f0.get("cboe_timestamp_original"), f1.get("cboe_timestamp_original")
             freshness = ("TIMESTAMP RIPETUTO" if t0 and t1 and t0 == t1
                          else "NON VERIFICABILE" if not t0 or not t1 else "TIMESTAMP DIVERSO")
+            same_reference = (f0.get("reference_spx") == f1.get("reference_spx"))
+            distinct_download = (f0.get("download_rome") != f1.get("download_rome"))
+            eligible = (result["status"] == "OK"
+                        and freshness == "TIMESTAMP DIVERSO"
+                        and same_reference and distinct_download)
             row = {
                 "Da": slot0, "A": slot1,
                 "Download iniziale": f0.get("download_rome"),
@@ -52,6 +57,8 @@ def render(available, kind, day):
                 "Origine finale": f1.get("origin"),
                 "Freschezza": freshness,
                 "Copertura": result["status"],
+                "Riferimento SPX coerente": same_reference,
+                "Confronto esplorativo idoneo": eligible,
                 "Strike comuni": result["common_count"],
                 "Strike prima": result["before_count"],
                 "Strike dopo": result["after_count"],
@@ -68,6 +75,11 @@ def render(available, kind, day):
             st.info("Nessun confronto utilizzabile negli snapshot selezionati.")
             return
         st.dataframe(results, hide_index=True, width="stretch")
+        n_eligible = sum(1 for row in results if row["Confronto esplorativo idoneo"])
+        st.caption(f"Confronti esplorativi idonei: {n_eligible}/{len(results)}. "
+                   "Idoneo significa: stessa copertura, riferimento coerente, "
+                   "download distinti e timestamp Cboe diversi. "
+                   "NON certifica dati indipendenti o capacità predittiva.")
         st.caption("Le variazioni sopra/sotto il prezzo usano lo SPX del frame INIZIALE "
                    "come soglia fissa. Copertura parziale = strike mancanti; "
                    "non interpretarli come gamma zero. I timestamp ripetuti "
