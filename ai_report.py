@@ -453,6 +453,16 @@ def pdf_summary(report):
              Paragraph(f"Data: {report['report_date']} | Snapshot: {len(report['snapshots'])} | "
                        f"Riferimento SPX: {report['parameters']['reference_spx_previous_close']:.4f} | "
                        f"ES-SPX: {report['parameters']['es_minus_spx'] if report['parameters']['es_minus_spx'] is not None else 'non disponibile'}", styles['SPXSmall']),
+             Paragraph(
+                 f"<b>ALLERTE VOLUME: {report.get('volume_integrity',{}).get('alert_count','N/D')} "
+                 f"(ufficiali {report.get('volume_integrity',{}).get('official_alert_count','N/D')}, "
+                 f"Replay {report.get('volume_integrity',{}).get('replay_alert_count','N/D')}).</b> "
+                 "Le anomalie di Volume non dimostrano flussi di acquisto o vendita.",
+                 styles['SPXSmall']),
+             Paragraph(
+                 "Freschezza Cboe: timestamp originale distinto dal download Roma. "
+                 "Eta N/D se il timestamp Cboe non dichiara il fuso; nessuna UTC presunta.",
+                 styles['SPXSmall']),
              Paragraph('Documento descrittivo. Nessuna previsione, validazione delle strutture o interpretazione di trade. I 50 strike di ciascun profilo sono nel JSON.', styles['SPXSmall'])]
     def table(cols, rows, widths=None):
         t = Table([cols]+rows, colWidths=widths, hAlign='LEFT', repeatRows=1)
@@ -476,12 +486,13 @@ def pdf_summary(report):
     previous_daily = ctx.get('previous_daily_range') or {}
     if previous_daily.get('status') == 'VALIDO':
         story.append(Paragraph(
-            f"Daily ES=F precedente ({previous_daily['day']}): "
+            f"Daily ES {previous_daily.get('ticker','N/D')} precedente ({previous_daily['day']}): "
             f"High {previous_daily['high']:.2f}; Low {previous_daily['low']:.2f}; "
             f"Close {previous_daily['close']:.2f}; "
             f"Range {previous_daily['range_points']:.2f} punti "
             f"({previous_daily['range_pct']:.2f}%). "
-            "Fonte Yahoo, sessione Daily potenzialmente diversa da ES1!.", styles['SPXSmall']))
+            f"Fonte: {previous_daily.get('source','NON DISPONIBILE')}; "
+            "sessione/contratto Daily da confrontare con ES1!.", styles['SPXSmall']))
     else:
         story.append(Paragraph('Daily ES precedente: NON DISPONIBILE.', styles['SPXSmall']))
     buffer = ctx.get('breakout_buffer') or {}
@@ -537,22 +548,49 @@ def pdf_summary(report):
                         _acquisition_label(rec)[:22],
                         rec['file'].split('/')[-1].replace('SPX_CBOE_','')[:24]])
     story.append(table(['Download Roma','Qualita','Slot','File Cboe'],entries,[39*mm,36*mm,38*mm,61*mm]))
-    audits = [(comp, label, check)
-              for comp in report.get('pairwise_changes', [])
-              for label, check in comp.get('volume_audit', {}).items()
-              if check.get('alert')]
+    story.append(Paragraph('Freschezza delle fotografie Cboe', styles['SPXHeading']))
+    for rec in report['snapshots']:
+        f = rec.get('freshness') or {}
+        age = (f"eta {f['cboe_age_minutes']:+.2f} minuti (timezone dichiarato)"
+               if f.get('cboe_age_minutes') is not None else
+               "eta N/D (timezone Cboe non verificato)")
+        repeated = ' | timestamp ripetuto' if f.get('cboe_timestamp_repeated_from_previous') else ''
+        story.append(Paragraph(
+            f"Download {rec.get('download_rome') or 'N/D'} | "
+            f"timestamp Cboe originale {f.get('cboe_timestamp_original') or 'N/D'} | "
+            f"{age}{repeated}.", styles['SPXSmall']))
+    replay_f = (report.get('freshness_audit') or {}).get('replay_timeline') or {}
+    story.append(Paragraph(
+        f"Replay: {replay_f.get('records',0)} rilevamenti; "
+        f"{replay_f.get('timezone_undeclared',0)} timestamp senza fuso; "
+        f"{replay_f.get('repeated_timestamp',0)} timestamp Cboe ripetuti. "
+        "La ripetizione non dimostra di per se un feed bloccato.",
+        styles['SPXSmall']))
+    audits = (report.get('volume_integrity') or {}).get('alerts') or []
     if audits:
-        story.append(Paragraph('ATTENZIONE: comparabilita del Volume tra snapshot', styles['SPXHeading']))
-        for comp, label, check in audits:
+        story.append(Paragraph('ATTENZIONE: comparabilita Volume ufficiali + Replay',
+                               styles['SPXHeading']))
+        for item in audits:
+            check = item.get('audit') or {}
+            scope = item.get('scope') or 'UFFICIALE'
+            if scope == 'REPLAY':
+                pair = f"{item.get('from_slot','?')} &gt; {item.get('to_slot','?')}"
+            else:
+                pair = (str(item.get('initial_file') or 'N/D').split('/')[-1] +
+                        ' &gt; ' + str(item.get('final_file') or 'N/D').split('/')[-1])
             story.append(Paragraph(
-                f"<b>{label}</b>: {comp.get('initial_download_rome') or 'n.d.'} &gt; "
-                f"{comp.get('final_download_rome') or 'n.d.'}; "
-                f"Volume sugli strike comuni "
-                f"{check['volume_initial']:.0f} &gt; {check['volume_final']:.0f} "
-                f"({check['volume_change_pct']:+.1f}%), OI ({check['oi_change_pct']:+.1f}%). "
-                "Possibile disomogeneita dei volumi: "
-                "non attribuire automaticamente il cambiamento NET GAMMA alle posizioni.",
+                f"<b>{scope} / {item.get('profile','?')}</b>: {pair}; "
+                f"Volume su strike comuni {check.get('volume_initial',0):.0f} "
+                f"&gt; {check.get('volume_final',0):.0f} "
+                f"({check.get('volume_change_pct',0):+.2f}%), "
+                f"OI ({check.get('oi_change_pct',0):+.2f}%). "
+                "Comparabilita non garantita. Non dedurre compravendite reali.",
                 styles['SPXSmall']))
+    unavailable = report.get('volume_integrity', {}).get('replay_comparisons_unavailable', 0)
+    if unavailable:
+        story.append(Paragraph(
+            f"Confronti Replay Volume/OI non valutabili: {unavailable}. "
+            "I campi null sono N/D, non zero.", styles['SPXSmall']))
     resets = report.get('volume_integrity', {}).get('possible_us_open_resets', [])
     if resets:
         story.append(Paragraph('Possibile reset giornaliero Volume alla riapertura USA', styles['SPXHeading']))
