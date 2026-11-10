@@ -101,7 +101,11 @@ class AiReportZipTests(unittest.TestCase):
                 "LEGGIMI.txt",
             }
             self.assertEqual(files, expected)
-            self.assertEqual(pdf, z.read("SPX_Report_2026-11-10.pdf"))
+            # ReportLab genera un ID documentale diverso ad ogni build:
+            # due PDF semanticamente identici non sono byte-identici.
+            zipped_pdf = z.read("SPX_Report_2026-11-10.pdf")
+            self.assertTrue(zipped_pdf.startswith(b"%PDF-"))
+            self.assertGreater(len(zipped_pdf), 1500)
             original = json.loads(z.read("SPX_AI_2026-11-10.json"))
             self.assertEqual(original["volume_integrity"]["alert_count"], 2)
             self.assertEqual(original["volume_integrity"]["replay_alert_count"], 2)
