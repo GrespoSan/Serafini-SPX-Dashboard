@@ -15,6 +15,7 @@ on:
       - 'tests/test_replay_scale.py'
       - 'tests/test_replay_profiles.py'
       - 'tests/test_replay_view.py'
+      - 'tests/test_replay_gif_band.py'
       - 'tests/test_replay_plotly_bars.py'
       - 'tests/test_replay_price_sources.py'
       - '.github/workflows/replay-rome-time-tests.yml'
@@ -43,4 +44,5 @@ jobs:
           python -m unittest discover -s tests -p 'test_replay_price_sources.py' -v
           python -m unittest discover -s tests -p 'test_replay_profiles.py' -v
           python -m unittest discover -s tests -p 'test_replay_view.py' -v
+          python -m unittest discover -s tests -p 'test_replay_gif_band.py' -v
           python -m unittest discover -s tests -p 'test_replay_plotly_bars.py' -v
