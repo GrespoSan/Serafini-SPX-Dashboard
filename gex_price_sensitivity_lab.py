@@ -5,6 +5,7 @@ non reinventa Black-Scholes, non aggiorna OI/IV, non ricalcola le Wall,
 non modifica Serafini NET GAMMA o i dati ufficiali.
 """
 import math
+from html import escape
 
 import plotly.graph_objects as go
 import streamlit as st
@@ -41,6 +42,35 @@ def scenario_gex(curve, spx_spot):
             fraction = (spot - x0) / (x1 - x0)
             return y0 + fraction * (y1 - y0)
     return points[-1][1] if spot == points[-1][0] else None
+
+
+def _signed_metric_color(value):
+    """Colore semantico del valore GEX, senza confondere segno e delta."""
+    number = float(value)
+    if not math.isfinite(number):
+        return "inherit"
+    if number > 0:
+        return "#22b573"
+    if number < 0:
+        return "#e64b4b"
+    return "inherit"
+
+
+def _signed_gex_metric(column, label, value, *, suffix="mld USD"):
+    """Colora soltanto il numero, mantenendo etichette e unità leggibili."""
+    amount = float(value) / 1e9
+    color = _signed_metric_color(value)
+    formatted = f"{amount:+.2f}" if amount != 0 else "0.00"
+    column.markdown(
+        '<div style="min-height:5rem">'
+        f'<div style="font-size:.875rem;line-height:1.5rem;opacity:.85">'
+        f'{escape(str(label))}</div>'
+        f'<div style="font-size:2rem;line-height:2.45rem;font-weight:400;'
+        f'color:{color};overflow-wrap:anywhere">'
+        f'{escape(formatted + " " + suffix)}</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario"):
@@ -115,13 +145,13 @@ def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario"):
                     "nessun confronto teorico affidabile calcolabile.")
             return
         a, b, c = st.columns(3)
-        a.metric("NET GEX originale", f"{actual_gex / 1e9:+.2f} mld USD")
-        b.metric("NET GEX teorico allo scenario",
-                 f"{model_at_scenario / 1e9:+.2f} mld USD")
+        _signed_gex_metric(a, "NET GEX originale", actual_gex)
+        _signed_gex_metric(b, "NET GEX teorico allo scenario",
+                           model_at_scenario)
         # Confronto della STESSA curva, non originale vs interpolazione:
         # non confondere una discrepanza numerica con un effetto-prezzo.
-        c.metric("Δ teorico dalla curva al cash SPX",
-                 f"{(model_at_scenario-baseline_curve)/1e9:+.2f} mld")
+        _signed_gex_metric(c, "Δ teorico dalla curva al cash SPX",
+                           model_at_scenario - baseline_curve, suffix="mld")
         chart = go.Figure()
         chart.add_trace(go.Scatter(
             x=[x+basis for x, _ in points],
