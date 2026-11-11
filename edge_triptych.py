@@ -116,16 +116,27 @@ def _plot(e, serafini_rows, candles, shift, bounds, reading_clock=None):
         fig.add_trace(go.Scatter(x=[_number(r["net_gex"])/1e9 for r in rows],
             y=y,mode="lines",line=dict(color="#f3a2b3",width=1.7),
             name="NET Edge",showlegend=False),row=1,col=3)
-    levels=[("Call Wall",e.get("call_wall_spx"),"#22b573"),
-            ("Put Wall",e.get("put_wall_spx"),"#e64b4b"),
-            ("Gamma Flip",e.get("gamma_flip_spx"),"#dca143")]
-    # Identical level price references across all three panels.
-    for name,val,color in levels:
-        if val is None:continue
-        y=_number(val)+shift
-        for col in (1,2,3):
-            fig.add_hline(y=y,line_dash="dot",line_color=color,line_width=1,
-                opacity=0.65,row=1,col=col)
+    levels=[
+        ("Call Wall", e.get("call_wall_spx"), "#31e38b", "dot"),
+        ("Put Wall", e.get("put_wall_spx"), "#ff5365", "dot"),
+        ("Gamma Flip", e.get("gamma_flip_spx"), "#ffcc4d", "dash"),
+    ]
+    # Stessi identici livelli SPX+base ES nei tre pannelli. Il pannello
+    # a candele mette in evidenza le tre strutture senza cambiare prezzi
+    # né scala; gli altri due conservano linee guida più leggere.
+    for name, val, color, dash in levels:
+        if val is None:
+            continue
+        y = _number(val) + shift
+        if not math.isfinite(y):
+            continue
+        for col in (1, 2, 3):
+            fig.add_hline(
+                y=y, line_dash=dash, line_color=color,
+                line_width=3 if col == 1 else 1.2,
+                opacity=0.98 if col == 1 else 0.6,
+                row=1, col=col,
+            )
     fig.update_yaxes(range=list(bounds),row=1,col=1,title="Prezzo ES equivalente")
     fig.update_yaxes(range=list(bounds),row=1,col=2)
     fig.update_yaxes(range=list(bounds),row=1,col=3)
@@ -359,8 +370,8 @@ def show(week, store, logs=None, *, on_valid_gex=None):
         st.markdown(
             "**Legenda GEX:** 🟢 **Call GEX** (barre verdi) · 🔴 **Put GEX** (barre rosse) · "
             "**NET GEX** (linea rosa) · "
-            "**Call Wall** (tratteggio verde) · **Put Wall** (tratteggio rosso) · "
-            "**Gamma Flip** (tratteggio giallo)."
+            "**Call Wall** (puntinato verde) · **Put Wall** (puntinato rosso) · "
+            "**Gamma Flip** (tratteggio giallo). Linee più marcate sul prezzo ES."
         )
         with st.expander("Curva teorica GEX",expanded=False):
             curve=e.get("curve",[])
