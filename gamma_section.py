@@ -15,6 +15,7 @@ from gamma_brief import select_key_levels, operational_summary, transition_zones
 from pine_export import make_pine
 from pine_compare import make_pine_comparison
 from pine_sources import load_export_profiles
+from acquisition_schedule import official_export_slots, CUTOFF_1446
 from gamma_scale import profile_gamma_bounds, gamma_components
 from serafini_sigma import serafini_cash_levels, add_sigma_markers
 from operational_levels import find_candidates, proposed_levels, candidate_csv
@@ -143,8 +144,11 @@ def _snapshot_log_index(week, log_names, _store):
         if slot == '30 7 * * 1-5':
             label='Mattina 07:30'
         elif slot == '30 13 * * 1-5':
-            label=('Pre-USA 13:30 · ufficiale' if dt.date() >= date(2026, 11, 11)
-                   else '13:30 (studio storico)')
+            label=('Pre-USA 13:30 · ufficiale (11/11)' if dt.date() == date(2026, 11, 11)
+                   else '13:30 (studio storico)' if dt.date() < date(2026, 11, 11)
+                   else '13:30 · cron ufficiale ritirato')
+        elif slot == '46 14 * * 1-5':
+            label='Pre-USA 14:46 · ufficiale Roma'
         elif slot == '0 17 * * 1-5':
             label='USA · 10:00 Chicago (17:00 ordinario)'
         elif slot == '46 15 * * 1-5':
@@ -1180,6 +1184,9 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
         from asia_gamma import render_auto as render_asia_gamma
         render_asia_gamma(day, asia_c1, asia_p1, level_context=asia_level_context)
     st.subheader('Esporta i profili su TradingView — 5 situazioni')
+    st.caption('Dal 12/11/2026 il secondo Pine ufficiale è 14:46 Roma; '
+               '13:30 resta esclusivamente Replay. I Pine delle date '
+               'precedenti conservano le denominazioni storiche.')
     scripts = {}
     export_issues = {}
     if offset is None or not math.isfinite(offset):
@@ -1187,9 +1194,12 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
     else:
         try:
             sources = _pine_export_data(week, day, len(logs), store, logs)
+            # Cinque esportazioni, senza reinterpretare lo storico 13:30.
+            # Dal 12/11 il secondo ufficiale è 14:46; 13:30 resta Replay.
+            middle = '14:46' if day >= CUTOFF_1446 else '13:30'
             plans = (
                 ('07:30', None),
-                ('13:30', '07:30'),
+                (middle, '07:30'),
                 ('15:50', '07:30'),
                 ('17:00', '15:50'),
                 ('20:30', '17:00' if sources.get('17:00') else '15:50'),
@@ -1251,9 +1261,10 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                        "Le esportazioni NET GAMMA restano utilizzabili.")
 
     columns = st.columns(5, gap='small')
+    middle = '14:46' if day >= CUTOFF_1446 else '13:30'
     descriptions = (
         ('07:30', '07:30 · 0DTE + Weekly'),
-        ('13:30', '07:30 0DTE → 13:30 0DTE + Weekly'),
+        (middle, f'07:30 0DTE → {middle} 0DTE + Weekly'),
         ('15:50', '07:30 0DTE → 15:50 0DTE + Weekly'),
         ('17:00', '15:50 0DTE → 17:00 0DTE + Weekly'),
         ('20:30', '17:00 0DTE → 20:30 0DTE + Weekly; fallback 15:50 se 17:00 assente'),
