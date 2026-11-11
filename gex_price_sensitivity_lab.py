@@ -5,7 +5,9 @@ non reinventa Black-Scholes, non aggiorna OI/IV, non ricalcola le Wall,
 non modifica Serafini NET GAMMA o i dati ufficiali.
 """
 import math
+from datetime import datetime
 from html import escape
+from zoneinfo import ZoneInfo
 
 import plotly.graph_objects as go
 import streamlit as st
@@ -73,7 +75,33 @@ def _signed_gex_metric(column, label, value, *, suffix="mld USD"):
     )
 
 
-def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario"):
+def _gex_reference_times(download_clock, valuation):
+    """Date verificabili: la valutazione teorica NON è l'ora del download.
+
+    Non attribuire il fuso Roma a timestamp naive. Se manca il tempo
+    effettivo di elaborazione del motore, NON inventarlo.
+    """
+    if isinstance(download_clock, datetime) and download_clock.tzinfo is not None:
+        snapshot = download_clock.astimezone(ZoneInfo("Europe/Rome")).strftime(
+            "%d/%m/%Y %H:%M:%S Roma")
+    else:
+        snapshot = "N/D"
+    model = "N/D"
+    if valuation:
+        try:
+            parsed = datetime.fromisoformat(str(valuation).replace("Z", "+00:00"))
+            if parsed.tzinfo is not None:
+                model = parsed.astimezone(ZoneInfo("Europe/Rome")).strftime(
+                    "%d/%m/%Y %H:%M Roma")
+            else:
+                model = parsed.strftime("%d/%m/%Y %H:%M") + " (fuso non dichiarato)"
+        except (TypeError, ValueError, OverflowError):
+            pass
+    return snapshot, model
+
+
+def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario",
+                   download_clock=None, slot=None):
     """Laboratorio collassato, senza richieste network o scritture.
 
     Curva scenario = stessi OI/IV/valutazione del report Edge. Conversione
@@ -81,6 +109,19 @@ def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario"):
     """
     with st.expander("LABORATORIO GEX — scenario prezzo (sperimentale)",
                      expanded=False):
+        snapshot_time, valuation_time = _gex_reference_times(
+            download_clock, edge.get("valuation"))
+        slot_text = f" · Replay {slot}" if slot else ""
+        st.markdown(
+            f"**Fotografia Cboe del calcolo GEX:** {snapshot_time}{slot_text}  "
+            f"\\n**Valutazione teorica del modello:** {valuation_time}"
+        )
+        st.caption(
+            "Lo scenario viene interpolato dalla curva GEX salvata per "
+            "questa fotografia. Cambiare prezzo NON acquisisce nuove opzioni "
+            "e non aggiorna la data di valutazione; l'orario effettivo di "
+            "esecuzione del motore non è archiviato separatamente."
+        )
         st.caption(
             "Ricerca WHAT-IF, non un nuovo indicatore né un segnale di trading. "
             "Si usa la curva teorica già calcolata dal motore Edge sulla "
