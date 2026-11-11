@@ -81,13 +81,19 @@ def describe_quality(value, store=None):
     return _cached_quality_from_file(path, store)
 
 
-def describe_slot(slot):
+def describe_slot(slot, rome_date=None):
     """Non indovinare lo slot di vecchi registri privi di identificazione."""
     name = str(slot or '').strip()
     if name == '30 7 * * 1-5':
         return 'Mattina 07:30'
     if name == '30 13 * * 1-5':
-        return 'Pre-USA 13:30 · ufficiale dal 11/11/2026'
+        if str(rome_date or '') < '2026-11-11':
+            return '13:30 (studio storico)'
+        if str(rome_date or '') == '2026-11-11':
+            return 'Pre-USA 13:30 · ufficiale storico (11/11)'
+        return '13:30 · ufficiale ritirato (dal 12/11)'
+    if name == '46 14 * * 1-5':
+        return 'Pre-USA 14:46 · ufficiale Roma'
     if name == '0 17 * * 1-5':
         return 'USA · 10:00 Chicago (17:00 ordinario)'
     if name == '30 15 * * 1-5':
@@ -314,7 +320,7 @@ with st.expander('ANALISI NET GAMMA', expanded=True):
                             else ('13:30 (studio storico)'
                                   if str(value.get('scheduled_slot') or '') == '30 13 * * 1-5'
                                   and str(value.get('rome_date') or '') < '2026-11-11'
-                                  else describe_slot(value.get('scheduled_slot')))
+                                  else describe_slot(value.get('scheduled_slot'), value.get('rome_date')))
                         ),
                         'Stato': value.get('status', ''),
                         'Qualità dati': describe_quality(value, store),
