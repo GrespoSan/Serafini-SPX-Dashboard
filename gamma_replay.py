@@ -16,18 +16,19 @@ from feed_quality import summarize_timeline
 from replay_scale import dynamic_gamma_bounds
 from replay_profiles import choose_rows, gamma_bar_trace
 from replay_view import plotted_rows, price_zoom_bounds, coverage_note
+from acquisition_schedule import (
+    ALL_SLOTS, ALWAYS_OFFICIAL, LEGACY_1330_CRON,
+    FIRST_1330_OFFICIAL, official_slots_for_day,
+    raw_study_1330_for_day, expected_replay_slots,
+)
 from spx_market_clock import classify_0dte_download, cash_open_rome, spxw_expiry_close_rome
 
 ROME = ZoneInfo("Europe/Rome")
-SLOTS = ("07:30", "11:00", "13:30", "14:31", "15:50", "16:01", "16:16",
-         "16:31", "16:46", "17:00", "17:30", "18:00", "18:30", "20:00",
-         "20:30", "21:30")
-OFFICIAL = {"07:30": "30 7 * * 1-5", "13:30": "30 13 * * 1-5",
-            "15:50": "50 15 * * 1-5", "17:00": "0 17 * * 1-5",
-            "20:30": "30 20 * * 1-5"}
-# Il 13:30 e ufficiale solo dalle nuove acquisizioni: le catene precedenti
-# restano STUDIO e non possono essere retro-promosse in un backtest.
-OFFICIAL_1330_START = date(2026, 11, 11)
+SLOTS = ALL_SLOTS
+OFFICIAL = {**ALWAYS_OFFICIAL, "14:46": "46 14 * * 1-5"}
+# Compatibilità storica per gli importatori esistenti; classificare sempre
+# utilizzando official_slots_for_day(day), non la costante OFFICIAL.
+OFFICIAL_1330_START = FIRST_1330_OFFICIAL
 
 def weekly_expiry(day):
     from datetime import timedelta
@@ -56,7 +57,10 @@ def _official_frames(_store, week, day, logs):
     for log in logs:
         try:
             item = json.loads(_store.download(f"{week}/logs/{log['name']}"))
-            slot = next((k for k, v in OFFICIAL.items()
+            slots_for_day = official_slots_for_day(day)
+            if raw_study_1330_for_day(day):
+                slots_for_day["13:30"] = LEGACY_1330_CRON
+            slot = next((k for k, v in slots_for_day.items()
                          if item.get("scheduled_slot") == v), None)
             if (not slot or item.get("rome_date") != day.isoformat()
                     or item.get("status") not in ("NUOVO", "INVARIATO")
@@ -113,7 +117,7 @@ def _official_frames(_store, week, day, logs):
                     "slot_rome": slot, "clock": clock.strftime("%H:%M:%S"),
                     "download_rome": clock.isoformat(timespec="seconds"),
                     "origin": ("STUDIO STORICO DA ARCHIVIO"
-                               if slot == "13:30" and day < OFFICIAL_1330_START
+                               if slot == "13:30" and raw_study_1330_for_day(day)
                                else "UFFICIALE"),
                     "spot": snap["data"].get("current_price"),
                     "reference_spx": ref, "profiles": profiles,
@@ -139,9 +143,8 @@ def _study_frames(_store, week, day):
                     or item.get("kind") != "STUDIO_INTRADAY_NON_UFFICIALE"):
                 continue
             slot = item.get("slot_rome")
-            # 13:30 Replay resta fallback esplicitamente STUDIO anche
-            # dopo la promozione ufficiale, se lo snapshot raw non arriva.
-            if slot not in SLOTS or (slot in OFFICIAL and slot != "13:30"):
+            # 13:30 è Replay, non promuoverlo automaticamente ad ufficiale.
+            if slot not in expected_replay_slots(day) or slot in ALWAYS_OFFICIAL:
                 continue
             dt = _download_clock(item)
             if dt is None:
@@ -165,11 +168,12 @@ def _study_frames(_store, week, day):
 
 def render(store, week, logs, view_mode=None):
     st.subheader("Replay / History — evoluzione NET GAMMA")
-    st.caption("Ufficiali: 07:30 e 13:30 Roma; 15:50, 17:00 e 20:30 come slot "
-               "USA ancorati a Chicago (orario Roma effettivo indicato per frame). "
-               "13:30 prima dell 11/11/2026: STUDIO storico, non ufficiale. "
-               "Altri orari: Replay intraday compatto (circa 30 giorni).")
-    iso_year, iso_week = map(int, week.split("-W"))
+    st.caption(
+        "Ufficiali: 07:30, 14:46 (dal 12/11/2026), 15:50, 17:00 e 20:30. "
+        "13:30 Replay dal 12/11. Storico invariato: 13:30 studio prima "
+        "dell'11/11, ufficiale soltanto l'11/11. "
+        "Per gli slot USA l'orario effettivo Roma è indicato nel frame."
+    )
     from datetime import timedelta
     monday = date.fromisocalendar(iso_year, iso_week, 1)
     weekdays = [monday + timedelta(days=i) for i in range(5)]
@@ -206,10 +210,11 @@ def render(store, week, logs, view_mode=None):
         for slot, item in _official_frames(store, week, day, logs).items():
             # Conserva la precedenza del compact storico 13:30 solo PRIMA
             # della promozione dello slot a ufficiale.
-            if not (slot == "13:30" and day < OFFICIAL_1330_START
+            if not (slot == "13:30" and raw_study_1330_for_day(day)
                     and slot in frames):
                 frames[slot] = item
-    all_available = [(slot, frames[slot]) for slot in SLOTS if slot in frames
+    expected_slots = expected_replay_slots(day)
+    all_available = [(slot, frames[slot]) for slot in expected_slots if slot in frames
                      and frames[slot].get("profiles", {}).get(kind, {}).get("rows")]
     # Ordinare secondo il download EFFETTIVO e non secondo la stringa dello
     # slot: nei disallineamenti DST il 17:00 logico USA cade alle 16:00 Roma.
@@ -224,9 +229,9 @@ def render(store, week, logs, view_mode=None):
     available = [(slot, frame) for slot, frame in all_available
                  if kind == "Weekly" or not classify_0dte_download(
                      day, frame.get("download_rome"))["post_expiry"]]
-    missing = [slot for slot in SLOTS if slot not in frames]
+    missing = [slot for slot in expected_slots if slot not in frames]
     st.caption(f"Frame {kind} {'pre-scadenza' if kind == '0DTE' else 'disponibili'}: "
-               f"{len(available)}/{len(SLOTS)} · "
+               f"{len(available)}/{len(expected_slots)} · 
                f"Assenti: {', '.join(missing) if missing else 'nessuno'}")
     if kind == "0DTE" and post_expiry:
         ignored = ', '.join(slot for slot, _ in post_expiry)
