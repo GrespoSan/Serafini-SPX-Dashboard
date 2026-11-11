@@ -1,5 +1,18 @@
 # Serafini SPX Dashboard v2 — repository PUBBLICO, dati PRIVATI
 
+## Stato attuale verificato (audit 11/11/2026)
+
+Questa sezione prevale sulle NOTE STORICHE più sotto che riportano versioni precedenti.
+- **Net Gamma Serafini**: `(OI Call + Volume Call)×Gamma Call − (OI Put + Volume Put)×Gamma Put`; **25 strike reali sopra e 25 sotto** il close SPX precedente. L'estensione fino a 140 livelli è soltanto grafica e non cambia i 50 originali.
+- **Pine ufficiali**: cinque pulsanti, `07:30`, `14:46` (slot logico delle **07:46 Chicago**, dal 12/11/2026), `15:50`, `17:00` e `20:30`. L'11/11 soltanto il secondo slot ufficiale storico è `13:30`, che dal 12/11 resta Replay.
+- **Pine delle 20:30**: soltanto 0DTE + Weekly correnti; senza precedente.
+- **Orari USA** ancorati a `America/Chicago`, non sempre corrispondono agli stessi orari `Europe/Rome` nelle settimane di disallineamento DST; usare gli orari di download dei log.
+- **Storage Supabase**: bucket privato `spx-snapshots`; ufficiali dell'ultima seduta mantenuti dalla pulizia notturna, Replay compatti conservati 30 giorni (correzione audit 11/11).
+- **Ricerca Gamma Contraction**: separata in `Serafini-SPX-Cloud`, raw ufficiali in archivio OAuth Google Drive, output giornaliero e cumulativo non validato.
+- **Sicurezza**: service role solo in Secrets del server. Il login della dashboard usa password condivise con limitazione basilare per sessione, non identità individuali.
+- **Workflow e test**: la dashboard è distinta dal downloader principale di `Serafini-SPX-Cloud`; il codice di compatibilità qui presente non va scambiato per l'acquisizione programmata.
+
+
 Questa cartella è **solo** l'interfaccia di consultazione/esportazione per `spx-snapshots`. Non contiene downloader, GitHub Actions, password o chiavi. Il repository privato `Serafini-SPX-Cloud` gestisce separatamente le acquisizioni e la pulizia automatica dello storico alle 23:30 Europe/Rome.
 
 ## Pubblicazione gratuita
