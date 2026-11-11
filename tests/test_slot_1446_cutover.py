@@ -95,6 +95,70 @@ class SlotMigrationTests(unittest.TestCase):
         self.assertIn("13:30", results)
         self.assertNotIn("14:46", results)
 
+    def test_ai_replay_uses_real_chicago_download_order_during_dst_mismatch(self):
+        import json
+        from ai_replay import attach_replay
+
+        day = date(2027, 3, 15)  # Chicago DST, Roma ancora in ora solare
+        weekly = "2027-03-19"
+        rows = [
+            {"strike_spx": 7400.0 + 5.0 * i,
+             "net_gamma": float(i - 25),
+             "call_oi": 1.0, "put_oi": 1.0,
+             "call_volume": 2.0, "put_volume": 2.0}
+            for i in range(50)
+        ]
+        report = {
+            "expiries": {"Weekly": weekly},
+            "snapshots": [{
+                "status": "VALIDO",
+                "acquisition_slot": "46 14 * * 1-5",
+                "download_utc": "2027-03-15T12:46:10+00:00",
+                "cboe_timestamp_original": "2027-03-15 07:45:00",
+                "file": "2027-W11/snapshots/official.json.gz",
+                "profiles": {
+                    "0DTE": {"expiry": day.isoformat(), "strikes": rows},
+                    "Weekly": {"expiry": weekly, "strikes": rows},
+                },
+            }],
+        }
+        compact = {
+            "schema": "serafini_replay_v1",
+            "kind": "STUDIO_INTRADAY_NON_UFFICIALE",
+            "rome_date": day.isoformat(), "slot_rome": "14:31",
+            "download_rome": "2027-03-15T14:31:08+01:00",
+            "reference_spx": 7500, "spot_spx": 7520,
+            "profiles": {
+                "0DTE": {"expiry": day.isoformat(), "rows": rows},
+                "Weekly": {"expiry": weekly, "rows": rows},
+            },
+        }
+
+        class StubStore:
+            def list(self, prefix):
+                return [{"name": "2027-03-15_14-31.json"}]
+
+            def download(self, path):
+                self_path = "replay/2027-W11/2027-03-15_14-31.json"
+                if path != self_path:
+                    raise AssertionError("Unexpected path " + path)
+                return json.dumps(compact).encode("utf-8")
+
+        result = attach_replay(
+            StubStore(), report, "2027-W11", day, 7500.0, 23.0)
+        self.assertEqual(
+            [x["slot_rome"] for x in result["timeline"][:2]],
+            ["14:46", "14:31"],
+        )
+        self.assertEqual(
+            (result["transitions"][0]["from_slot"],
+             result["transitions"][0]["to_slot"]),
+            ("14:46", "14:31"),
+        )
+        self.assertEqual(result["available_slots"][:2], ["14:46", "14:31"])
+        self.assertEqual(result["timeline"][0]["download_rome"][:16],
+                         "2027-03-15T13:46")
+
     def test_ai_report_source_labels_are_date_aware(self):
         from ai_report import _acquisition_label
         r = {"acquisition_slot": "30 13 * * 1-5",
