@@ -428,7 +428,7 @@ def _acquisition_label(rec):
         '30 13 * * 1-5': ('13:30 ufficiale storico (11/11)'
                             if str(rec.get('download_utc') or '')[:10] == '2026-11-11'
                             else '13:30 (studio storico)'),
-        '46 14 * * 1-5': 'Pre-USA 14:46 ufficiale Roma',
+        '46 14 * * 1-5': 'Rilevamento 14:46 ufficiale Roma',
         '46 15 * * 1-5': 'Pomeriggio 15:46',
         '07:30': 'Mattina 07:30',
         '15:46': 'Pomeriggio 15:46',
