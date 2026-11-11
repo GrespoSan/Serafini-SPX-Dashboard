@@ -303,7 +303,16 @@ def show(week, store, logs=None, *, on_valid_gex=None):
                     "**Fotografia Cboe — orario del download non disponibile**")
         price=float(e["spot_spx"])+shift
         p=st.columns(5)
-        p[0].metric("Spot ES equivalente",f"{price:,.2f}")
+        p[0].metric("SPX Cboe + base · riferimento", f"{price:,.2f}")
+        st.caption(
+            f"Prezzo SPX nel JSON Cboe {float(e['spot_spx']):,.2f} "
+            f"+ differenziale ES−SPX {shift:+.2f}. "
+            "È una conversione teorica degli strike, NON una quotazione "
+            "corrente del future ES. Qualità Edge non significa spot aggiornato."
+        )
+        if e.get("valuation"):
+            st.caption(f"Valutazione del modello Edge: {e['valuation']} "
+                       "(orario del modello, diverso dal download).")
         for c,key,lab in zip(p[1:4],("put_wall_spx","gamma_flip_spx","call_wall_spx"),("Put Wall","Gamma Flip","Call Wall")):
             v=e.get(key);c.metric(lab,f"{float(v)+shift:,.2f}" if v is not None else "N/D")
         _colored_edge_metric(p[4], "Regime Edge", str(e.get("regime", "N/D")), e.get("regime"))
