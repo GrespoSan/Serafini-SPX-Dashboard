@@ -36,3 +36,18 @@ jobs:
         run: |
           python -m unittest discover -s tests -p 'test_macro_calendar_auth.py' -v
           python -m unittest discover -s tests -p 'test_pine_news_overlay.py' -v
+      - name: Probe real BLS public schedule access (diagnostic only)
+        continue-on-error: true
+        run: |
+          python - <<'PY'
+          from datetime import date
+          from bls_calendar import fetch_bls
+          try:
+              events = fetch_bls(date(2026,11,10), date(2026,11,13))
+              cpi = [e for e in events if e["day"] == date(2026,11,10) and e["kind"] == "CPI"]
+              print("BLS public access OK; CPI 10 Nov:", cpi)
+              assert cpi and cpi[0]["clock"] == "14:30"
+          except Exception as exc:
+              print("BLS public access NOT VERIFIED", type(exc).__name__, str(exc)[:300])
+              raise
+          PY
