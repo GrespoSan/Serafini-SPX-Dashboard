@@ -38,6 +38,24 @@ class EdgeMetricUiTests(unittest.TestCase):
         self.assertIn("positive", html)
         self.assertTrue(kwargs["unsafe_allow_html"])
 
+    def test_replay_net_gex_uses_signed_value_color_instead_of_default_metric(self):
+        root = Path(__file__).resolve().parent.parent
+        replay = (root / "edge_replay_panel.py").read_text(encoding="utf-8")
+        self.assertIn('if key == "net_gex":', replay)
+        self.assertIn('_colored_edge_metric(col, title,', replay)
+        self.assertIn('amount)', replay)
+        self.assertIn('col.caption(f"Δ {(amount - old)/1e9:+.2f} mld")', replay)
+        col = RecordingColumn()
+        _colored_edge_metric(col, "NET GEX", "-3.99 mld USD", -3.99e9)
+        self.assertIn("color:#e64b4b", col.calls[0][0])
+        self.assertIn("-3.99 mld USD", col.calls[0][0])
+        col = RecordingColumn()
+        _colored_edge_metric(col, "NET GEX", "+2.11 mld USD", 2.11e9)
+        self.assertIn("color:#22b573", col.calls[0][0])
+        col = RecordingColumn()
+        _colored_edge_metric(col, "NET GEX", "0.00 mld USD", 0.0)
+        self.assertIn("color:inherit", col.calls[0][0])
+
     def test_edge_quality_percentage_is_consistent_and_validated(self):
         self.assertEqual(_format_edge_quality(99.91), "99.91%")
         self.assertEqual(_format_edge_quality(92.75), "92.75%")
