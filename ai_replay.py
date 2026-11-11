@@ -10,7 +10,8 @@ import math
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from gamma_replay import OFFICIAL, SLOTS
+from gamma_replay import SLOTS
+from acquisition_schedule import official_slots_for_day, raw_study_1330_for_day, expected_replay_slots
 from volume_audit import compare_volume_profiles
 from spx_market_clock import classify_0dte_download
 
@@ -138,7 +139,8 @@ def attach_replay(store, report, week, day, reference, offset):
 
     # Uno slot nel report cronologico appare una sola volta.
     # L'ufficiale ha priorita' sul Replay compatto dello stesso slot.
-    official_slots = {cron: slot for slot, cron in OFFICIAL.items()}
+    official_slots = {cron: slot
+                      for slot, cron in official_slots_for_day(day).items()}
     chosen = {}
     for rec in report["snapshots"]:
         if rec.get("status") != "VALIDO":
@@ -179,7 +181,7 @@ def attach_replay(store, report, week, day, reference, offset):
     # Prima del cambio di programma le 13:30 erano salvate come catena
     # completa. Manteniamo accessibile quel dato storico come STUDIO,
     # soltanto in assenza del corrispondente frame compatto 13:30.
-    if "13:30" not in chosen:
+    if "13:30" not in chosen and raw_study_1330_for_day(day):
         for rec in report["snapshots"]:
             if (rec.get("status") != "VALIDO" or
                     str(rec.get("acquisition_slot") or "") != "30 13 * * 1-5"):
@@ -210,7 +212,8 @@ def attach_replay(store, report, week, day, reference, offset):
 
     timeline = []
     previous_timestamp = None
-    for slot in SLOTS:
+    expected_slots = expected_replay_slots(day)
+    for slot in expected_slots:
         item = chosen.get(slot)
         if not item:
             continue
@@ -285,11 +288,11 @@ def attach_replay(store, report, week, day, reference, offset):
                 change["profiles"][label] = comp
         transitions.append(change)
 
-    available = [slot for slot in SLOTS if slot in chosen]
+    available = [slot for slot in expected_slots if slot in chosen]
     return {
         "status": "DISPONIBILE" if available else "NESSUN REPLAY DISPONIBILE",
-        "expected_slots": list(SLOTS), "available_slots": available,
-        "missing_slots": [slot for slot in SLOTS if slot not in chosen],
+        "expected_slots": list(expected_slots), "available_slots": available,
+        "missing_slots": [slot for slot in expected_slots if slot not in chosen],
         "official_count_in_timeline": sum(x["source"] == "UFFICIALE" for x in timeline),
         "study_count_in_timeline": sum(x["source"] != "UFFICIALE" for x in timeline),
         "study_files_total": len(frames), "rejected_files": rejected,
