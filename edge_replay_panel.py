@@ -11,6 +11,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from edge_replay_data import list_edge_slots, read_pair, same_model
+from gex_cash_provenance import describe_spx_trade
 from edge_gex_exposure import format_gex_billions
 from replay_prices import load_es_candles, candles_up_to
 from replay_profiles import choose_rows
@@ -223,6 +224,12 @@ def show_replay(week, store, plotter):
             "Copertura del modello, NON freschezza del prezzo cash SPX. "
             "Segno, Call/Put e NET GEX modellati sulla catena Cboe completa."
         )
+    cash_trade_note, cash_trade_status = describe_spx_trade(
+        edge.get("spx_cash_last_trade_time"), clock)
+    st.caption(cash_trade_note)
+    if cash_trade_status == "anomalia":
+        st.warning("Timestamp cash SPX successivo al download: "
+                   "verificare i dati Cboe prima di interpretare il modello.")
     if model_clock["prior_cash_session"]:
         st.warning(
             "RIFERIMENTO SPX NON LIVE: il modello GEX utilizza una valutazione "
