@@ -155,6 +155,16 @@ class DualSourceTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Entrambe"):
                 load_calendar(NOV10, NOV10)
 
+    def test_macro_ui_keeps_bls_link_no_yesterday_and_no_yellow_fc_warning(self):
+        from pathlib import Path
+        source = (Path(__file__).resolve().parents[1] /
+                  "macro_calendar.py").read_text(encoding="utf-8")
+        self.assertIn("Calendario ufficiale BLS</a>", source)
+        self.assertNotIn('with st.expander(f"Ieri', source)
+        self.assertNotIn('st.warning("Calendario parziale:', source)
+        self.assertIn('st.caption("FinanceCalendar temporaneamente non disponibile', source)
+        self.assertIn('elif not health["financecalendar_ok"]:', source)
+
     def test_pine_marks_cpi_only_before_verified_download(self):
         events=[cpi()]
         before = append_news(
