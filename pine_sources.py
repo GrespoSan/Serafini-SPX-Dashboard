@@ -1,30 +1,33 @@
 """Selezione dei rilevamenti reali per i cinque export Pine.
 
 Usa ESATTAMENTE i lettori ufficiali/di studio gia' validati dal Replay.
-I frame 13:30 anteriori all 11/11/2026 restano STUDIO; successivi ufficiali.
+13:30: STUDIO prima dell'11/11, UFFICIALE solo l'11/11; dal 12/11 solo Replay.
+14:46: UFFICIALE dal 12/11. Non si reinterpretano i log storici.
 """
 from datetime import date
 
-from gamma_replay import _official_frames, _study_frames, weekly_expiry, OFFICIAL_1330_START
+from gamma_replay import _official_frames, _study_frames, weekly_expiry
+from acquisition_schedule import official_export_slots, raw_study_1330_for_day
 
 
-EXPORT_SLOTS = ("07:30", "13:30", "15:50", "17:00", "20:30")
+EXPORT_SLOTS = ("07:30", "13:30", "14:46", "15:50", "17:00", "20:30")
 
 
 def load_export_profiles(store, week, day: date, logs):
     """Ritorna profili reali per slot, senza ripetere stime o NET GAMMA."""
+    active_slots = official_export_slots(day)
     study = _study_frames(store, week, day)
     recorded = _official_frames(store, week, day, logs)
-    frames = {slot: frame for slot, frame in study.items() if slot in EXPORT_SLOTS}
+    frames = {slot: frame for slot, frame in study.items() if slot in active_slots}
     for slot, frame in recorded.items():
-        # Il vecchio compact delle 13:30 prevale SOLO prima della
-        # promozione a rilevamento ufficiale; dopo prevale il raw.
-        if not (slot == "13:30" and day < OFFICIAL_1330_START and slot in frames):
+        # Il compact storico delle 13:30 prevale prima dell'11/11.
+        if not (slot == "13:30" and raw_study_1330_for_day(day)
+                and slot in frames):
             frames[slot] = frame
 
     expected = {"0DTE": day.isoformat(), "Weekly": weekly_expiry(day).isoformat()}
     result = {}
-    for slot in EXPORT_SLOTS:
+    for slot in active_slots:
         frame = frames.get(slot)
         if frame is None:
             continue
