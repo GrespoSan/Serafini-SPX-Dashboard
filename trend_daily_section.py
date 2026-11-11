@@ -213,13 +213,13 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
     # In evidenza la TENUTA dell'ultimo impulso, non il baricentro della
     # singola candela Daily: quest'ultimo resta nei dettagli.
     if impulse is None:
-        impulse_label = "Ultimo impulso"
+        impulse_label = "Baricentro impulso"
         impulse_value = "N/D"
         impulse_sub = "Nessun impulso nelle ultime 20 sedute"
         impulse_color = "#b6bcc5"
     else:
         impulse_label = (
-            f"Impulso {pd.Timestamp(impulse['day']):%d/%m/%Y}")
+            f"Baricentro impulso {pd.Timestamp(impulse['day']):%d/%m/%Y}")
         impulse_value = (f"{impulse['midpoint']:,.2f}"
                          .replace(",", "X").replace(".", ",").replace("X", "."))
         impulse_sub = (
@@ -301,7 +301,7 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
   <div class="spx-trend-grid">
     <div class="spx-trend-kpi"><div class="spx-trend-label">Struttura Daily</div><div class="spx-trend-value" style="color:{direction_color}">{escape(result["direction"])}</div></div>
     <div class="spx-trend-kpi"><div class="spx-trend-label">Chiusura vs baricentro Daily</div><div class="spx-trend-value" style="color:{state_color}">{escape(result["midpoint_state"])}</div><div class="spx-trend-sub">{escape(delta_text)} dal baricentro</div></div>
-    <div class="spx-trend-kpi"><div class="spx-trend-label">{escape(impulse_label)}</div><div class="spx-trend-value" style="color:{impulse_color}">{escape(impulse_value)}</div><div class="spx-trend-sub">{escape(impulse_sub)} · Baricentro impulso</div></div>
+    <div class="spx-trend-kpi"><div class="spx-trend-label">{escape(impulse_label)}</div><div class="spx-trend-value" style="color:{impulse_color}">{escape(impulse_value)}</div><div class="spx-trend-sub">{escape(impulse_sub)}</div></div>
     <div class="spx-trend-kpi"><div class="spx-trend-label">Barre stesso colore</div><div class="spx-trend-value" style="color:{count_color}">{result["same_color"]}</div></div>
     {gex_card}
   </div>
