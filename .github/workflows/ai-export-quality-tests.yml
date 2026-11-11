@@ -7,6 +7,8 @@ on:
       - 'ai_report.py'
       - 'ai_quality_export.py'
       - 'ai_replay.py'
+      - 'acquisition_schedule.py'
+      - 'gamma_replay.py'
       - 'volume_audit.py'
       - 'tests/test_ai_quality_export.py'
       - 'tests/test_ai_report_v10_zip.py'
@@ -26,7 +28,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Compile AI report and original dependencies
-        run: python -m compileall -q ai_quality_export.py ai_report.py ai_replay.py volume_audit.py vix_regime.py
+        run: python -m compileall -q ai_quality_export.py ai_report.py ai_replay.py acquisition_schedule.py gamma_replay.py volume_audit.py vix_regime.py
       - name: Install application dependencies
         run: python -m pip install -q -r requirements.txt
       - name: Verify volume alerts and source timestamp provenance
