@@ -164,7 +164,9 @@ class DualSourceTests(unittest.TestCase):
             "//@version=6\nindicator('test',overlay=true)",
             events, captured_at="2026-11-10T15:50:10+01:00")
         self.assertIn("newsTime0", before)
-        self.assertIn("CPI", before)
+        # Etichetta TradingView intenzionalmente verticale C / P / I.
+        self.assertIn('timestamp("Europe/Rome", 2026, 11, 10, 14, 30)', before)
+        self.assertIn("newsLabel0", before)
         self.assertNotIn("newsTime0", after)
 
 
