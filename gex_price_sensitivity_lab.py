@@ -109,15 +109,19 @@ def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario"):
         )
         hypothetical_spx = float(value) - basis
         model_at_scenario = scenario_gex(curve, hypothetical_spx)
-        if model_at_scenario is None:
+        baseline_curve = scenario_gex(curve, cash_spot)
+        if model_at_scenario is None or baseline_curve is None:
             st.info("Prezzo fuori dai punti della curva: "
-                    "nessun NET GEX scenariale calcolabile.")
+                    "nessun confronto teorico affidabile calcolabile.")
             return
         a, b, c = st.columns(3)
         a.metric("NET GEX originale", f"{actual_gex / 1e9:+.2f} mld USD")
         b.metric("NET GEX teorico allo scenario",
                  f"{model_at_scenario / 1e9:+.2f} mld USD")
-        c.metric("Differenza teorica", f"{(model_at_scenario-actual_gex)/1e9:+.2f} mld")
+        # Confronto della STESSA curva, non originale vs interpolazione:
+        # non confondere una discrepanza numerica con un effetto-prezzo.
+        c.metric("Δ teorico dalla curva al cash SPX",
+                 f"{(model_at_scenario-baseline_curve)/1e9:+.2f} mld")
         chart = go.Figure()
         chart.add_trace(go.Scatter(
             x=[x+basis for x, _ in points],
@@ -142,7 +146,9 @@ def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario"):
             f"Input scenario SPX = ES {float(value):,.2f} − base {basis:+.2f} "
             f"= {hypothetical_spx:,.2f}. "
             "NET GEX dello scenario ottenuto per interpolazione lineare "
-            "tra punti della curva Edge archiviata; NON un nuovo download, "
+            "tra punti della curva Edge archiviata. Il delta usa la stessa "
+            "curva interpolata allo SPX cash, evitando differenze puramente "
+            "numeriche rispetto al valore Edge originale; NON un nuovo download, "
             "NON una rivalutazione completa di ogni contratto, NON nuove Wall "
             "o Flip e NON una misura di posizioni dealer osservate."
         )
