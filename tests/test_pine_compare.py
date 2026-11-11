@@ -49,7 +49,8 @@ class PineComparisons(unittest.TestCase):
 
     def test_all_comparisons_have_manual_scale_and_3_closer_columns(self):
         for previous, current in [
-            ("07:30", "13:30"),
+            ("07:30", "13:30"),  # storico 11/11: non reinterpretare
+            ("07:30", "14:46"),  # dal 12/11: 07:46 Chicago
             ("07:30", "15:50"),
             ("15:50", "17:00"),
             ("17:00", "20:30"),
@@ -96,6 +97,30 @@ class PineComparisons(unittest.TestCase):
                 self.assertIn("renderProfile(odteLevels, odteValues", code)
                 self.assertIn("renderProfile(weeklyLevels, weeklyValues", code)
                 self.assertNotIn("Distanza 0DTE attuale (senza precedente)", code)
+
+    def test_2040_is_current_only_without_any_previous_source(self):
+        # Il quinto Pine ufficiale è autonomo: solo 0DTE + Weekly ore 20:30.
+        code = make_pine(self.odte, self.weekly, 36,
+                         "2026-11-12", "2026-11-12 19:30:20", "Sera 20:30")
+        self.assertIn('0DTE 20:30', code)
+        self.assertIn('Weekly 20:30', code)
+        self.assertIn('Serafini SPX NET GAMMA | 2026-11-12 | Sera 20:30', code)
+        self.assertNotIn('showPrevious', code)
+        self.assertNotIn('prevLevels', code)
+        self.assertNotIn('0DTE precedente', code)
+        self.assertIn('Mostra 0DTE corrente', code)
+        self.assertIn('Mostra Weekly corrente', code)
+        self.assertIn('Scala MANUALE', code)
+
+    def test_1446_chicago_labels_are_internal_to_comparison_pine(self):
+        code = make_pine_comparison(
+            self.earlier, self.odte, self.weekly, 36,
+            "2026-11-12", "07:30", "14:46", "2026-11-12 13:46:00")
+        self.assertIn('0DTE 07:30', code)
+        self.assertIn('0DTE 14:46', code)
+        self.assertIn('Weekly 14:46', code)
+        self.assertNotIn('Weekly 13:30', code)
+        self.assertIn('Mostra 0DTE precedente', code)
 
     def test_rank_only_real_0dte_positive_negative_bars(self):
         rows = [
