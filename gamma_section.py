@@ -148,7 +148,7 @@ def _snapshot_log_index(week, log_names, _store):
                    else '13:30 (studio storico)' if dt.date() < date(2026, 11, 11)
                    else '13:30 · cron ufficiale ritirato')
         elif slot == '46 14 * * 1-5':
-            label='Pre-USA 14:46 · ufficiale Roma'
+            label='Rilevamento 14:46 · ufficiale Roma'
         elif slot == '0 17 * * 1-5':
             label='USA · 10:00 Chicago (17:00 ordinario)'
         elif slot == '46 15 * * 1-5':
