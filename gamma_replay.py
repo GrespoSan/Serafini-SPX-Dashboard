@@ -1,4 +1,4 @@
-"""Replay temporaneo intraday: 3 snapshot ufficiali + replay intraday compatto.
+"""Replay temporaneo intraday: 5 snapshot ufficiali + replay intraday compatto.
 
 Il grafico espone ORARI DI DOWNLOAD a Roma; il timestamp Cboe non viene
 interpretato come tempo UTC o come ora italiana. Nessuna scrittura in Supabase.
@@ -14,11 +14,28 @@ import streamlit as st
 from net_gamma import profile, read_snapshot
 
 ROME = ZoneInfo("Europe/Rome")
-SLOTS = ("07:30", "11:00", "13:30", "14:31", "15:50", "16:01", "16:16",
-         "16:31", "16:46", "17:30", "18:00", "18:30", "20:00",
-         "20:30", "21:30")
-OFFICIAL = {"07:30": "30 7 * * 1-5", "15:50": "50 15 * * 1-5",
-            "20:30": "30 20 * * 1-5"}
+SLOTS = ("07:30", "11:00", "13:30", "14:31", "14:46", "15:50",
+         "16:01", "16:16", "16:31", "16:46", "17:00", "17:30",
+         "18:00", "18:30", "20:00", "20:30", "21:30")
+
+# Allinea i rilevamenti MT4 agli official slots REALI del Cloud.
+# Chiavi nominali Chicago: 14:46=07:46 Chicago, 15:50=08:50 Chicago,
+# 17:00=10:00 Chicago, 20:30=13:30 Chicago.
+# Non promuovere retroattivamente vecchi Replay a ufficiali.
+ALWAYS_OFFICIAL = {"07:30": "30 7 * * 1-5",
+                   "15:50": "50 15 * * 1-5",
+                   "17:00": "0 17 * * 1-5",
+                   "20:30": "30 20 * * 1-5"}
+CUTOFF_1446 = date(2026, 11, 12)
+HISTORICAL_1330_OFFICIAL = date(2026, 11, 11)
+
+def official_slots_for_day(day):
+    result = dict(ALWAYS_OFFICIAL)
+    if day >= CUTOFF_1446:
+        result["14:46"] = "46 14 * * 1-5"
+    elif day == HISTORICAL_1330_OFFICIAL:
+        result["13:30"] = "30 13 * * 1-5"
+    return result
 
 def weekly_expiry(day):
     from datetime import timedelta
@@ -46,7 +63,7 @@ def _official_frames(store, week, day, logs, *, include_mt4_raw=False):
     for log in logs:
         try:
             item = json.loads(store.download(f"{week}/logs/{log['name']}"))
-            slot = next((k for k, v in OFFICIAL.items()
+            slot = next((k for k, v in official_slots_for_day(day).items()
                          if item.get("scheduled_slot") == v), None)
             if (not slot or item.get("rome_date") != day.isoformat()
                     or item.get("status") not in ("NUOVO", "INVARIATO")
@@ -123,7 +140,7 @@ def _study_frames(store, week, day):
                     or item.get("kind") != "STUDIO_INTRADAY_NON_UFFICIALE"):
                 continue
             slot = item.get("slot_rome")
-            if slot not in SLOTS or slot in OFFICIAL:
+            if slot not in SLOTS or slot in official_slots_for_day(day):
                 continue
             dt = _download_clock(item)
             if dt is None:
