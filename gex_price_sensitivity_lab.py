@@ -100,15 +100,42 @@ def _gex_reference_times(download_clock, valuation):
     return snapshot, model
 
 
+def _add_price_reference_markers(chart, *, original_es, original_gex_on_curve,
+                                 scenario_es, scenario_gex_on_curve):
+    """Due riferimenti sullo stesso profilo GEX: prima originale, poi scenario.
+
+    Il pallino grigio usa la stessa interpolazione del delta numerico, non
+    inventa un nuovo GEX o un prezzo da una fotografia successiva.
+    """
+    chart.add_trace(go.Scatter(
+        x=[float(original_es)], y=[float(original_gex_on_curve) / 1e9],
+        mode="markers", name="Originale (curva)",
+        marker=dict(size=10, color="#a0a0a0"),
+        hovertemplate=(
+            "Originale sulla curva Edge<br>"
+            "ES %{x:,.2f}<br>NET GEX %{y:+.2f} mld USD<extra></extra>"
+        ),
+    ))
+    chart.add_trace(go.Scatter(
+        x=[float(scenario_es)], y=[float(scenario_gex_on_curve) / 1e9],
+        mode="markers", name="Scenario teorico",
+        marker=dict(size=10, color="#eabf4a"),
+        hovertemplate=(
+            "Scenario teorico<br>"
+            "ES %{x:,.2f}<br>NET GEX %{y:+.2f} mld USD<extra></extra>"
+        ),
+    ))
+
+
 def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario",
                    download_clock=None, slot=None):
-    """Laboratorio collassato, senza richieste network o scritture.
+    """Laboratorio aperto di default, senza richieste network o scritture.
 
     Curva scenario = stessi OI/IV/valutazione del report Edge. Conversione
     ES->SPX con offset congelato e dichiarato. Nessuna previsione intraday.
     """
     with st.expander("LABORATORIO GEX — scenario prezzo (sperimentale)",
-                     expanded=False):
+                     expanded=True):
         snapshot_time, valuation_time = _gex_reference_times(
             download_clock, edge.get("valuation"))
         slot_text = f" · Replay {slot}" if slot else ""
@@ -202,10 +229,13 @@ def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario",
                         line_color="#a0a0a0")
         chart.add_vline(x=float(value), line_dash="dot",
                         line_color="#eabf4a")
-        chart.add_trace(go.Scatter(
-            x=[float(value)], y=[model_at_scenario/1e9],
-            mode="markers", name="Scenario teorico",
-            marker=dict(size=10, color="#eabf4a")))
+        _add_price_reference_markers(
+            chart,
+            original_es=cash_spot + basis,
+            original_gex_on_curve=baseline_curve,
+            scenario_es=float(value),
+            scenario_gex_on_curve=model_at_scenario,
+        )
         chart.add_hline(y=0, line_dash="dash", line_color="#777777")
         chart.update_layout(
             title="Sensibilità teorica GEX alla variazione del prezzo",
