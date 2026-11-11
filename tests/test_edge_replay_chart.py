@@ -12,10 +12,22 @@ class EdgeReplayChartTests(unittest.TestCase):
             "open": [7545.], "high": [7555.],
             "low": [7542.], "close": [7550.],
         })
-        edge = {"rows": [],
-                "put_wall_spx": 7509.0, "gamma_flip_spx": 7544.67,
-                "call_wall_spx": 7549.0}
-        fig = _plot(edge, [], candles, 24.0, [7440., 7630.])
+        edge = {
+            "rows": [
+                {"strike_spx": 7509., "call_gex": 100e6,
+                 "put_gex": -120e6, "net_gex": -20e6},
+                {"strike_spx": 7549., "call_gex": 200e6,
+                 "put_gex": -80e6, "net_gex": 120e6}
+            ],
+            "put_wall_spx": 7509.0, "gamma_flip_spx": 7544.67,
+            "call_wall_spx": 7549.0
+        }
+        serafini_rows = [
+            {"strike_spx": 7509.0, "net_gamma": -20.0},
+            {"strike_spx": 7549.0, "net_gamma": 45.0}
+        ]
+        # Real triptych: both GEX and Serafini panels have their own axes.
+        fig = _plot(edge, serafini_rows, candles, 24.0, [7440., 7630.])
         shapes = list(fig.layout.shapes)
         self.assertEqual(len(shapes), 9)
         first = [s for s in shapes if s.xref == "x domain"]
