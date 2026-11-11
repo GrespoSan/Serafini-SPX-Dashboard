@@ -181,7 +181,6 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
     delta_text = f"{delta:+.2f}%".replace(".", ",") if delta is not None else "N/D"
     gap_points = result["last_close"] - result["midpoint"]
     gap_text = f"{gap_points:+,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    center_text = f'{result["midpoint"]:,.2f}'.replace(",", "X").replace(".", ",").replace("X", ".")
     close_text = f'{result["last_close"]:,.2f}'.replace(",", "X").replace(".", ",").replace("X", ".")
     state_color = ("#56d49e" if result["midpoint_state"] == "SOPRA" else
                    "#ff676d" if result["midpoint_state"] == "SOTTO" else "#b6bcc5")
@@ -307,7 +306,7 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
     {gex_card}
   </div>
   {gex_source}
-  <div class="spx-trend-impulse"><b>Ultima candela di impulso:</b> {escape(impulse_text)}</div>
+  <div class="spx-trend-impulse">{escape(impulse_text)}</div>
   <div class="spx-trend-foot">{escape(baricentro_text)}</div>\n  <div class="spx-trend-foot">{escape(meaning)}</div>\n  <div class="spx-trend-note">Candela di impulso: criterio sperimentale (range ≥1,3% della chiusura precedente, corpo ≥60% del range, ricerca nelle ultime 20 sedute). Tenuta = tutte le barre successive rispettano il baricentro; recuperato/perso = posizione dell’ultima chiusura dopo una violazione. Non è un segnale operativo validato.</div>
 </div>
 """, unsafe_allow_html=True)
