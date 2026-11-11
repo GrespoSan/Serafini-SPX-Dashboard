@@ -87,7 +87,7 @@ class EdgeExposureSummaryTests(unittest.TestCase):
         self.assertIn('"put_gex":result["put_gex"]', payload)
         self.assertIn('"modeled_gamma_sign":result["modeled_gamma_sign"]', payload)
         self.assertIn('**GEX EDGE 0DTE — esposizioni modellate**', panel)
-        self.assertIn('Segno Gamma modellato', panel)
+        self.assertIn('"Regime Edge"', panel)
         self.assertIn('Call GEX', panel)
         self.assertIn('Put GEX', panel)
         self.assertIn("posizioni osservate", panel)
