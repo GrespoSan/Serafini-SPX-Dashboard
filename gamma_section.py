@@ -1184,9 +1184,10 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
         from asia_gamma import render_auto as render_asia_gamma
         render_asia_gamma(day, asia_c1, asia_p1, level_context=asia_level_context)
     st.subheader('Esporta i profili su TradingView — 5 situazioni')
-    st.caption('Dal 12/11/2026 il secondo Pine ufficiale è 14:46 Roma; '
-               '13:30 resta esclusivamente Replay. I Pine delle date '
-               'precedenti conservano le denominazioni storiche.')
+    st.caption('Dal 12/11/2026 il secondo Pine ufficiale è 07:46 Chicago '
+               '(chiave logica 14:46; ora Roma reale nel rilevamento). '
+               '13:30 Roma resta solo Replay. Le date precedenti mantengono '
+               'i nomi e i dati storici.')
     scripts = {}
     export_issues = {}
     if offset is None or not math.isfinite(offset):
