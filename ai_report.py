@@ -16,6 +16,9 @@ from zoneinfo import ZoneInfo
 import streamlit as st
 from net_gamma import profile, read_snapshot
 from ai_replay import attach_replay
+from acquisition_schedule import (
+    official_slots_for_day, LEGACY_1330_CRON, raw_study_1330_for_day,
+)
 from ai_quality_export import (
     attach_freshness_audit, merge_volume_alerts,
     volume_alerts_csv, freshness_csv,
@@ -126,13 +129,15 @@ def build_report(store, week, day, reference, offset=None, selected_levels=None)
             rec['download_utc'] = log.get('download_utc')
             rec['acquisition_slot'] = log.get('scheduled_slot')
             rec['acquisition_status'] = log.get('status')
-            rec['acquisition_classification'] = (
-                'STUDIO_STORICO_DA_ARCHIVIO'
-                if rec['acquisition_slot'] == '30 13 * * 1-5' else
-                'UFFICIALE' if rec['acquisition_slot'] in (
-                    '30 7 * * 1-5', '50 15 * * 1-5', '30 20 * * 1-5')
-                else 'NON CLASSIFICATO'
-            )
+            if (rec['acquisition_slot'] == LEGACY_1330_CRON and
+                    raw_study_1330_for_day(day)):
+                rec['acquisition_classification'] = 'STUDIO_STORICO_DA_ARCHIVIO'
+            elif rec['acquisition_slot'] in official_slots_for_day(day).values():
+                rec['acquisition_classification'] = 'UFFICIALE'
+            elif rec['acquisition_slot'] == LEGACY_1330_CRON:
+                rec['acquisition_classification'] = 'SLOT_UFFICIALE_RITIRATO'
+            else:
+                rec['acquisition_classification'] = 'NON CLASSIFICATO'
             rec['cboe_spot_spx'] = snap['data'].get('current_price')
             rec['cboe_prev_close_spx'] = snap['data'].get('prev_day_close')
             rec['status'], rec['quality_counts'] = _quality(snap)
@@ -420,7 +425,10 @@ def _acquisition_label(rec):
         '30 7 * * 1-5': 'Mattina 07:30',
         '50 15 * * 1-5': 'Pomeriggio 15:50',
         '30 20 * * 1-5': 'Sera 20:30',
-        '30 13 * * 1-5': '13:30 (studio storico)',
+        '30 13 * * 1-5': ('13:30 ufficiale storico (11/11)'
+                            if str(rec.get('download_utc') or '')[:10] == '2026-11-11'
+                            else '13:30 (studio storico)'),
+        '46 14 * * 1-5': 'Pre-USA 14:46 ufficiale Roma',
         '46 15 * * 1-5': 'Pomeriggio 15:46',
         '07:30': 'Mattina 07:30',
         '15:46': 'Pomeriggio 15:46',
