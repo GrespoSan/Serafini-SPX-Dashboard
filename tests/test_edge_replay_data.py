@@ -105,6 +105,38 @@ class ReplayEdgeDataTests(unittest.TestCase):
         report, _ = validate_pair(c, s, DAY, "16:31")
         self.assertIs(report["quality_sufficient"], False)
 
+    def test_saved_call_put_walls_and_flip_agree_with_curve(self):
+        c, sc = compact(), sidecar()
+        model = sc["edge"]
+        model.update({
+            "call_wall_spx": 7550.0,
+            "put_wall_spx": 7500.0,
+            "gamma_flip_spx": 7520.0,
+            "rows": [
+                {"strike_spx": 7500., "call_gex": 100., "put_gex": -700.,
+                 "net_gex": -600.},
+                {"strike_spx": 7550., "call_gex": 900., "put_gex": -50.,
+                 "net_gex": 850.},
+            ],
+            "curve": [
+                {"spot_spx": 7500., "net_gex": -40.},
+                {"spot_spx": 7540., "net_gex": 40.},
+            ],
+        })
+        valid, clock = validate_pair(c, sc, DAY, "16:31")
+        self.assertEqual(valid["gamma_flip_spx"], 7520.0)
+        self.assertEqual(clock.hour, 16)
+        for field, bad_value, message in (
+            ("call_wall_spx", 7500., "Call Wall"),
+            ("put_wall_spx", 7550., "Put Wall"),
+            ("gamma_flip_spx", 7525., "Gamma Flip"),
+        ):
+            altered = deepcopy(sc)
+            altered["edge"][field] = bad_value
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(ValueError, message):
+                    validate_pair(c, altered, DAY, "16:31")
+
     def test_select_only_available_slots_from_same_day(self):
         week = "2026-W46"
         c, s = compact(), sidecar()
