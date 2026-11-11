@@ -54,9 +54,6 @@ def expected_replay_slots(day):
 
 
 def official_export_slots(day):
-    base = ["07:30"]
-    if FIRST_1330_OFFICIAL <= day <= LAST_1330_OFFICIAL:
-        base.append("13:30")
-    if day >= CUTOFF_1446:
-        base.append("14:46")
-    return tuple(base + ["15:50", "17:00", "20:30"])
+    """Cinque pulsanti Pine; il vecchio 13:30 storico resta consultabile."""
+    middle = "14:46" if day >= CUTOFF_1446 else "13:30"
+    return ("07:30", middle, "15:50", "17:00", "20:30")
