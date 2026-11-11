@@ -98,7 +98,7 @@ class PineComparisons(unittest.TestCase):
                 self.assertIn("renderProfile(weeklyLevels, weeklyValues", code)
                 self.assertNotIn("Distanza 0DTE attuale (senza precedente)", code)
 
-    def test_2040_is_current_only_without_any_previous_source(self):
+    def test_2030_is_current_only_without_any_previous_source(self):
         # Il quinto Pine ufficiale è autonomo: solo 0DTE + Weekly ore 20:30.
         code = make_pine(self.odte, self.weekly, 36,
                          "2026-11-12", "2026-11-12 19:30:20", "Sera 20:30")
