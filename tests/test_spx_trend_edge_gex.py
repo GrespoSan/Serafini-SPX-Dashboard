@@ -118,7 +118,7 @@ class EdgeDailyKPITests(unittest.TestCase):
             trend_daily_section.render(reference_day=date(2026,11,11),
                                       daily_bars=source,contract="ESZ6")
         html=fake.markdowns[0][0]
-        self.assertIn('class="spx-trend-label">Impulso 09/11/2026',html)
+        self.assertIn('class="spx-trend-label">Baricentro impulso 09/11/2026',html)
         self.assertIn("7.505,00",html)
         self.assertIn("Rialzista · TENUTA · 1 seduta",html)
         self.assertIn("nessuna candela successiva è scesa sotto il baricentro",html)
