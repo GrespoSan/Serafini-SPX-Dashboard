@@ -327,11 +327,6 @@ def show_replay(week, store, plotter):
         "Confronto informativo su dati 0DTE: Edge usa posizioni dei dealer "
         "MODELLATE, non osservate. NET GAMMA Serafini ed Edge sono distinti."
     )
-    # Laboratorio indipendente: SOLO la curva Edge archiviata, nessun
-    # cambiamento alle Wall/Flip della sezione ufficiale o a Serafini.
-    show_price_lab(edge, shift, last_es,
-                   key=f"edge_scenario_{week}_{day}_{current}")
-
     with st.expander("Curva teorica GEX Edge", expanded=False):
         curve = edge.get("curve") or []
         if curve:
@@ -352,3 +347,8 @@ def show_replay(week, store, plotter):
             st.plotly_chart(fig, width="stretch")
         else:
             st.info("Curva teorica non presente nel report Edge.")
+
+    # Laboratorio indipendente DOPO la curva teorica. Calcoli ufficiali
+    # Edge e Serafini invariati, pannello sempre chiuso di default.
+    show_price_lab(edge, shift, last_es,
+                   key=f"edge_scenario_{week}_{day}_{current}")
