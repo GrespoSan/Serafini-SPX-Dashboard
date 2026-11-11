@@ -187,9 +187,19 @@ def show_replay(week, store, plotter):
         amount = float(edge[key])
         old = (float(previous_edge[key]) if previous_edge else None)
         with col:
-            st.metric(title, format_gex_billions(amount, signed=True),
-                      delta=(f"{(amount - old)/1e9:+.2f} mld"
-                             if old is not None else None))
+            if key == "net_gex":
+                # In Streamlit st.metric il valore resta bianco anche quando
+                # e' negativo: colorare il VALORE usando il segno reale Edge,
+                # mantenendo separata la variazione rispetto al Replay scelto.
+                _colored_edge_metric(col, title,
+                                     format_gex_billions(amount, signed=True),
+                                     amount)
+                if old is not None:
+                    col.caption(f"Δ {(amount - old)/1e9:+.2f} mld")
+            else:
+                st.metric(title, format_gex_billions(amount, signed=True),
+                          delta=(f"{(amount - old)/1e9:+.2f} mld"
+                                 if old is not None else None))
     with metrics[3]:
         # Il segno modellato è già rappresentato dal Regime Edge:
         # mostra qui una misura indipendente sulla qualità dell'analisi.
