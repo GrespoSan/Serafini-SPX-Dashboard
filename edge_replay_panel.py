@@ -73,6 +73,52 @@ def _metric_price(label, value, shift, prev=None):
     st.metric(label, f"{current:,.2f}", delta=delta)
 
 
+def _verified_es_last_candle(candles, clock, *, max_age_minutes=11):
+    """L'ultima ES 5m CHIUSA, e sufficientemente recente allo snapshot.
+
+    Non usa il prezzo Cboe del cash SPX, né barre future. Un feed fermo
+    non deve mai apparire come quotazione attuale del future.
+    """
+    if candles is None or candles.empty or clock.tzinfo is None:
+        return None
+    if "bar_close" not in candles or "close" not in candles:
+        return None
+    try:
+        valid = candles.loc[candles["bar_close"] <= clock].sort_values("bar_close")
+        if valid.empty:
+            return None
+        last = valid.iloc[-1]
+        when = last["bar_close"]
+        price = float(last["close"])
+        age = (clock - when).total_seconds() / 60
+        if not math.isfinite(price) or price <= 0 or not (0 <= age <= max_age_minutes):
+            return None
+        return {
+            "price": price,
+            "clock": when.astimezone(ROME).strftime("%H:%M"),
+            "source": str(candles.attrs.get("candle_source", "ES 5m")),
+            "age_minutes": round(age, 2),
+        }
+    except (KeyError, TypeError, ValueError, OverflowError, AttributeError):
+        return None
+
+
+def _model_valuation_context(edge, clock):
+    """La data di valutazione del modello Edge NON è quella del download."""
+    value = edge.get("valuation")
+    try:
+        when = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if when.tzinfo is None:
+            return {"label": "N/D", "prior_cash_session": False}
+        rome_when = when.astimezone(ROME)
+        return {
+            "label": rome_when.strftime("%d/%m/%Y %H:%M"),
+            "prior_cash_session": rome_when.date() < clock.astimezone(ROME).date(),
+        }
+    except (TypeError, ValueError, OverflowError, AttributeError):
+        return {"label": "N/D", "prior_cash_session": False}
+
+
 def show_replay(week, store, plotter):
     iso_year, iso_week = map(int, week.split("-W"))
     monday = date.fromisocalendar(iso_year, iso_week, 1)
@@ -144,6 +190,20 @@ def show_replay(week, store, plotter):
         except (RuntimeError, ValueError, TypeError, KeyError, OverflowError) as exc:
             st.warning(f"Il rilevamento {compare} non è confrontabile: {exc}")
             previous_edge = None
+    # Il Cash SPX Cboe resta fisso fuori RTH. Le candele future ES sono
+    # una fonte separata, usata SOLO per la quotazione ES e lo zoom.
+    # Caricarle prima dei KPI evita di spacciare SPX+offset per prezzo ES.
+    try:
+        candles = load_es_candles(day, required_until=clock)
+        candles = candles_up_to(candles, clock)
+    except (ValueError, TypeError, RuntimeError, KeyError, OverflowError) as exc:
+        candles = None
+        st.caption(f"Candele ES non disponibili: {exc}. GEX e Serafini restano visibili.")
+    last_es = _verified_es_last_candle(candles, clock)
+    model_clock = _model_valuation_context(edge, clock)
+    cash_spot = float(edge["spot_spx"])
+    equivalent = cash_spot + shift
+
     good = edge.get("quality_sufficient") is True
     st.caption(
         f"Replay {current} · download {clock:%H:%M:%S} Roma · "
@@ -160,11 +220,28 @@ def show_replay(week, store, plotter):
     else:
         st.caption(
             f"Qualità Edge: {float(edge['quality_pct']):.2f}% · "
+            "Copertura del modello, NON freschezza del prezzo cash SPX. "
             "Segno, Call/Put e NET GEX modellati sulla catena Cboe completa."
         )
+    if model_clock["prior_cash_session"]:
+        st.warning(
+            "RIFERIMENTO SPX NON LIVE: il modello GEX utilizza una valutazione "
+            f"del {model_clock['label']} Roma (seduta cash precedente). "
+            "Gli strike Wall e il Gamma Flip sono modellati su questo "
+            "riferimento, NON ricalcolati sul prezzo corrente del future ES."
+        )
+    else:
+        st.caption(f"Valutazione modello GEX: {model_clock['label']} Roma.")
+
     cols = st.columns(5)
     with cols[0]:
-        st.metric("Spot ES equivalente", f"{float(edge['spot_spx']) + shift:,.2f}")
+        st.metric("ES future · ultima chiusura 5m",
+                  f"{last_es['price']:,.2f}" if last_es is not None else "N/D")
+        if last_es is not None:
+            st.caption(f"Barra {last_es['clock']} Roma · {last_es['source']}")
+        else:
+            st.caption("ES 5m non verificabile entro il download. "
+                       "Nessun prezzo future ricostruito.")
     for column, title, field in zip(cols[1:4],
                                     ("Put Wall", "Gamma Flip", "Call Wall"),
                                     ("put_wall_spx", "gamma_flip_spx", "call_wall_spx")):
@@ -180,6 +257,13 @@ def show_replay(week, store, plotter):
             str(edge.get("regime", "N/D")) if good else "N/D",
             edge.get("regime") if good else None,
         )
+    st.caption(
+        f"Base della struttura GEX: SPX Cboe {cash_spot:,.2f} "
+        f"· conversione teorica ES {equivalent:,.2f} "
+        f"(differenziale ES−SPX {shift:+.2f}). "
+        "NON è una quotazione ES corrente. Put Wall, Gamma Flip e Call Wall "
+        "sono strike SPX convertiti con lo stesso differenziale fisso."
+    )
     metrics = st.columns(4)
     for col, title, key in zip(metrics[:3],
                                ("NET GEX", "Call GEX", "Put GEX"),
@@ -213,14 +297,10 @@ def show_replay(week, store, plotter):
             f"Δ rispetto al Replay {compare} · stesso modello e scadenza "
             "0DTE, qualità validata in entrambe le fotografie."
         )
-    try:
-        candles = load_es_candles(day, required_until=clock)
-        candles = candles_up_to(candles, clock)
-    except (ValueError, TypeError, RuntimeError, KeyError, OverflowError) as exc:
-        candles = None
-        st.caption(f"Candele ES non disponibili: {exc}. GEX e Serafini restano visibili.")
     serafini_rows = choose_rows(compact["profiles"]["0DTE"], extended=True)
-    price = float(edge["spot_spx"]) + shift
+    # La visualizzazione segue il prezzo ES verificato; la geometria degli
+    # strike GEX continua a usare SPX + base e i dati grezzi NON cambiano.
+    price = last_es["price"] if last_es is not None else equivalent
     prices = [price] + [float(row["strike_spx"]) + shift for row in serafini_rows]
     prices += [float(row["strike_spx"]) + shift for row in edge["rows"]]
     if candles is not None and not candles.empty:
@@ -253,7 +333,7 @@ def show_replay(week, store, plotter):
                     mode="lines", name=f"Replay {compare}",
                     line=dict(dash="dash")))
             fig.add_hline(y=0, line_dash="dot", line_color="#e8ba55")
-            fig.update_layout(xaxis_title="Prezzo future ES equivalente",
+            fig.update_layout(xaxis_title="Scenario SPX convertito in coordinate ES",
                               yaxis_title="NET GEX miliardi USD/1%",
                               height=420)
             st.plotly_chart(fig, width="stretch")
