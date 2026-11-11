@@ -93,7 +93,7 @@ def describe_slot(slot, rome_date=None):
             return 'Pre-USA 13:30 · ufficiale storico (11/11)'
         return '13:30 · ufficiale ritirato (dal 12/11)'
     if name == '46 14 * * 1-5':
-        return 'Pre-USA 14:46 · ufficiale Roma'
+        return 'Rilevamento 14:46 · ufficiale Roma'
     if name == '0 17 * * 1-5':
         return 'USA · 10:00 Chicago (17:00 ordinario)'
     if name == '30 15 * * 1-5':
