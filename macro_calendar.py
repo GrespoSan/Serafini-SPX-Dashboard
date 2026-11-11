@@ -333,7 +333,7 @@ def render():
         '<h3 style="margin:0;padding:0">Calendario macro USA — eventi da monitorare</h3>'
         '<span style="font-size:0.82rem;color:#999">Fonti: '
         '<a href="https://www.bls.gov/schedule/news_release/" target="_blank" '
-        'rel="noopener noreferrer">BLS ufficiale</a> · '
+        'rel="noopener noreferrer">Calendario ufficiale BLS</a> · '
         '<a href="https://www.financecalendar.com" target="_blank" '
         'rel="noopener noreferrer">Finance Calendar</a></span>'
         '</div>',
