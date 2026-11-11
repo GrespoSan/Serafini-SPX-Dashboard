@@ -331,32 +331,33 @@ def render():
         '<div style="display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap;'
         'margin:0 0 0.65rem 0">'
         '<h3 style="margin:0;padding:0">Calendario macro USA — eventi da monitorare</h3>'
-        '<span style="font-size:0.82rem;color:#999">Dati: BLS + '
+        '<span style="font-size:0.82rem;color:#999">Fonti: '
+        '<a href="https://www.bls.gov/schedule/news_release/" target="_blank" '
+        'rel="noopener noreferrer">BLS ufficiale</a> · '
         '<a href="https://www.financecalendar.com" target="_blank" '
         'rel="noopener noreferrer">Finance Calendar</a></span>'
         '</div>',
         unsafe_allow_html=True,
     )
     try:
-        # Anche ieri rimane consultabile per gli audit retrospettivi.
-        # CPI/PPI/NFP/JOLTS BLS non dipendono dalla chiave FinanceCalendar.
-        events, health = load_calendar(
-            today - timedelta(days=1), today + timedelta(days=7))
+        # Solo oggi e prossimi 7 giorni. Per audit di date passate esistono
+        # i test BLS e le fonti, senza una sezione "Ieri" nella dashboard.
+        events, health = load_calendar(today, today + timedelta(days=7))
     except RuntimeError:
         st.error("Entrambe le fonti del calendario macro non sono verificabili. "
                  "Non interpretare il calendario vuoto come assenza di news.")
-        st.link_button("Calendario ufficiale BLS",
-                       "https://www.bls.gov/schedule/news_release/")
         return
-    if not health["bls_ok"] or not health["financecalendar_ok"]:
-        st.warning("Calendario parziale: " +
-                   ("FinanceCalendar non disponibile. " if not health["financecalendar_ok"] else "") +
-                   ("BLS non disponibile." if not health["bls_ok"] else ""))
+    if not health["bls_ok"]:
+        st.warning("BLS non verificabile: gli eventi ufficiali CPI/PPI/NFP/JOLTS "
+                   "non hanno un controllo indipendente.")
+    elif not health["financecalendar_ok"]:
+        st.caption("FinanceCalendar temporaneamente non disponibile · "
+                   "gli eventi BLS sono comunque visibili.")
     for message in health["messages"]:
         if message.startswith("Calendario BLS") or message.startswith("FinanceCalendar"):
             continue
-        if message.startswith(f"{today:%d/%m}") or message.startswith(f"{today - timedelta(days=1):%d/%m}"):
-            st.warning(message)
+        if message.startswith(f"{today:%d/%m}"):
+            st.caption("Controllo fonti macro: " + message)
 
     today_events = [e for e in events if e["day"] == today]
     urgent = [e for e in today_events if e["priority"] == "ALTA"]
@@ -433,17 +434,6 @@ def render():
 
         with right:
             upcoming_earnings, earnings_sources = render_m7(today)
-        yesterday = today - timedelta(days=1)
-        past = [e for e in events if e["day"] == yesterday]
-        with st.expander(f"Ieri · {yesterday:%d/%m/%Y} · eventi macro", expanded=False):
-            if past:
-                for item in past:
-                    event_line(item, show_day=True)
-                    if item.get("source_warning"):
-                        st.caption(item["source_warning"])
-            else:
-                st.caption("Nessun evento BLS/FinanceCalendar verificato per ieri; "
-                           "controllare lo stato delle fonti.")
         upcoming = [e for e in events if e["day"] > today]
         next_macro, next_earnings = st.columns(2, gap="large")
         with next_macro:
