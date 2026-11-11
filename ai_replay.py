@@ -213,10 +213,15 @@ def attach_replay(store, report, week, day, reference, offset):
     timeline = []
     previous_timestamp = None
     expected_slots = expected_replay_slots(day)
-    for slot in expected_slots:
-        item = chosen.get(slot)
-        if not item:
-            continue
+    # Durante il disallineamento DST, 07:46 Chicago e' 13:46 Roma,
+    # anche se la chiave dello slot rimane "14:46". Ordinare sempre
+    # per download reale, MAI per la posizione nominale in SLOTS.
+    ordered_slots = sorted(
+        (slot for slot in expected_slots if slot in chosen),
+        key=lambda slot: (_clock(chosen[slot]["download_rome"]), slot),
+    )
+    for slot in ordered_slots:
+        item = chosen[slot]
         stamp = str(item.get("cboe_timestamp_original") or "").strip()
         repeated = bool(stamp and previous_timestamp and stamp == previous_timestamp)
         previous_timestamp = stamp or None
@@ -288,7 +293,7 @@ def attach_replay(store, report, week, day, reference, offset):
                 change["profiles"][label] = comp
         transitions.append(change)
 
-    available = [slot for slot in expected_slots if slot in chosen]
+    available = ordered_slots
     return {
         "status": "DISPONIBILE" if available else "NESSUN REPLAY DISPONIBILE",
         "expected_slots": list(expected_slots), "available_slots": available,
