@@ -20,6 +20,8 @@ def load_export_profiles(store, week, day: date, logs):
     recorded = _official_frames(store, week, day, logs)
     frames = {slot: frame for slot, frame in study.items() if slot in active_slots}
     for slot, frame in recorded.items():
+        if slot not in active_slots:
+            continue
         # Il compact storico delle 13:30 prevale prima dell'11/11.
         if not (slot == "13:30" and raw_study_1330_for_day(day)
                 and slot in frames):
