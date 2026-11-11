@@ -169,12 +169,13 @@ def _study_frames(_store, week, day):
 def render(store, week, logs, view_mode=None):
     st.subheader("Replay / History — evoluzione NET GAMMA")
     st.caption(
-        "Ufficiali: 07:30, 14:46 (dal 12/11/2026), 15:50, 17:00 e 20:30. "
-        "13:30 Replay dal 12/11. Storico invariato: 13:30 studio prima "
-        "dell'11/11, ufficiale soltanto l'11/11. "
-        "Per gli slot USA l'orario effettivo Roma è indicato nel frame."
+        "Ufficiale pre-USA dalle 12/11: 07:46 Chicago (slot logico 14:46; "
+        "14:46 Roma normalmente, 13:46 Roma nel disallineamento DST). "
+        "13:30 Roma resta solo Replay; storico 13:30 ufficiale soltanto "
+        "l'11/11. Gli orari effettivi Roma sono registrati nei fotogrammi."
     )
     from datetime import timedelta
+    iso_year, iso_week = map(int, week.split("-W"))
     monday = date.fromisocalendar(iso_year, iso_week, 1)
     weekdays = [monday + timedelta(days=i) for i in range(5)]
     current_date = datetime.now(ROME).date()
