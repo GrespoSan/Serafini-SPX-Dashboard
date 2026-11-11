@@ -10,6 +10,7 @@ from datetime import datetime
 from gex_cash_provenance import extract_spx_trade_time, describe_spx_trade
 from gex_price_sensitivity_lab import (
     scenario_gex, _signed_metric_color, _signed_gex_metric,
+    _gex_reference_times,
 )
 
 
@@ -92,6 +93,30 @@ class ExistingCurveScenarioTests(unittest.TestCase):
             {"spot_spx": 7500, "net_gex": 2}], 7500))
         with self.assertRaises(ValueError):
             scenario_gex(self.curve, float("nan"))
+
+    def test_lab_shows_real_snapshot_and_separate_valuation_clock(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[1]
+        panel = (root / "edge_replay_panel.py").read_text(encoding="utf-8")
+        lab = (root / "gex_price_sensitivity_lab.py").read_text(encoding="utf-8")
+        download = datetime.fromisoformat("2026-11-11T11:01:19+01:00")
+        snapshot, valuation = _gex_reference_times(
+            download, "2026-11-10T21:00:00+00:00")
+        self.assertEqual(snapshot, "11/11/2026 11:01:19 Roma")
+        self.assertEqual(valuation, "10/11/2026 22:00 Roma")
+        self.assertIn("download_clock=clock, slot=current", panel)
+        self.assertIn("Fotografia Cboe del calcolo GEX", lab)
+        self.assertIn("Valutazione teorica del modello", lab)
+        self.assertIn("non è archiviato separatamente", lab)
+
+    def test_lab_never_infers_timezone_or_invents_missing_calculation_clock(self):
+        download = datetime.fromisoformat("2026-11-11T11:01:19")
+        snapshot, valuation = _gex_reference_times(
+            download, "2026-11-10T21:00:00")
+        self.assertEqual(snapshot, "N/D")
+        self.assertEqual(valuation, "10/11/2026 21:00 (fuso non dichiarato)")
+        self.assertEqual(_gex_reference_times(None, None), ("N/D", "N/D"))
+        self.assertEqual(_gex_reference_times(None, "not a date"), ("N/D", "N/D"))
 
     def test_laboratory_after_edge_curve_and_closed_by_default(self):
         from pathlib import Path
