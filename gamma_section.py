@@ -1316,6 +1316,13 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
                 on_click="ignore",
             )
             st.caption(description)
+            if slot == '14:46' and day < CUTOFF_1446 and script is None:
+                st.caption(
+                    'Non ancora attivo nella giornata selezionata. '
+                    'Prima acquisizione ufficiale: 12/11/2026 alle 07:46 '
+                    'Chicago. L’esecuzione dell’11/11 è stata saltata '
+                    'come programmato; nessun Pine retroattivo.'
+                )
     if scripts:
         with st.expander('Mostra codice Pine da copiare e incollare'):
             selected_code = st.selectbox(
