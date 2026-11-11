@@ -10,7 +10,7 @@ from datetime import datetime
 from gex_cash_provenance import extract_spx_trade_time, describe_spx_trade
 from gex_price_sensitivity_lab import (
     scenario_gex, _signed_metric_color, _signed_gex_metric,
-    _gex_reference_times,
+    _gex_reference_times, _add_price_reference_markers,
 )
 
 
@@ -118,7 +118,7 @@ class ExistingCurveScenarioTests(unittest.TestCase):
         self.assertEqual(_gex_reference_times(None, None), ("N/D", "N/D"))
         self.assertEqual(_gex_reference_times(None, "not a date"), ("N/D", "N/D"))
 
-    def test_laboratory_after_edge_curve_and_closed_by_default(self):
+    def test_laboratory_after_edge_curve_and_open_by_default(self):
         from pathlib import Path
         root = Path(__file__).resolve().parents[1]
         panel = (root / "edge_replay_panel.py").read_text(encoding="utf-8")
@@ -128,7 +128,44 @@ class ExistingCurveScenarioTests(unittest.TestCase):
             panel.index('    show_price_lab(edge, shift, last_es'),
         )
         self.assertIn('st.expander("LABORATORIO GEX — scenario prezzo (sperimentale)"', lab)
-        self.assertIn('expanded=False', lab)
+        self.assertIn('expanded=True', lab)
+        self.assertNotIn('expanded=False', lab)
+
+    def test_gray_original_dot_and_yellow_scenario_dot_are_on_same_curve(self):
+        import plotly.graph_objects as go
+        chart = go.Figure()
+        _add_price_reference_markers(
+            chart,
+            original_es=7543.93,
+            original_gex_on_curve=-3.64e9,
+            scenario_es=7608.75,
+            scenario_gex_on_curve=5.32e9,
+        )
+        self.assertEqual(len(chart.data), 2)
+        original, scenario = chart.data
+        self.assertEqual(original.name, "Originale (curva)")
+        self.assertEqual(original.mode, "markers")
+        self.assertEqual(original.marker.color, "#a0a0a0")
+        self.assertEqual(original.x[0], 7543.93)
+        self.assertAlmostEqual(original.y[0], -3.64)
+        self.assertEqual(scenario.name, "Scenario teorico")
+        self.assertEqual(scenario.marker.color, "#eabf4a")
+        self.assertEqual(scenario.x[0], 7608.75)
+        self.assertAlmostEqual(scenario.y[0], 5.32)
+        self.assertIn("Originale sulla curva", original.hovertemplate)
+        self.assertIn("Scenario teorico", scenario.hovertemplate)
+
+    def test_no_new_curve_or_model_and_marker_overlap_is_safe(self):
+        import plotly.graph_objects as go
+        chart = go.Figure()
+        _add_price_reference_markers(
+            chart, original_es=7543.93, original_gex_on_curve=-3.64e9,
+            scenario_es=7543.93, scenario_gex_on_curve=-3.64e9,
+        )
+        self.assertEqual(chart.data[0].x, chart.data[1].x)
+        self.assertEqual(chart.data[0].y, chart.data[1].y)
+        self.assertEqual(chart.data[0].marker.color, "#a0a0a0")
+        self.assertEqual(chart.data[1].marker.color, "#eabf4a")
 
     def test_three_gex_values_change_color_with_sign(self):
         import math
