@@ -5,6 +5,42 @@ from edge_triptych import _plot
 
 
 class EdgeReplayChartTests(unittest.TestCase):
+    def test_wall_and_flip_lines_stand_out_on_es_candles(self):
+        # Reuses a real Plotly figure: all 3 panels retain the SAME levels.
+        candles = pd.DataFrame({
+            "bar_close": pd.DatetimeIndex(["2026-11-11T09:00:00+00:00"]),
+            "open": [7545.], "high": [7555.],
+            "low": [7542.], "close": [7550.],
+        })
+        edge = {"rows": [],
+                "put_wall_spx": 7509.0, "gamma_flip_spx": 7544.67,
+                "call_wall_spx": 7549.0}
+        fig = _plot(edge, [], candles, 24.0, [7440., 7630.])
+        shapes = list(fig.layout.shapes)
+        self.assertEqual(len(shapes), 9)
+        first = [s for s in shapes if s.xref == "x domain"]
+        second = [s for s in shapes if s.xref == "x2 domain"]
+        third = [s for s in shapes if s.xref == "x3 domain"]
+        self.assertEqual(len(first), 3)
+        self.assertEqual(len(second), 3)
+        self.assertEqual(len(third), 3)
+        expected = {7533.0: ("#ff5365", "dot"),
+                    7568.67: ("#ffcc4d", "dash"),
+                    7573.0: ("#31e38b", "dot")}
+        for shape in first:
+            color, dash = expected[round(shape.y0, 2)]
+            self.assertEqual(shape.line.color, color)
+            self.assertEqual(shape.line.dash, dash)
+            self.assertEqual(shape.line.width, 3)
+            self.assertEqual(shape.opacity, 0.98)
+        for shape in second + third:
+            color, dash = expected[round(shape.y0, 2)]
+            self.assertEqual(shape.line.color, color)
+            self.assertEqual(shape.line.dash, dash)
+            self.assertEqual(shape.line.width, 1.2)
+            self.assertEqual(shape.opacity, 0.6)
+        self.assertEqual(fig.layout.yaxis.range, (7440., 7630.))
+
     def test_candle_timestamp_display_has_correct_rome_clock(self):
         candles = pd.DataFrame({
             "bar_close": pd.DatetimeIndex([
