@@ -1,0 +1,36 @@
+name: SPX schedule 14:46 cutover regression
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'acquisition_schedule.py'
+      - 'gamma_replay.py'
+      - 'pine_sources.py'
+      - 'gamma_section.py'
+      - 'app.py'
+      - 'ai_replay.py'
+      - 'ai_report.py'
+      - 'research_gamma_replay_ui.py'
+      - 'tests/test_slot_1446_cutover.py'
+      - '.github/workflows/spx-slot-1446-migration-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  historical-migration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile UI, policy and export
+        run: python -m compileall -q acquisition_schedule.py gamma_replay.py pine_sources.py gamma_section.py app.py ai_replay.py ai_report.py research_gamma_replay_ui.py
+      - name: Install app dependencies
+        run: python -m pip install --quiet -r requirements.txt
+      - name: Verify 13:30 history and 14:46 new official Pine/AI/Replay
+        run: python -m unittest discover -s tests -p 'test_slot_1446_cutover.py' -v
