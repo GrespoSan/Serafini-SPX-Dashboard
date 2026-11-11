@@ -211,6 +211,24 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
         )
     else:
         impulse_text = 'Candela di impulso precedente: nessuna individuata nelle ultime 20 sedute con i criteri sperimentali.'
+    # In evidenza la TENUTA dell'ultimo impulso, non il baricentro della
+    # singola candela Daily: quest'ultimo resta nei dettagli.
+    if impulse is None:
+        impulse_label = "Ultimo impulso"
+        impulse_value = "N/D"
+        impulse_sub = "Nessun impulso nelle ultime 20 sedute"
+        impulse_color = "#b6bcc5"
+    else:
+        impulse_label = (
+            f"Impulso {pd.Timestamp(impulse['day']):%d/%m/%Y}")
+        impulse_value = (f"{impulse['midpoint']:,.2f}"
+                         .replace(",", "X").replace(".", ",").replace("X", "."))
+        impulse_sub = (
+            f"{impulse['side'].capitalize()} · {impulse['status']} · "
+            f"{impulse['bars']} "
+            f"{'seduta' if impulse['bars'] == 1 else 'sedute'}")
+        impulse_color = ("#56d49e" if impulse["side"] == "RIALZISTA"
+                         else "#ff676d")
     # Spiegazione descrittiva: nessuna modifica al rilevamento degli impulsi.
     if impulse is None:
         meaning = "Nessuna candela di impulso individuata con i criteri sperimentali."
@@ -269,6 +287,12 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
   border-top:1px solid #292b30;margin-top:12px;padding-top:10px;
   color:#cbd5e1;font-size:1rem;line-height:1.45;
 }}
+.spx-trend-impulse {{
+  border-top:1px solid #292b30;margin-top:12px;padding-top:12px;
+  color:#f4f5f6;font-size:.96rem;line-height:1.5;
+}}
+.spx-trend-impulse b {{font-weight:700;}}
+
 @media(max-width:750px) {{
   .spx-trend-grid {{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:10px;}}
   .spx-trend-kpi:nth-child(odd) {{border-left:0;padding-left:0;}}
@@ -277,13 +301,14 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
 <div class="spx-trend-card">
   <div class="spx-trend-grid">
     <div class="spx-trend-kpi"><div class="spx-trend-label">Struttura Daily</div><div class="spx-trend-value" style="color:{direction_color}">{escape(result["direction"])}</div></div>
-    <div class="spx-trend-kpi"><div class="spx-trend-label">Chiusura vs baricentro</div><div class="spx-trend-value" style="color:{state_color}">{escape(result["midpoint_state"])}</div><div class="spx-trend-sub">{escape(delta_text)} dal baricentro</div></div>
-    <div class="spx-trend-kpi"><div class="spx-trend-label">Baricentro Daily</div><div class="spx-trend-value">{escape(center_text)}</div></div>
+    <div class="spx-trend-kpi"><div class="spx-trend-label">Chiusura vs baricentro Daily</div><div class="spx-trend-value" style="color:{state_color}">{escape(result["midpoint_state"])}</div><div class="spx-trend-sub">{escape(delta_text)} dal baricentro</div></div>
+    <div class="spx-trend-kpi"><div class="spx-trend-label">{escape(impulse_label)}</div><div class="spx-trend-value" style="color:{impulse_color}">{escape(impulse_value)}</div><div class="spx-trend-sub">{escape(impulse_sub)} · Baricentro impulso</div></div>
     <div class="spx-trend-kpi"><div class="spx-trend-label">Barre stesso colore</div><div class="spx-trend-value" style="color:{count_color}">{result["same_color"]}</div></div>
     {gex_card}
   </div>
   {gex_source}
-  <div class="spx-trend-foot">{escape(baricentro_text)}</div>\n  <div class="spx-trend-foot">{escape(impulse_text)}</div>\n  <div class="spx-trend-foot">{escape(meaning)}</div>\n  <div class="spx-trend-note">Candela di impulso: criterio sperimentale (range ≥1,3% della chiusura precedente, corpo ≥60% del range, ricerca nelle ultime 20 sedute). Tenuta = tutte le barre successive rispettano il baricentro; recuperato/perso = posizione dell’ultima chiusura dopo una violazione. Non è un segnale operativo validato.</div>
+  <div class="spx-trend-impulse"><b>Ultima candela di impulso:</b> {escape(impulse_text)}</div>
+  <div class="spx-trend-foot">{escape(baricentro_text)}</div>\n  <div class="spx-trend-foot">{escape(meaning)}</div>\n  <div class="spx-trend-note">Candela di impulso: criterio sperimentale (range ≥1,3% della chiusura precedente, corpo ≥60% del range, ricerca nelle ultime 20 sedute). Tenuta = tutte le barre successive rispettano il baricentro; recuperato/perso = posizione dell’ultima chiusura dopo una violazione. Non è un segnale operativo validato.</div>
 </div>
 """, unsafe_allow_html=True)
     st.caption(
