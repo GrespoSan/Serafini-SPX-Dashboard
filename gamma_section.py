@@ -1274,15 +1274,13 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
     # Un errore del feed non blocca mai l'export NET GAMMA.
     if scripts:
         try:
-            from macro_calendar import _fetch, _prepare
+            from macro_calendar import load_calendar
             from pine_news_overlay import append_news
-            finance_key = str(st.secrets.get(
-                "FINANCE_CALENDAR_API_KEY", "")).strip()
-            daily_news = [
-                event for event in _prepare(
-                    _fetch(day.isoformat(), day.isoformat(), finance_key), day)
-                if event["day"] == day
-            ]
+            macro_events, health = load_calendar(day, day)
+            daily_news = [event for event in macro_events if event["day"] == day]
+            if not health["financecalendar_ok"] or not health["bls_ok"]:
+                st.caption("News Pine da calendario parziale: "
+                           "BLS e FinanceCalendar verificati separatamente.")
             if daily_news:
                 scripts = {
                     slot: append_news(
