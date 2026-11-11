@@ -13,6 +13,7 @@ on:
       - "tests/test_spx_vix_spot_kpi.py"
       - "tests/test_previous_es_daily_change.py"
       - "tests/test_spx_massive_trend_daily.py"
+      - "tests/test_spx_trend_edge_gex.py"
       - "trend_daily_section.py"
       - "app.py"
       - ".github/workflows/massive-daily-context-tests.yml"
@@ -45,4 +46,5 @@ jobs:
           python -m unittest discover -s tests -p "test_previous_es_daily_change.py" -v
           python -m unittest discover -s tests -p "test_spx_vix_spot_kpi.py" -v
           python -m unittest discover -s tests -p "test_spx_massive_trend_daily.py" -v
+          python -m unittest discover -s tests -p "test_spx_trend_edge_gex.py" -v
           python -m unittest discover -s tests -p "test_spx_massive_day_cache.py" -v
