@@ -146,7 +146,7 @@ offsetOdte = input.int(100, "Distanza 0DTE da ultima candela", minval=45, maxval
 offsetWeekly = input.int(100, "Distanza Weekly dalle 0DTE", minval=20, maxval=600)\nshowExtension = input.bool(true, "Estensione automatica NET GAMMA")
 showCurrentOdte = input.bool(true, "Mostra 0DTE corrente")
 showCurrentWeekly = input.bool(true, "Mostra Weekly corrente")
-showTop3Odte = input.bool(true, "Proietta Top 3 Call / Put 0DTE")
+showTop3Odte = input.bool(false, "Proietta Top 3 Call / Put 0DTE")
 positiveColor = input.color(color.rgb(0, 143, 76), "NET GAMMA positivo")
 negativeColor = input.color(color.rgb(242, 54, 69), "NET GAMMA negativo")
 showTitles = input.bool(true, "Mostra intestazioni")
