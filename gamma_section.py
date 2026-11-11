@@ -1100,6 +1100,39 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                         + ' Fonte Yahoo ES=F: differenze possibili rispetto a TV ES1!.'
                     )
 
+    # Guida interpretativa: nessun effetto sui calcoli o sugli export.
+    # Visibile sotto entrambi i grafici Net Gamma, chiusa per default.
+    with st.expander('COME LEGGERE E USARE IL NET GAMMA SERAFINI', expanded=False):
+        st.markdown("""
+**Che cosa rappresenta**
+
+Il Net Gamma Serafini è una mappa che ci aiuta a individuare i livelli di prezzo più sensibili, dove le opzioni possono reagire maggiormente.
+
+Quando molte opzioni presentano una sensibilità significativa in determinati strike, l'esposizione complessiva al Delta può cambiare rapidamente mentre il sottostante si muove.
+
+Pertanto, questi livelli sono interessanti non perché il prezzo debba necessariamente fermarsi o invertire, ma perché potrebbero essere associati alla necessità di aggiustare le coperture, se esistono posizioni effettive che richiedono hedging.
+
+Chi gestisce queste opzioni potrebbe quindi avere bisogno di comprare o vendere strumenti collegati al sottostante per mantenere equilibrate le proprie posizioni.
+
+**Il Net Gamma aiuta a individuare dove osservare con maggiore attenzione il comportamento del prezzo, ma non stabilisce da solo in quale direzione il mercato si muoverà.**
+
+**Come leggere il grafico**
+
+- **Barre verdi:** prevalenza della componente Call nel calcolo Serafini.
+- **Barre rosse:** prevalenza della componente Put nel calcolo Serafini.
+- **Barre più lunghe:** maggiore sensibilità complessiva stimata in corrispondenza di quel livello.
+- **Barre che cambiano tra due rilevamenti:** indicano che la struttura delle opzioni sta cambiando, ma non necessariamente che gli operatori stiano aprendo o chiudendo posizioni.
+
+**Perché il Net Gamma cambia durante la giornata**
+
+La sensibilità delle opzioni non è fissa. Può cambiare perché:
+
+- Il sottostante sale o scende.
+- Si avvicina la scadenza delle opzioni, soprattutto quelle 0DTE.
+- Cambia la volatilità attesa dal mercato.
+- Cambiano i volumi e le posizioni presenti sulle opzioni.
+        """)
+
     # Dettagli numerici allineati sotto entrambi i grafici.
     detail_cols = st.columns(2, gap='small')
     for detail_title, detail_col in zip(('0DTE', 'Weekly'), detail_cols):
