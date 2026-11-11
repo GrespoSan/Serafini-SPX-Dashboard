@@ -78,7 +78,7 @@ class SPXDailyTrendTests(unittest.TestCase):
         self.assertIn("history_days=75",daily)
         self.assertIn("Chiusura vs baricentro",trend)
         self.assertNotIn('class="spx-trend-label">Baricentro Daily</div>',trend)
-        self.assertIn("Impulso {pd.Timestamp(impulse['day'])",trend)
+        self.assertIn("Baricentro impulso {pd.Timestamp(impulse['day'])",trend)
         self.assertIn("spx-trend-impulse",trend)
         self.assertNotIn(">Variazione del range</div>",trend)
         self.assertNotIn(">Range</div>",trend)
