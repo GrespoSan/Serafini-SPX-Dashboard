@@ -72,7 +72,7 @@ class SlotMigrationTests(unittest.TestCase):
     def test_pine_loader_does_not_mix_retired_slot(self):
         day = date(2026,11,12)
         frame = fake_frame(day)
-        with patch("pine_sources._study_frames", return_value={"13:30": frame}), \\
+        with patch("pine_sources._study_frames", return_value={"13:30": frame}), \
              patch("pine_sources._official_frames", return_value={
                  "07:30": frame, "13:30": frame, "14:46": frame,
                  "15:50": frame, "17:00": frame, "20:30": frame,
@@ -85,7 +85,7 @@ class SlotMigrationTests(unittest.TestCase):
     def test_pine_loader_keeps_11_nov_historical_official(self):
         day = date(2026,11,11)
         frame = fake_frame(day)
-        with patch("pine_sources._study_frames", return_value={"13:30": frame}), \\
+        with patch("pine_sources._study_frames", return_value={"13:30": frame}), \
              patch("pine_sources._official_frames", return_value={
                  "07:30": frame, "13:30": frame, "14:46": frame,
                  "15:50": frame, "17:00": frame, "20:30": frame,
