@@ -66,7 +66,7 @@ class SPXLayoutParityTests(unittest.TestCase):
     def test_manual_button_unique_and_pine_preserved(self):
         self.assertEqual(MANUAL.count("if st.button('Scarica nuovo snapshot Cboe'"), 1)
         self.assertEqual(APP.count("render_manual_acquisition("), 1)
-        self.assertIn("Esporta i profili su TradingView — 4 situazioni", GAMMA)
+        self.assertIn("Esporta i profili su TradingView — 5 situazioni", GAMMA)
         self.assertNotIn("from v2_market_engine", APP)
 
 
