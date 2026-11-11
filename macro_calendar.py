@@ -420,10 +420,10 @@ def render():
                 )
             else:
                 st.markdown(
-                    '<div class="macro-priority-card">'
-                    ('Nessun evento macro USA ad alta priorità confermato oggi.</div>'
-                     if health["bls_ok"] and health["financecalendar_ok"] else
-                     'Nessun evento prioritario verificabile oggi: almeno una fonte non disponibile.</div>'),
+                    ('<div class="macro-priority-card">' +
+                     ('Nessun evento macro USA ad alta priorità confermato oggi.</div>'
+                      if health["bls_ok"] and health["financecalendar_ok"] else
+                      'Nessun evento prioritario verificabile oggi: almeno una fonte non disponibile.</div>')),
                     unsafe_allow_html=True,
                 )
             if secondary:
