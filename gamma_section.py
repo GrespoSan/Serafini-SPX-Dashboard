@@ -1263,9 +1263,13 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
 
     columns = st.columns(5, gap='small')
     middle = '14:46' if day >= CUTOFF_1446 else '13:30'
+    middle_description = (
+        '07:46 Chicago (slot logico 14:46)' if middle == '14:46'
+        else '13:30 Roma storico'
+    )
     descriptions = (
         ('07:30', '07:30 · 0DTE + Weekly'),
-        (middle, f'07:30 0DTE → {middle} 0DTE + Weekly'),
+        (middle, f'07:30 0DTE → {middle_description} 0DTE + Weekly'),
         ('15:50', '07:30 0DTE → 15:50 0DTE + Weekly'),
         ('17:00', '15:50 0DTE → 17:00 0DTE + Weekly'),
         ('20:30', '17:00 0DTE → 20:30 0DTE + Weekly; fallback 15:50 se 17:00 assente'),
