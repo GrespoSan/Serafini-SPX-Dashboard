@@ -98,6 +98,34 @@ class PineComparisons(unittest.TestCase):
                 self.assertIn("renderProfile(weeklyLevels, weeklyValues", code)
                 self.assertNotIn("Distanza 0DTE attuale (senza precedente)", code)
 
+    def test_top3_is_off_by_default_in_all_five_pine_exports(self):
+        """The checkbox remains available, but projections do not start ON."""
+        scripts = {
+            "07:30": make_pine(
+                self.odte, self.weekly, 36, "2026-11-12",
+                "2026-11-12 06:30:00", "Mattina 07:30"),
+            "14:46": make_pine_comparison(
+                self.earlier, self.odte, self.weekly, 36, "2026-11-12",
+                "07:30", "14:46", "2026-11-12 13:46:00"),
+            "15:50": make_pine_comparison(
+                self.earlier, self.odte, self.weekly, 36, "2026-11-12",
+                "07:30", "15:50", "2026-11-12 14:50:00"),
+            "17:00": make_pine_comparison(
+                self.earlier, self.odte, self.weekly, 36, "2026-11-12",
+                "15:50", "17:00", "2026-11-12 16:00:00"),
+            "20:30": make_pine(
+                self.odte, self.weekly, 36, "2026-11-12",
+                "2026-11-12 19:30:00", "Sera 20:30"),
+        }
+        toggle = 'showTop3Odte = input.bool(false, "Proietta Top 3 Call / Put 0DTE")'
+        for slot, pine in scripts.items():
+            with self.subTest(slot=slot):
+                self.assertEqual(pine.count(toggle), 1)
+                self.assertNotIn(
+                    'showTop3Odte = input.bool(true,', pine)
+                self.assertIn("if showTop3Odte", pine)
+                self.assertIn("drawOdteTopProjections(", pine)
+
     def test_2030_is_current_only_without_any_previous_source(self):
         # Il quinto Pine ufficiale è autonomo: solo 0DTE + Weekly ore 20:30.
         code = make_pine(self.odte, self.weekly, 36,
@@ -159,7 +187,7 @@ class PineComparisons(unittest.TestCase):
                 "2026-10-28", "07:30", "15:50"),
         ):
             with self.subTest(code_type="comparison" if "showPrevious" in code else "standard"):
-                self.assertIn('showTop3Odte = input.bool(true, "Proietta Top 3 Call / Put 0DTE")', code)
+                self.assertIn('showTop3Odte = input.bool(false, "Proietta Top 3 Call / Put 0DTE")', code)
                 self.assertIn("var array<float> topCallFull = array.from(", code)
                 self.assertIn("var array<float> topPutFull = array.from(", code)
                 self.assertIn("7526.0", code)  # 7490 + ES-SPX basis 36, actual strike
