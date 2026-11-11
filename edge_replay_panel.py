@@ -351,4 +351,5 @@ def show_replay(week, store, plotter):
     # Laboratorio indipendente DOPO la curva teorica. Calcoli ufficiali
     # Edge e Serafini invariati, pannello sempre chiuso di default.
     show_price_lab(edge, shift, last_es,
-                   key=f"edge_scenario_{week}_{day}_{current}")
+                   key=f"edge_scenario_{week}_{day}_{current}",
+                   download_clock=clock, slot=current)
