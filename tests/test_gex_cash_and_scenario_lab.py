@@ -8,7 +8,9 @@ import unittest
 from datetime import datetime
 
 from gex_cash_provenance import extract_spx_trade_time, describe_spx_trade
-from gex_price_sensitivity_lab import scenario_gex
+from gex_price_sensitivity_lab import (
+    scenario_gex, _signed_metric_color, _signed_gex_metric,
+)
 
 
 class SPXIndexPriceProvenance(unittest.TestCase):
@@ -90,6 +92,54 @@ class ExistingCurveScenarioTests(unittest.TestCase):
             {"spot_spx": 7500, "net_gex": 2}], 7500))
         with self.assertRaises(ValueError):
             scenario_gex(self.curve, float("nan"))
+
+    def test_laboratory_after_edge_curve_and_closed_by_default(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[1]
+        panel = (root / "edge_replay_panel.py").read_text(encoding="utf-8")
+        lab = (root / "gex_price_sensitivity_lab.py").read_text(encoding="utf-8")
+        self.assertLess(
+            panel.index('with st.expander("Curva teorica GEX Edge"'),
+            panel.index('    show_price_lab(edge, shift, last_es'),
+        )
+        self.assertIn('st.expander("LABORATORIO GEX — scenario prezzo (sperimentale)"', lab)
+        self.assertIn('expanded=False', lab)
+
+    def test_three_gex_values_change_color_with_sign(self):
+        import math
+        self.assertEqual(_signed_metric_color(-3.64e9), "#e64b4b")
+        self.assertEqual(_signed_metric_color(5.32e9), "#22b573")
+        self.assertEqual(_signed_metric_color(8.96e9), "#22b573")
+        self.assertEqual(_signed_metric_color(-8.96e9), "#e64b4b")
+        self.assertEqual(_signed_metric_color(0), "inherit")
+        self.assertEqual(_signed_metric_color(math.nan), "inherit")
+
+        class Column:
+            def __init__(self):
+                self.markups = []
+            def markdown(self, markup, **kwargs):
+                self.markups.append((markup, kwargs))
+
+        for label, amount, suffix, number, color in (
+            ("NET GEX originale", -3.64e9, "mld USD",
+             "-3.64 mld USD", "#e64b4b"),
+            ("NET GEX teorico allo scenario", 5.32e9, "mld USD",
+             "+5.32 mld USD", "#22b573"),
+            ("Δ teorico dalla curva al cash SPX", 8.96e9, "mld",
+             "+8.96 mld", "#22b573"),
+            ("Δ teorico dalla curva al cash SPX", -2.5e9, "mld",
+             "-2.50 mld", "#e64b4b"),
+            ("NET GEX originale", 0, "mld USD",
+             "0.00 mld USD", "inherit"),
+        ):
+            column = Column()
+            _signed_gex_metric(column, label, amount, suffix=suffix)
+            self.assertEqual(len(column.markups), 1)
+            html, kwargs = column.markups[0]
+            self.assertIn(label, html)
+            self.assertIn(number, html)
+            self.assertIn("color:" + color, html)
+            self.assertTrue(kwargs["unsafe_allow_html"])
 
     def test_lab_does_not_claim_wall_recomputation_or_change_serafini(self):
         from pathlib import Path
