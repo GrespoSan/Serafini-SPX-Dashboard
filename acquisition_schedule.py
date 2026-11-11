@@ -2,7 +2,7 @@
 
 Il 13:30 viene acquisito come STUDIO tramite replay.yml.
 L'ultimo slot ufficiale 13:30 è datato 11/11/2026.
-Dal 12/11/2026 il nuovo ufficiale è 14:46 Europe/Rome.
+Dal 12/11/2026 il nuovo ufficiale e' 07:46 America/Chicago;\n14:46 Roma di solito, 13:46 Roma durante il disallineamento DST.
 
 Questa policy NON genera download: serve ad interpretare i log REALI,
 senza rinominare/retro-promuovere rilevamenti storici.
@@ -14,7 +14,8 @@ FIRST_1330_OFFICIAL = date(2026, 11, 11)
 LAST_1330_OFFICIAL = date(2026, 11, 11)
 
 LEGACY_1330_CRON = "30 13 * * 1-5"
-NEW_1446_CRON = "46 14 * * 1-5"
+NEW_1446_CRON = "46 14 * * 1-5"  # identificativo LOGICO, non orario in Roma
+OFFICIAL_CHICAGO_TIME = "07:46"
 
 ALWAYS_OFFICIAL = {
     "07:30": "30 7 * * 1-5",
@@ -48,12 +49,12 @@ def raw_study_1330_for_day(day):
 
 
 def expected_replay_slots(day):
-    """14:46 non va marcato assente nei report anteriori al 12/11."""
+    """14:46 e' l'ID logico del 07:46 Chicago, attivo dal 12/11."""
     return tuple(x for x in ALL_SLOTS if
                  not (x == "14:46" and day < CUTOFF_1446))
 
 
 def official_export_slots(day):
-    """Cinque pulsanti Pine; il vecchio 13:30 storico resta consultabile."""
+    """Cinque pulsanti Pine; 14:46 e' un ID logico ancorato a Chicago."""
     middle = "14:46" if day >= CUTOFF_1446 else "13:30"
     return ("07:30", middle, "15:50", "17:00", "20:30")
