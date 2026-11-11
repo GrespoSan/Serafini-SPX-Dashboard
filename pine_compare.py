@@ -11,7 +11,7 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
                          offset, date_text, previous_slot, current_slot,
                          cboe_stamp=""):
     if (previous_slot, current_slot) not in (
-            ("07:30", "13:30"), ("07:30", "15:50"),
+            ("07:30", "13:30"), ("07:30", "14:46"), ("07:30", "15:50"),
             ("15:50", "17:00"), ("17:00", "20:30"),
             ("15:50", "20:30")):
         raise ValueError("Coppia di rilevamenti Pine non prevista")
