@@ -11,6 +11,7 @@ from edge_context import read_report, _number
 from net_gamma import read_snapshot, profile
 from replay_prices import load_es_candles
 from edge_gex_exposure import format_gex_billions
+from gex_cash_provenance import extract_spx_trade_time, describe_spx_trade
 
 
 def _edge_metric_color(value):
@@ -301,6 +302,11 @@ def show(week, store, logs=None, *, on_valid_gex=None):
             st.error("Impossibile verificare la fotografia Serafini: "+str(err));return
         st.markdown(f"**Fotografia Cboe ore {reading_clock} Roma**" if reading_clock else
                     "**Fotografia Cboe — orario del download non disponibile**")
+        # GEX only: read the ORIGINAL Cboe index timestamp, not option
+        # quote times and not the model/download timestamp.
+        cash_trade_time = extract_spx_trade_time(raw) if source.startswith("Automatico") else None
+        cash_note, _ = describe_spx_trade(cash_trade_time)
+        st.caption(cash_note)
         price=float(e["spot_spx"])+shift
         p=st.columns(5)
         p[0].metric("SPX Cboe + base · riferimento", f"{price:,.2f}")
