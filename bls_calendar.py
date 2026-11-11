@@ -213,8 +213,12 @@ def fetch_bls(first_day, last_day):
     try:
         result = parse_ics(
             _read_url(ICS_URL, accept="text/calendar"), first_day, last_day)
-        # ICS valido e vuoto può essere legittimo; non inventare eventi.
-        return result
+        if result:
+            return result
+        # Alcuni feed ICS BLS contengono solo le prossime pubblicazioni.
+        # Un giorno senza eventi nel feed non è prova di assenza:
+        # controllare anche le tabelle mensili, senza inventare orari.
+        problems.append("ICS: nessun evento nel periodo")
     except (OSError, TimeoutError, ValueError) as exc:
         problems.append("ICS: " + type(exc).__name__)
     result = []
