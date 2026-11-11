@@ -57,6 +57,84 @@ def csv_rows(data):
     return meta, profiles
 
 
+class MT4SlotCutoverTest(unittest.TestCase):
+    def test_real_official_slots_include_17_and_new_0746_chicago(self):
+        from gamma_replay import official_slots_for_day
+        before = official_slots_for_day(date(2026,11,10))
+        day11 = official_slots_for_day(date(2026,11,11))
+        day12 = official_slots_for_day(date(2026,11,12))
+        self.assertEqual(before["17:00"], "0 17 * * 1-5")
+        self.assertEqual(day11["17:00"], "0 17 * * 1-5")
+        self.assertEqual(day12["17:00"], "0 17 * * 1-5")
+        self.assertNotIn("14:46", day11)
+        self.assertIn("13:30", day11)
+        self.assertNotIn("13:30", day12)
+        self.assertEqual(day12["14:46"], "46 14 * * 1-5")
+        self.assertNotIn("13:30", before)
+
+    def test_17_official_log_is_retrieved_from_real_snapshot_slot(self):
+        from gamma_replay import _official_frames
+        day = date(2026, 11, 11)
+        log = {
+            "status": "NUOVO", "scheduled_slot": "0 17 * * 1-5",
+            "rome_date": day.isoformat(),
+            "download_rome": "2026-11-11T17:00:18+01:00",
+            "file": "2026-W46/snapshots/SPX_CBOE_20261111_155925.json.gz",
+        }
+        class Store:
+            def download(self, path):
+                if path.endswith("logs/official.json"):
+                    return json.dumps(log).encode("utf-8")
+                if path == log["file"]:
+                    return b"test-original-snapshot-bytes"
+                raise AssertionError(path)
+        snap = {
+            "timestamp": "2026-11-11 15:59:25",
+            "data": {"prev_day_close": 7650., "current_price": 7650.},
+        }
+        def fake_profile(snapshot, expiry, reference, strike_count=50):
+            profile = make_profile()
+            return {"rows": (profile["mt4_rows"] if strike_count == 100
+                             else profile["rows"])}
+        with patch("gamma_replay.read_snapshot", return_value=snap), patch(
+                "gamma_replay.profile", side_effect=fake_profile):
+            frames = _official_frames(
+                Store(), "2026-W46", day, [{"name": "official.json"}],
+                include_mt4_raw=True)
+        self.assertEqual(list(frames), ["17:00"])
+        self.assertEqual(frames["17:00"]["clock"], "17:00:18")
+        self.assertEqual(frames["17:00"]["origin"], "UFFICIALE")
+        self.assertEqual(len(frames["17:00"]["profiles"]["0DTE"]["mt4_rows"]),100)
+        self.assertEqual(frames["17:00"]["_mt4_original_cboe_bytes"],
+                         b"test-original-snapshot-bytes")
+
+    def test_17_wins_over_1646_in_both_replay_and_official_feeds(self):
+        # La situazione reale: oggi il Cloud aveva un ufficiale 17:00,
+        # ma il vecchio publisher fermava l'ultimo CSV official a 15:50.
+        class ClockNov(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return datetime(2026,11,11,17,20,tzinfo=tz)
+        day = date(2026,11,11)
+        official = {
+            "15:50": frame("15:50:04", True, "UFFICIALE"),
+            "17:00": frame("17:00:18", True, "UFFICIALE"),
+        }
+        study = {"16:46": frame("16:46:32", True)}
+        with patch.object(mt4_feed, "datetime", ClockNov), patch.object(
+                mt4_feed, "_official_frames", return_value=official), patch.object(
+                mt4_feed, "_study_frames", return_value=study):
+            for mode in ("Replay", "Ufficiale"):
+                with self.subTest(mode=mode):
+                    result = mt4_feed.build_feed(
+                        Store(), day, BASIS, mode=mode, strike_count=100)
+                    meta, profiles = csv_rows(result)
+                    self.assertEqual(meta["slot_rome"], "17:00")
+                    self.assertEqual(meta["download_clock_rome"], "17:00:18")
+                    self.assertEqual(meta["origin"], "UFFICIALE")
+                    self.assertEqual(len(profiles["0DTE"]),100)
+
+
 class MT4FeedTest(unittest.TestCase):
     def build(self, mode="Replay", strikes=100, study_extended=True, official_extended=True):
         official = {"15:50": frame("15:50:02", official_extended, "UFFICIALE")}
