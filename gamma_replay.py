@@ -231,7 +231,7 @@ def render(store, week, logs, view_mode=None):
                      day, frame.get("download_rome"))["post_expiry"]]
     missing = [slot for slot in expected_slots if slot not in frames]
     st.caption(f"Frame {kind} {'pre-scadenza' if kind == '0DTE' else 'disponibili'}: "
-               f"{len(available)}/{len(expected_slots)} · 
+               f"{len(available)}/{len(expected_slots)} · "
                f"Assenti: {', '.join(missing) if missing else 'nessuno'}")
     if kind == "0DTE" and post_expiry:
         ignored = ', '.join(slot for slot, _ in post_expiry)
