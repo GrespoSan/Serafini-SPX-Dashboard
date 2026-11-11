@@ -49,6 +49,14 @@ class SlotMigrationTests(unittest.TestCase):
             self.assertEqual(before[slot], historical[slot])
             self.assertEqual(historical[slot], new[slot])
 
+    def test_pine_ui_explains_pre_cutover_skip_without_backfill(self):
+        from pathlib import Path
+        source = (Path(__file__).resolve().parents[1] /
+                  "gamma_section.py").read_text(encoding="utf-8")
+        self.assertIn("slot == '14:46' and day < CUTOFF_1446", source)
+        self.assertIn("Non ancora attivo nella giornata selezionata", source)
+        self.assertIn("nessun Pine retroattivo", source)
+
     def test_replay_keeps_1330_and_adds_1446_only_post_cutover(self):
         before = expected_replay_slots(date(2026,11,10))
         after = expected_replay_slots(date(2026,11,12))
