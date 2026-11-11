@@ -1,0 +1,36 @@
+name: GEX-only index trade time and existing curve what-if
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'gex_cash_provenance.py'
+      - 'gex_price_sensitivity_lab.py'
+      - 'edge_replay_panel.py'
+      - 'edge_triptych.py'
+      - 'tests/test_gex_cash_and_scenario_lab.py'
+      - '.github/workflows/gex-index-cash-scenario-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gex-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile GEX modules (Serafini untouched)
+        run: python -m compileall -q gex_cash_provenance.py gex_price_sensitivity_lab.py edge_replay_panel.py edge_triptych.py
+      - name: Install app requirements
+        run: python -m pip install -q -r requirements.txt
+      - name: Verify index timestamp, timezone and frozen curve lab
+        run: python -m unittest discover -s tests -p 'test_gex_cash_and_scenario_lab.py' -v
+      - name: Existing Edge Replay display tests
+        run: |
+          python -m unittest discover -s tests -p 'test_edge_metric_ui.py' -v
+          python -m unittest discover -s tests -p 'test_edge_replay_data.py' -v
