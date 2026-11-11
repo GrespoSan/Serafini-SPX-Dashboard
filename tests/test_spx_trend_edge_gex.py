@@ -96,6 +96,37 @@ class EdgeDailyKPITests(unittest.TestCase):
         self.assertIn("download 07:30 Roma", html)
         self.assertIn("GEX EDGE 0DTE", html)
 
+    def test_impulse_midpoint_replaces_daily_midpoint_kpi_and_sentence_moves_up(self):
+        # L'ultima Daily è del 10/11; l'impulso valido è del 09/11.
+        # Questo è solo un campione artificiale, non una quotazione.
+        days = [date(2026,11,4),date(2026,11,5),date(2026,11,6),
+                date(2026,11,9),date(2026,11,10)]
+        ohlc = [
+            (7400,7440,7370,7420),
+            (7420,7450,7390,7400),
+            (7400,7430,7375,7410),
+            (7440,7580,7430,7560),  # impulso rialzista: midpoint 7505
+            (7560,7580,7520,7555),  # tenuta sopra il centro impulso
+        ]
+        source = [
+            {"day": d, "ticker":"ESZ6", "open":v[0], "hi":v[1],
+             "lo":v[2], "close":v[3]}
+            for d,v in zip(days,ohlc)
+        ]
+        fake=FakeUI()
+        with patch.object(trend_daily_section, "st", fake):
+            trend_daily_section.render(reference_day=date(2026,11,11),
+                                      daily_bars=source,contract="ESZ6")
+        html=fake.markdowns[0][0]
+        self.assertIn('class="spx-trend-label">Impulso 09/11/2026',html)
+        self.assertIn("7.505,00",html)
+        self.assertIn("Rialzista · TENUTA · 1 seduta",html)
+        self.assertIn("nessuna candela successiva è scesa sotto il baricentro",html)
+        self.assertEqual(html.count("Candela di impulso 09/11/2026"),1)
+        self.assertNotIn('class="spx-trend-label">Baricentro Daily</div>',html)
+        self.assertIn("Chiusura vs baricentro Daily",html)
+        self.assertIn("spx-trend-impulse",html)
+
     def test_no_edge_gex_keeps_four_daily_cards_without_extra_caption(self):
         fake = FakeUI()
         with patch.object(trend_daily_section, "st", fake):
