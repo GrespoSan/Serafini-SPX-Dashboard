@@ -117,8 +117,10 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
             "; non confondere con l'ora effettiva del download.\n"
         )
     else:
-        odte_heading = '0DTE 07:30'
-        weekly_heading = 'Weekly 07:30'
+        # Intestazioni associate allo slot realmente esportato, mai fisse a 07:30.
+        display_clock = '20:30' if '20:30' in clean_label else '07:30'
+        odte_heading = f'0DTE {display_clock}'
+        weekly_heading = f'Weekly {display_clock}'
         indicator_title = f'Serafini SPX NET GAMMA | {date_text}{tag}'
         clock_note = ''
     warning = ('// NOTA: 0DTE e Weekly hanno LA STESSA SCADENZA in questa data: i due profili sono identici per definizione.\n' if same_exp else '')
