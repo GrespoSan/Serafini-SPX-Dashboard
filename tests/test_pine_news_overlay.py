@@ -135,15 +135,16 @@ class MacroNewsPineTests(unittest.TestCase):
         result2=future_news_only(events,"2026-11-02T14:50:00Z")
         self.assertEqual([x["clock"] for x in result2],["15:55"])
 
-    def test_github_export_flow_requires_key_and_verified_capture(self):
+    def test_github_export_flow_uses_dual_source_and_verified_capture(self):
         main=(ROOT/"gamma_section.py").read_text(encoding="utf-8")
         src=(ROOT/"pine_sources.py").read_text(encoding="utf-8")
         overlay=(ROOT/"pine_news_overlay.py").read_text(encoding="utf-8")
         for n,s in (("gamma_section.py",main),("pine_sources.py",src),
                     ("pine_news_overlay.py",overlay)):
             ast.parse(s,filename=n)
-        self.assertIn('"FINANCE_CALENDAR_API_KEY"',main)
-        self.assertIn('_fetch(day.isoformat(), day.isoformat(), finance_key)',main)
+        self.assertIn('from macro_calendar import load_calendar',main)
+        self.assertIn('macro_events, health = load_calendar(day, day)',main)
+        self.assertNotIn('_fetch(day.isoformat(), day.isoformat(), finance_key)',main)
         self.assertIn('captured_at=(sources.get(slot) or {}).get("download_rome")',main)
         self.assertIn('"download_rome": frame.get("download_rome")',src)
         self.assertIn('if event_dt.astimezone(timezone.utc) > cutoff:',overlay)
