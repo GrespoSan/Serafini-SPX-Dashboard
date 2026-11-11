@@ -106,6 +106,12 @@ class EmergencyPineTests(unittest.TestCase):
         self.assertIn('indicator("Serafini SPX NET GAMMA | 2026-11-02 | Mattina 07:30"', official)
         self.assertIn("0DTE 07:30", official)
         self.assertIn("Weekly 07:30", official)
+        # Emergency/manual and official sources share the same checkbox.
+        for generated in (code, official):
+            self.assertIn(
+                'showTop3Odte = input.bool(false, "Proietta Top 3 Call / Put 0DTE")',
+                generated)
+            self.assertIn("if showTop3Odte", generated)
 
     def test_label_tracks_actual_source_stamp_not_download_clock(self):
         snap = fixture()
