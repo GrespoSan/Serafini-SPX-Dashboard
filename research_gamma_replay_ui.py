@@ -9,7 +9,7 @@ from research_gamma_distribution import compare_profiles
 
 
 def render(available, kind, day):
-    with st.expander("🧪 LABORATORIO · Evoluzione NET GAMMA (sperimentale)", expanded=True):
+    with st.expander("🧪 LABORATORIO · Evoluzione NET GAMMA (sperimentale)", expanded=False):
         st.caption("Solo ricerca: nessun segnale trading, nessuna modifica a Serafini. "
                    "Confronti consecutivi ordinati per download Roma, stessa scadenza.")
         if len(available) < 2:
