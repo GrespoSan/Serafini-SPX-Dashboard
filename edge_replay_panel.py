@@ -12,6 +12,7 @@ import streamlit as st
 
 from edge_replay_data import list_edge_slots, read_pair, same_model
 from gex_cash_provenance import describe_spx_trade
+from gex_price_sensitivity_lab import show_price_lab
 from edge_gex_exposure import format_gex_billions
 from replay_prices import load_es_candles, candles_up_to
 from replay_profiles import choose_rows
@@ -326,6 +327,11 @@ def show_replay(week, store, plotter):
         "Confronto informativo su dati 0DTE: Edge usa posizioni dei dealer "
         "MODELLATE, non osservate. NET GAMMA Serafini ed Edge sono distinti."
     )
+    # Laboratorio indipendente: SOLO la curva Edge archiviata, nessun
+    # cambiamento alle Wall/Flip della sezione ufficiale o a Serafini.
+    show_price_lab(edge, shift, last_es,
+                   key=f"edge_scenario_{week}_{day}_{current}")
+
     with st.expander("Curva teorica GEX Edge", expanded=False):
         curve = edge.get("curve") or []
         if curve:
