@@ -104,7 +104,7 @@ class ExistingCurveScenarioTests(unittest.TestCase):
             download, "2026-11-10T21:00:00+00:00")
         self.assertEqual(snapshot, "11/11/2026 11:01:19 Roma")
         self.assertEqual(valuation, "10/11/2026 22:00 Roma")
-        self.assertIn("download_clock=clock, slot=current", panel)
+        self.assertIn("download_clock=lab_clock, slot=lab_slot", panel)
         self.assertIn("Fotografia Cboe del calcolo GEX", lab)
         self.assertIn("Valutazione teorica del modello", lab)
         self.assertIn("non è archiviato separatamente", lab)
@@ -125,7 +125,7 @@ class ExistingCurveScenarioTests(unittest.TestCase):
         lab = (root / "gex_price_sensitivity_lab.py").read_text(encoding="utf-8")
         self.assertLess(
             panel.index('with st.expander("Curva teorica GEX Edge"'),
-            panel.index('    show_price_lab(edge, shift, last_es'),
+            panel.index('    show_price_lab(\n        lab_edge, shift, lab_last_es'),
         )
         self.assertIn('st.expander("LABORATORIO GEX — scenario prezzo (sperimentale)"', lab)
         self.assertIn('expanded=True', lab)
@@ -208,7 +208,7 @@ class ExistingCurveScenarioTests(unittest.TestCase):
         root=Path(__file__).resolve().parents[1]
         panel=(root/"edge_replay_panel.py").read_text(encoding="utf-8")
         lab=(root/"gex_price_sensitivity_lab.py").read_text(encoding="utf-8")
-        self.assertIn("show_price_lab(edge, shift, last_es", panel)
+        self.assertIn("show_price_lab(\n        lab_edge, shift, lab_last_es", panel)
         self.assertIn("NON si ricostruiscono nuove",lab)
         self.assertIn("interpolazione lineare",lab)
         self.assertNotIn("from net_gamma import",lab)
