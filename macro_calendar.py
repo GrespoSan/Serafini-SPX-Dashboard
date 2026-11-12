@@ -207,7 +207,7 @@ def _claims_events(first, last):
     names = ("January", "February", "March", "April", "May", "June",
              "July", "August", "September", "October", "November", "December")
     for month in names:
-        for m in re.finditer(r"\\b" + month + r"\\s+(\\d{1,2}),?\\s+2026\\b", readable, re.I):
+        for m in re.finditer(r"\b" + month + r"\s+(\d{1,2}),?\s+2026\b", readable, re.I):
             snippet = readable[m.end():m.end()+190]
             if "Unemployment Insurance Weekly Claims Report" not in snippet:
                 continue
