@@ -97,17 +97,17 @@ class ExistingCurveScenarioTests(unittest.TestCase):
     def test_lab_shows_real_snapshot_and_separate_valuation_clock(self):
         from pathlib import Path
         root = Path(__file__).resolve().parents[1]
-        panel = (root / "edge_replay_panel.py").read_text(encoding="utf-8")
-        lab = (root / "gex_price_sensitivity_lab.py").read_text(encoding="utf-8")
+        panel = (root/"edge_replay_panel.py").read_text(encoding="utf-8")
+        lab = (root/"gex_price_sensitivity_lab.py").read_text(encoding="utf-8")
         download = datetime.fromisoformat("2026-11-11T11:01:19+01:00")
         snapshot, valuation = _gex_reference_times(
             download, "2026-11-10T21:00:00+00:00")
         self.assertEqual(snapshot, "11/11/2026 11:01:19 Roma")
         self.assertEqual(valuation, "10/11/2026 22:00 Roma")
-        self.assertIn("download_clock=lab_clock, slot=lab_slot", panel)
+        self.assertIn("download_clock=clock, slot=current", panel)
         self.assertIn("Fotografia Cboe del calcolo GEX", lab)
         self.assertIn("Valutazione modello GEX", lab)
-        self.assertIn("non è archiviato separatamente", lab)
+        self.assertIn("non coincide necessariamente", lab)
 
     def test_lab_never_infers_timezone_or_invents_missing_calculation_clock(self):
         download = datetime.fromisoformat("2026-11-11T11:01:19")
@@ -118,18 +118,20 @@ class ExistingCurveScenarioTests(unittest.TestCase):
         self.assertEqual(_gex_reference_times(None, None), ("N/D", "N/D"))
         self.assertEqual(_gex_reference_times(None, "not a date"), ("N/D", "N/D"))
 
-    def test_laboratory_after_edge_curve_and_open_by_default(self):
+    def test_one_curve_and_scenario_open_by_default(self):
         from pathlib import Path
         root = Path(__file__).resolve().parents[1]
-        panel = (root / "edge_replay_panel.py").read_text(encoding="utf-8")
-        lab = (root / "gex_price_sensitivity_lab.py").read_text(encoding="utf-8")
-        self.assertLess(
-            panel.index('with st.expander("Curva teorica GEX Edge"'),
-            panel.index('        show_price_lab(\n            lab_edge, shift, lab_last_es'),
-        )
-        self.assertIn('st.expander("LABORATORIO GEX — scenario prezzo (sperimentale)"', lab)
+        panel = (root/"edge_replay_panel.py").read_text(encoding="utf-8")
+        official = (root/"edge_triptych.py").read_text(encoding="utf-8")
+        lab = (root/"gex_price_sensitivity_lab.py").read_text(encoding="utf-8")
+        self.assertNotIn('with st.expander("Curva teorica GEX Edge"', panel)
+        self.assertNotIn('with st.expander("Curva teorica GEX",', official)
+        self.assertIn(
+            'st.expander("Curva teorica GEX Edge — scenario prezzo (sperimentale)"',
+            lab)
         self.assertIn('expanded=True', lab)
-        self.assertNotIn('expanded=False', lab)
+        self.assertIn("min_col.metric", lab)
+        self.assertIn("max_col.metric", lab)
 
     def test_gray_original_dot_and_yellow_scenario_dot_are_on_same_curve(self):
         import plotly.graph_objects as go
@@ -208,8 +210,8 @@ class ExistingCurveScenarioTests(unittest.TestCase):
         root=Path(__file__).resolve().parents[1]
         panel=(root/"edge_replay_panel.py").read_text(encoding="utf-8")
         lab=(root/"gex_price_sensitivity_lab.py").read_text(encoding="utf-8")
-        self.assertIn("show_price_lab(\n            lab_edge, shift, lab_last_es", panel)
-        self.assertIn("NON si ricostruiscono nuove",lab)
+        self.assertIn("show_price_lab(\n            edge, shift, last_es", panel)
+        self.assertIn("non aggiorna",lab)
         self.assertIn("interpolazione lineare",lab)
         self.assertNotIn("from net_gamma import",lab)
 
