@@ -152,67 +152,11 @@ def _latest_es_quote(day):
     }
 
 
-def _latest_official_edge_for_lab(week, store, logs, day, shift):
-    """Newest OFFICIAL Cboe download, never an intraday Replay sidecar.
-
-    Reuses the existing pinned Edge analysis of the SAME raw SPX snapshot.
-    The curve is computed from the official original; it is not a Replay
-    sidecar and does not change the Serafini NET GAMMA pipeline.
-    """
-    import hashlib
-    from gamma_section import _snapshot_log_index
-    from edge_triptych import _cached_official_snapshot
-    from edge_auto import result_from_snapshot
-
-    index = _snapshot_log_index(
-        week, tuple(str(item["name"]) for item in logs), store)
-    official_prefixes = (
-        "Mattina 07:30",
-        "Pomeriggio · 08:50 Chicago",
-        "USA · 10:00 Chicago",
-        "07:46 Chicago · ufficiale",
-        "Sera · 13:30 Chicago",  # older official 20:30 archive
-    )
-    candidates = []
-    for path, (label, _, actual) in index.items():
-        if (not path.startswith(f"{week}/snapshots/SPX_CBOE_{day:%Y%m%d}_")
-                or not any(label.startswith(p) for p in official_prefixes)
-                or not isinstance(actual, datetime)
-                or actual.tzinfo is None or actual.astimezone(ROME).date() != day):
-            continue
-        candidates.append((actual, path, label))
-    if not candidates:
-        raise ValueError("Nessun download SPX UFFICIALE del giorno nei log.")
-    clock, source_path, label = max(candidates, key=lambda item: item[0])
-    filename = source_path.rsplit("/", 1)[-1]
-    raw = _cached_official_snapshot(week, filename, store)
-    edge = result_from_snapshot(raw, float(shift))
-    if (edge.get("sha256") != hashlib.sha256(raw).hexdigest()
-            or edge.get("symbol") != "SPX"
-            or edge.get("mode") != "0DTE"
-            or edge.get("expiries") != [day.isoformat()]):
-        raise ValueError(
-            "Catena 0DTE della fotografia ufficiale non coerente: "
-            "nessun dato GEX sostitutivo.")
-    logical = ("17:00" if label.startswith("USA · 10:00")
-               else "15:50" if label.startswith("Pomeriggio ·")
-               else "14:46" if label.startswith("07:46 Chicago")
-               else "20:30" if label.startswith("Sera · 13:30")
-               else "07:30")
-    return edge, clock.astimezone(ROME), logical, filename
-
-
-def show_replay(week, store, plotter, logs=None):
-    iso_year, iso_week = map(int, week.split("-W"))
-    monday = date.fromisocalendar(iso_year, iso_week, 1)
-    weekdays = [monday + timedelta(days=i) for i in range(5)]
-    today = datetime.now(ROME).date()
-    default = today if today in weekdays else weekdays[0]
-    day = st.selectbox(
-        "Giornata Replay Edge", weekdays, index=weekdays.index(default),
-        format_func=lambda value: value.strftime("%d/%m/%Y"),
-        key=f"edge_replay_day_{week}",
-    )
+def show_replay(week, store, plotter, logs=None, *, selected=None):
+    if selected is None or selected.get("kind") != "Replay":
+        st.warning("Nessun Replay verificato da mostrare.")
+        return
+    day = selected["day"]
     if st.button("Aggiorna rilevamenti Edge",
                  key=f"edge_replay_refresh_{week}_{day}",
                  help="Aggiorna solo l'elenco e i report Edge della giornata."):
@@ -229,29 +173,20 @@ def show_replay(week, store, plotter, logs=None):
             "Nessun risultato GEX Edge da Replay disponibile per questa giornata. "
             "I Replay compatti storici non consentono il ricalcolo: i report "
             "Edge vengono salvati soltanto dalle nuove acquisizioni. "
-            "Puoi selezionare «Download ufficiali» sopra."
+            "Nessun rilevamento Replay verificato per la giornata."
         )
         return
     names = [slot for slot, _ in slots]
-    # Layout first, controls second: Streamlit container placeholders keep
-    # Replay selectors immediately BELOW the triptych disclaimer and ABOVE
-    # the curve/laboratory, while their state still drives all earlier plots.
+    # The active photograph is the newest verified download, selected in
+    # edge_triptych. Historical comparisons belong ONLY in the unified curve.
+    current = str(selected["slot"])
+    if current not in names:
+        st.warning("Il Replay più recente non è nell'archivio selezionato.")
+        return
+    index = names.index(current)
+    compare = "Nessuno"
     summary_panel = st.container()
-    replay_controls_panel = st.container()
     curve_lab_panel = st.container()
-    with replay_controls_panel:
-        current = st.selectbox("Rilevamento Replay da studiare", names, index=len(names)-1,
-                               key=f"edge_replay_clock_{week}_{day}")
-        index = names.index(current)
-        earlier = names[:index]
-        previous_default = earlier[-1] if earlier else "Nessuno"
-        compare = st.selectbox(
-            "Confronta con",
-            ["Nessuno"] + earlier,
-            index=(earlier.index(previous_default)+1 if earlier else 0),
-            key=f"edge_replay_compare_{week}_{day}_{current}",
-            help="Solo orari precedenti della stessa giornata e stesso modello Edge.",
-        )
     with summary_panel:
         try:
             compact, sidecar, edge, clock = _cached_pair(week, day, current, store)
@@ -420,82 +355,6 @@ def show_replay(week, store, plotter, logs=None):
             "MODELLATE, non osservate. NET GAMMA Serafini ed Edge sono distinti."
         )
     with curve_lab_panel:
-        with st.expander("Curva teorica GEX Edge", expanded=False):
-            curve = edge.get("curve") or []
-            if curve:
-                fig = go.Figure(go.Scatter(
-                    x=[float(row["spot_spx"])+shift for row in curve],
-                    y=[float(row["net_gex"])/1e9 for row in curve],
-                    mode="lines", name=f"Replay {current}"))
-                if previous_edge is not None and previous_edge.get("curve"):
-                    fig.add_trace(go.Scatter(
-                        x=[float(row["spot_spx"])+shift for row in previous_edge["curve"]],
-                        y=[float(row["net_gex"])/1e9 for row in previous_edge["curve"]],
-                        mode="lines", name=f"Replay {compare}",
-                        line=dict(dash="dash")))
-                fig.add_hline(y=0, line_dash="dot", line_color="#e8ba55")
-                fig.update_layout(xaxis_title="Scenario SPX convertito in coordinate ES",
-                                  yaxis_title="NET GEX miliardi USD/1%",
-                                  height=420)
-                st.plotly_chart(fig, width="stretch")
-            else:
-                st.info("Curva teorica non presente nel report Edge.")
-
-        # The Replay triptych stays untouched. ONLY the standalone scenario
-        # laboratory defaults to the latest official Cboe curve, if valid.
-        st.caption("**Fonte del Laboratorio GEX:** la curva ufficiale e il Replay "
-                   "sono fotografie distinte. Nessuna fusione dei valori.")
-        lab_source = st.radio(
-            "Fotografia per il Laboratorio GEX",
-            ("Ultimo download ufficiale", f"Replay {current}"),
-            key=f"edge_lab_source_{week}_{day}",
-            horizontal=True,
-        )
-        lab_edge, lab_clock, lab_slot = edge, clock, current
-        source_kind, lab_last_es = "Replay", last_es
-        if lab_source == "Ultimo download ufficiale":
-            try:
-                lab_edge, lab_clock, lab_slot, source_filename = (
-                    _latest_official_edge_for_lab(week, store, logs or [], day, shift))
-                source_kind, lab_last_es = "Ufficiale", None
-                st.markdown(
-                    f"**Laboratorio GEX · UFFICIALE {lab_slot} · "
-                    f"download {lab_clock:%d/%m/%Y %H:%M:%S} Roma**"
-                )
-                st.caption(
-                    f"Fotografia ufficiale: {source_filename}. "
-                    "Curva GEX calcolata su questa catena Cboe originale; "
-                    f"NON sul Replay {current}."
-                )
-                quality_value = lab_edge.get("quality_pct")
-                try:
-                    quality_text = (f"{float(quality_value):.2f}%"
-                                    if quality_value is not None else "N/D")
-                except (ValueError, TypeError, OverflowError):
-                    quality_text = "N/D"
-                if lab_edge.get("quality_sufficient") is not True:
-                    st.warning(
-                        f"**UFFICIALE {lab_slot} · validazione GEX Edge NON "
-                        f"superata** (copertura GEX: {quality_text}). "
-                        "La curva è soltanto diagnostica. "
-                        f"Il valore di qualità riportato sopra appartiene "
-                        f"al Replay {current}, "
-                        "una fotografia DIFFERENTE e successiva: non indica "
-                        "la qualità del download ufficiale. Il download Cboe "
-                        "può essere corretto anche se il filtro Edge "
-                        "del MODELLO GEX non è superato: almeno il 98% "
-                        "del GEX assoluto stimato nella banda ±5% "
-                        "deve risultare coperto da contratti validi, "
-                        "con stima quantificabile. Non è un controllo "
-                        "sulla riuscita del download."
-                    )
-                else:
-                    st.caption(f"**UFFICIALE {lab_slot}:** validazione "
-                               f"GEX Edge superata · copertura {quality_text}.")
-            except (ValueError, RuntimeError, TypeError, KeyError, OSError) as exc:
-                st.warning("Laboratorio ufficiale non disponibile: " + str(exc)[:160] +
-                           ". Per visualizzare il Replay, selezionalo sopra.")
-                return
         current_es = None
         if day == datetime.now(ROME).date():
             try:
@@ -503,9 +362,16 @@ def show_replay(week, store, plotter, logs=None):
             except (ValueError, RuntimeError, TypeError, KeyError, OverflowError,
                     OSError):
                 pass
+
+        def load_historical_curve(slot):
+            _, _, historical, _ = _cached_pair(week, day, slot, store)
+            return historical
+
         show_price_lab(
-            lab_edge, shift, lab_last_es,
-            key=f"edge_scenario_{week}_{day}_{source_kind}_{lab_slot}",
-            download_clock=lab_clock, slot=lab_slot, source_kind=source_kind,
+            edge, shift, last_es,
+            key=f"edge_scenario_{week}_{day}_Replay_{current}",
+            download_clock=clock, slot=current, source_kind="Replay",
             current_es=current_es,
+            history_options=names[:index],
+            history_loader=load_historical_curve,
         )
