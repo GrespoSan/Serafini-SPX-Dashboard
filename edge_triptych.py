@@ -204,7 +204,7 @@ def show(week, store, logs=None, *, on_valid_gex=None):
             _publish_official_header_unchanged(
                 week, store, logs or [], on_valid_gex)
             from edge_replay_panel import show_replay
-            show_replay(week, store, _plot)
+            show_replay(week, store, _plot, logs=logs or [])
             return
         st.caption("Download ufficiali: calcolo Edge e NET GAMMA sulla stessa "
                    "catena Cboe verificata. La selezione precedente è preservata.")
@@ -431,3 +431,33 @@ def show(week, store, logs=None, *, on_valid_gex=None):
                     st.markdown(f"**{curve_title}**")
             else:
                 st.markdown(f"**{curve_title}**")
+
+        # Also offer the laboratory on a selected OFFICIAL Edge snapshot.
+        # This never mixes official exposure with any Replay sidecar.
+        from gex_price_sensitivity_lab import show_price_lab
+        from edge_replay_panel import _latest_es_quote
+        from gamma_section import _snapshot_log_index
+        idx = _snapshot_log_index(
+            week, tuple(str(item["name"]) for item in (logs or [])), store)
+        source_row = idx.get(f"{week}/snapshots/{selected_name}")
+        full_clock = source_row[2] if source_row else None
+        source_label = source_row[0] if source_row else ""
+        logical_slot = (
+            "17:00" if source_label.startswith("USA · 10:00")
+            else "15:50" if source_label.startswith("Pomeriggio ·")
+            else "07:30" if source_label.startswith("Mattina")
+            else "Rilevamento ufficiale"
+        )
+        current_es = None
+        if day == datetime.now(ZoneInfo("Europe/Rome")).date():
+            try:
+                current_es = _latest_es_quote(day)
+            except (ValueError, RuntimeError, TypeError, KeyError, OSError):
+                pass
+        show_price_lab(
+            e, shift,
+            key=f"edge_official_scenario_{week}_{day}_{selected_name}",
+            download_clock=full_clock,
+            slot=logical_slot, source_kind="Ufficiale",
+            current_es=current_es,
+        )
