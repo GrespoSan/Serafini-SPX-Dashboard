@@ -171,6 +171,7 @@ def _latest_official_edge_for_lab(week, store, logs, day, shift):
         "Pomeriggio · 08:50 Chicago",
         "USA · 10:00 Chicago",
         "07:46 Chicago · ufficiale",
+        "Sera · 13:30 Chicago",  # older official 20:30 archive
     )
     candidates = []
     for path, (label, _, actual) in index.items():
@@ -196,6 +197,7 @@ def _latest_official_edge_for_lab(week, store, logs, day, shift):
     logical = ("17:00" if label.startswith("USA · 10:00")
                else "15:50" if label.startswith("Pomeriggio ·")
                else "14:46" if label.startswith("07:46 Chicago")
+               else "20:30" if label.startswith("Sera · 13:30")
                else "07:30")
     return edge, clock.astimezone(ROME), logical, filename
 
