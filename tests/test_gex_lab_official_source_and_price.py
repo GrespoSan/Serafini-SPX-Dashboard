@@ -74,6 +74,34 @@ class OfficialLabSourceTests(unittest.TestCase):
                 _latest_official_edge_for_lab(
                     "2026-W46", object(), [], day, 23)
 
+    def test_replay_controls_render_below_summary_and_before_curve(self):
+        panel = (ROOT / "edge_replay_panel.py").read_text(encoding="utf-8")
+        start = panel.index("def show_replay(")
+        body = panel[start:]
+        self.assertLess(body.index("summary_panel = st.container()"),
+                        body.index("replay_controls_panel = st.container()"))
+        self.assertLess(body.index("replay_controls_panel = st.container()"),
+                        body.index("curve_lab_panel = st.container()"))
+        self.assertLess(body.index("with replay_controls_panel:"),
+                        body.index('current = st.selectbox("Rilevamento Replay da studiare"'))
+        self.assertLess(body.index("with summary_panel:"),
+                        body.index("Confronto informativo su dati 0DTE"))
+        self.assertLess(body.index("Confronto informativo su dati 0DTE"),
+                        body.index('with st.expander("Curva teorica GEX Edge"'))
+        self.assertLess(body.index("with curve_lab_panel:"),
+                        body.index('with st.expander("Curva teorica GEX Edge"'))
+        self.assertIn('compare = st.selectbox(', body)
+        self.assertEqual(body.count('Rilevamento Replay da studiare'), 1)
+        self.assertIn("Valutazione modello GEX · REPLAY", body)
+
+    def test_official_quality_warning_is_not_confused_with_replay(self):
+        panel = (ROOT / "edge_replay_panel.py").read_text(encoding="utf-8")
+        self.assertIn("validazione GEX Edge NON", panel)
+        self.assertIn("qualità del download ufficiale", panel)
+        self.assertIn("una fotografia DIFFERENTE", panel)
+        self.assertIn("quality_pct", panel)
+        self.assertIn("download {lab_clock:%d/%m/%Y %H:%M:%S}", panel)
+
     def test_laboratory_default_official_and_replay_remains_available(self):
         replay = (ROOT / "edge_replay_panel.py").read_text(encoding="utf-8")
         official = (ROOT / "edge_triptych.py").read_text(encoding="utf-8")
