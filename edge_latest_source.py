@@ -6,9 +6,35 @@ formula and workflow are deliberately not modified.
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+import streamlit as st
+
 from edge_replay_data import SLOT_FILE, read_pair
 
 ROME = ZoneInfo("Europe/Rome")
+
+
+@st.cache_data(ttl=90, show_spinner=False, max_entries=24)
+def _latest_verified_replay(week, slots, _store):
+    """Cache archive validation; refresh when file list or 90s TTL changes."""
+    replay = None
+    now = datetime.now(ROME)
+    for day in sorted({d for d, _ in slots}, reverse=True):
+        for slot in sorted((s for d, s in slots if d == day), reverse=True):
+            try:
+                _, _, _, clock = read_pair(_store, week, day, slot)
+            except (RuntimeError, ValueError, TypeError, KeyError,
+                    OverflowError, OSError):
+                continue
+            if clock > now + timedelta(minutes=5):
+                continue
+            if replay is None or clock > replay["clock"]:
+                replay = {
+                    "kind": "Replay", "day": day,
+                    "clock": clock, "slot": slot, "filename": None,
+                }
+        if replay is not None:
+            break
+    return replay
 
 
 def latest_gex_reading(week, store, logs):
@@ -59,25 +85,7 @@ def latest_gex_reading(week, store, logs):
             except ValueError:
                 continue
             names.append((day, f"{match.group(2)}:{match.group(3)}"))
-    # The latest valid pair per date is sufficient: a later date dominates;
-    # all existing slots of that day are considered if the latest is invalid.
-    replay = None
-    for day in sorted({d for d, _ in names}, reverse=True):
-        for slot in sorted((s for d, s in names if d == day), reverse=True):
-            try:
-                _, _, _, clock = read_pair(store, week, day, slot)
-            except (RuntimeError, ValueError, TypeError, KeyError,
-                    OverflowError, OSError):
-                continue
-            if clock > now + timedelta(minutes=5):
-                continue
-            if replay is None or clock > replay["clock"]:
-                replay = {
-                    "kind": "Replay", "day": day,
-                    "clock": clock, "slot": slot, "filename": None,
-                }
-        if replay is not None:
-            break
+    replay = _latest_verified_replay(week, tuple(sorted(set(names))), store)
     if replay is not None:
         candidates.append(replay)
     if not candidates:
