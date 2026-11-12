@@ -9,6 +9,7 @@ on:
       - 'edge_replay_panel.py'
       - 'edge_triptych.py'
       - 'tests/test_gex_cash_and_scenario_lab.py'
+      - 'tests/test_gex_lab_official_source_and_price.py'
       - '.github/workflows/gex-index-cash-scenario-tests.yml'
   workflow_dispatch:
 
@@ -29,7 +30,9 @@ jobs:
       - name: Install app requirements
         run: python -m pip install -q -r requirements.txt
       - name: Verify index timestamp, timezone and frozen curve lab
-        run: python -m unittest discover -s tests -p 'test_gex_cash_and_scenario_lab.py' -v
+        run: |
+          python -m unittest discover -s tests -p 'test_gex_cash_and_scenario_lab.py' -v
+          python -m unittest discover -s tests -p 'test_gex_lab_official_source_and_price.py' -v
       - name: Existing Edge Replay display tests
         run: |
           python -m unittest discover -s tests -p 'test_edge_metric_ui.py' -v
