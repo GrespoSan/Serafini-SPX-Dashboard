@@ -13,7 +13,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from edge_replay_panel import _latest_es_quote
-from edge_latest_source import latest_gex_reading
+from edge_latest_source import latest_gex_reading, _latest_verified_replay
 from gex_price_sensitivity_lab import (
     _add_delayed_es_marker, curve_extrema, scenario_gex,
 )
@@ -39,6 +39,7 @@ class LatestSourceTests(unittest.TestCase):
     """Real download timestamps, no source radio and no cross-source mixing."""
 
     def setUp(self):
+        _latest_verified_replay.clear()
         self.day = (datetime.now(ROME) - timedelta(days=1)).date()
         self.week = f"{self.day.isocalendar().year}-W{self.day.isocalendar().week:02d}"
         self.snapshot = f"SPX_CBOE_{self.day:%Y%m%d}_155925.json.gz"
