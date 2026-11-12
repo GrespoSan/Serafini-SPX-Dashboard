@@ -1,490 +1,269 @@
-"""Calendario macro USA essenziale, con priorita per SPX/ES e fonte libera.
-
-Le date provengono da Finance Calendar (fonte terza, attribuzione richiesta).
-Non influenzano calcoli NET GAMMA, file Cboe o acquisizioni Cloud.
+"""Calendario macro Serafini SPX: fonti pubbliche gratuite, nessuna API key.
+Copertura verificabile: BLS, BEA, Census, Fed FOMC, ISM (2026).
+Non interpreta assenza di eventi come garanzia che il calendario USA sia completo.
+Non modifica Gamma, CBOE, Replay o pipeline dati.
 """
-import json
 import re
-from datetime import datetime, timedelta, time
-from urllib.parse import urlencode, urlparse
+from datetime import datetime, timedelta, date
+from html.parser import HTMLParser
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 import streamlit as st
 
 ROME = ZoneInfo("Europe/Rome")
-NEW_YORK = ZoneInfo("America/New_York")
-API = "https://www.financecalendar.com/wp-json/fc/v1/calendar"
-CREDITS = "https://www.financecalendar.com"
-OFFICIAL = {
-    "CPI": "https://www.bls.gov/schedule/news_release/cpi.htm",
-    "PCE": "https://www.bea.gov/news/schedule/",
-    "PPI": "https://www.bls.gov/schedule/news_release/ppi.htm",
-    "Jobless Claims": "https://www.dol.gov/agencies/eta/ui-data",
-    "NFP": "https://www.bls.gov/schedule/news_release/empsit.htm",
-    "Retail Sales": "https://www.census.gov/retail/release_schedule.html",
-    "FOMC": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
-    "Conferenza stampa Fed": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
-    "FOMC Minutes": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
-    "ISM Manufacturing": "https://www.ismworld.org/supply-management-news-and-reports/reports/ism-report-on-business/",
-    "ISM Services": "https://www.ismworld.org/supply-management-news-and-reports/reports/ism-report-on-business/",
-    "JOLTS": "https://www.bls.gov/schedule/news_release/jolts.htm",
-    "Consumer Confidence": "https://www.conference-board.org/topics/consumer-confidence",
-    "Michigan Sentiment": "https://data.sca.isr.umich.edu/",
-    "S&P Global Flash PMI": "https://www.spglobal.com/marketintelligence/en/mi/research-analysis/pmi.html",
-    "Beige Book": "https://www.federalreserve.gov/monetarypolicy/beige-book-default.htm",
+NY = ZoneInfo("America/New_York")
+BLS_URL = "https://www.bls.gov/schedule/news_release/"
+BEA_URL = "https://www.bea.gov/news/schedule/"
+CENSUS_URL = "https://www.census.gov/economic-indicators/calendar-listview.html"
+FED_URL = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
+ISM_URL = "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar"
+SOURCES = {"BLS": BLS_URL, "BEA": BEA_URL, "Census": CENSUS_URL,
+           "Fed": FED_URL, "ISM": ISM_URL}
+# Pubblicazioni ISM 2026, dal calendario ufficiale, non regole stimate.
+ISM_2026 = {
+    1: (5, 7), 2: (2, 4), 3: (2, 4), 4: (1, 6),
+    5: (1, 5), 6: (1, 3), 7: (1, 6), 8: (3, 5),
+    9: (1, 3), 10: (1, 5), 11: (2, 4), 12: (1, 3),
 }
-HIGH_PRIORITY = frozenset((
-    "CPI", "PCE", "PPI", "Jobless Claims", "NFP", "Retail Sales",
-    "FOMC", "Conferenza stampa Fed", "FOMC Minutes",
-    "ISM Manufacturing", "ISM Services", "JOLTS",
-))
-# Altri indicatori non sostituiscono mai eventi ad alta priorita.
-SECONDARY = frozenset(("Consumer Confidence", "Michigan Sentiment",
-                       "S&P Global Flash PMI", "Beige Book"))
+# Date di decisione FOMC 2026, pubblicate nel calendario ufficiale.
+FOMC_2026 = ((1,28), (3,18), (4,29), (6,17),
+             (7,29), (9,16), (10,28), (12,9))
 
 
-def _source_link(event, kind):
-    """Solo https; la classificazione e le etichette non usano testi HTML remoti."""
-    candidate = str(event.get("source_url") or "").strip()
-    try:
-        parsed = urlparse(candidate)
-        if parsed.scheme == "https" and parsed.netloc and not any(
-                ch.isspace() or ch in "()[]<>" for ch in candidate):
-            return candidate
-    except (TypeError, ValueError):
-        pass
-    return OFFICIAL[kind]
+class TableRows(HTMLParser):
+    """Estrazione HTML robusta di righe e celle, senza eseguire JS remoto."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.rows = []
+        self.row = None
+        self.cell = None
+        self.ignore = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("script", "style"):
+            self.ignore += 1
+        elif not self.ignore and tag == "tr":
+            self.row = []
+        elif not self.ignore and tag in ("td", "th") and self.row is not None:
+            self.cell = []
+
+    def handle_endtag(self, tag):
+        if tag in ("script", "style") and self.ignore:
+            self.ignore -= 1
+        elif not self.ignore and tag in ("td", "th") and self.cell is not None:
+            self.row.append(" ".join("".join(self.cell).split()))
+            self.cell = None
+        elif not self.ignore and tag == "tr" and self.row is not None:
+            if self.row:
+                self.rows.append(self.row)
+            self.row = None
+
+    def handle_data(self, data):
+        if self.cell is not None and not self.ignore:
+            self.cell.append(data)
 
 
-def _kind(event):
-    """Classificazione conservativa per codice serie + nomi riconoscibili.
-
-    Non identifica genericamente 'Fed', 'PMI' o 'confidence':
-    evitiamo falsi FOMC e collisioni con altri paesi/indici.
-    """
-    code = str(event.get("series_code") or "").lower().strip()
-    name = " ".join(str(event.get(k) or "") for k in
-                    ("series_name", "name", "title")).lower()
-    normalized = re.sub(r"[^a-z0-9]+", " ", name)
-
-    # Ordine: verbali e conferenza prima della decisione FOMC.
-    if (code in ("fomc-minutes", "fed-minutes") or
-            re.search(r"\bfomc minutes\b|\bfederal open market committee minutes\b", normalized)):
-        return "FOMC Minutes"
-    if (code in ("fomc-press-conference", "fed-press-conference") or
-            re.search(r"\b(fomc|fed|federal reserve) press conference\b", normalized)):
-        return "Conferenza stampa Fed"
-    if (code in ("fomc", "fed-decision", "fomc-decision", "fed-funds") or
-            re.search(r"\bfomc (rate )?decision\b|\bfomc meeting (decision|statement)\b", normalized)):
-        return "FOMC"
-    if code in ("ism-manufacturing", "us-ism-manufacturing", "ism-manufacturing-pmi") or (
-            "ism" in normalized and "manufacturing" in normalized):
-        return "ISM Manufacturing"
-    if code in ("ism-services", "us-ism-services", "ism-non-manufacturing") or (
-            "ism" in normalized and
-            ("services" in normalized or "non manufacturing" in normalized)):
-        return "ISM Services"
-    if code in ("jolts", "us-jolts") or re.search(
-            r"\bjolts\b|\bjob openings and labor turnover\b", normalized):
-        return "JOLTS"
-    if code in ("consumer-confidence", "us-consumer-confidence") or (
-            "consumer confidence" in normalized and
-            ("conference board" in normalized or "us" in normalized or code)):
-        return "Consumer Confidence"
-    if code in ("michigan-sentiment", "us-michigan-sentiment",
-                "university-michigan-sentiment") or (
-            "michigan" in normalized and "sentiment" in normalized):
-        return "Michigan Sentiment"
-    if code in ("us-flash-pmi", "sp-global-flash-pmi", "us-sp-global-flash-pmi") or (
-            "s p global" in normalized and "flash pmi" in normalized):
-        return "S&P Global Flash PMI"
-    if code in ("beige-book", "fed-beige-book") or re.search(r"\bbeige book\b", normalized):
-        return "Beige Book"
-    # Sei serie precedenti, stessa copertura e stessi nomi visibili.
-    if code in ("us-cpi", "cpi") or re.search(r"\b(consumer price index|cpi)\b", normalized):
-        return "CPI"
-    if code in ("us-ppi", "ppi") or re.search(r"\b(producer price index|ppi)\b", normalized):
-        return "PPI"
-    if (code in ("us-pce", "us-pce-price-index", "pce") or
-        re.search(r"\b(personal income and outlays|personal consumption expenditures|pce price index|core pce)\b", normalized)):
-        return "PCE"
-    if (re.search(r"\b(jobless claims|initial unemployment claims|initial claims)\b", normalized)
-        or "jobless" in code or "initial-claims" in code):
-        return "Jobless Claims"
-    if (code in ("us-nfp", "nfp", "us-nonfarm-payrolls") or
-        re.search(r"\b(nonfarm payrolls|non farm payrolls|employment situation)\b", normalized)):
-        return "NFP"
-    if (code in ("us-retail-sales", "retail-sales") or
-        re.search(r"\bretail sales\b", normalized)):
-        return "Retail Sales"
-    return None
-
-
-def _rome_time(event):
-    """Mai applicare un +6 fisso: DST USA ed europeo cambiano in date diverse."""
-    # v2 FinanceCalendar: release_at_utc è il campo canonico; time_utc alias v1.
-    utc = event.get("release_at_utc") or event.get("time_utc")
-    if isinstance(utc, str) and utc.strip():
-        try:
-            parsed = datetime.fromisoformat(utc.strip().replace("Z", "+00:00"))
-            if parsed.tzinfo is not None:
-                return parsed.astimezone(ROME)
-        except ValueError:
-            pass
-    local = event.get("time_local")
-    if isinstance(local, str) and local.strip():
-        try:
-            parsed = datetime.fromisoformat(local.strip().replace("Z", "+00:00"))
-            if parsed.tzinfo is not None:
-                return parsed.astimezone(ROME)
-        except ValueError:
-            pass
-    date_str = event.get("date")
-    eastern = event.get("time_et")
-    if isinstance(date_str, str) and isinstance(eastern, str):
-        try:
-            clock = re.search(r"(\d{1,2}):(\d{2})", eastern)
-            if clock:
-                hour, minute = int(clock.group(1)), int(clock.group(2))
-                if re.search(r"\bpm\b", eastern, re.I) and hour < 12:
-                    hour += 12
-                if re.search(r"\bam\b", eastern, re.I) and hour == 12:
-                    hour = 0
-                day = datetime.fromisoformat(date_str[:10]).date()
-                return datetime.combine(day, time(hour, minute), NEW_YORK).astimezone(ROME)
-        except (ValueError, TypeError):
-            pass
-    return None
-
-
-@st.cache_data(ttl=1800, show_spinner=False, max_entries=10)
-def _fetch(first_day, last_day, api_key):
-    # FinanceCalendar HTTP 401 richiede una chiave. La chiave proviene
-    # esclusivamente dai Secrets privati di Streamlit, mai dalla URL o dai log.
-    if not api_key:
-        raise ValueError("Chiave FinanceCalendar mancante")
-    params = urlencode({
-        "from": first_day, "to": last_day, "country": "US",
-        "tz": "Europe/Rome", "limit": 500,
-    })
-    request = Request(API + "?" + params, headers={
-        "Accept": "application/json",
-        "User-Agent": "SerafiniSPXDashboard/1.0",
-        "X-API-Key": api_key,
+def _read(url):
+    request = Request(url, headers={
+        "User-Agent": "Mozilla/5.0 (compatible; SerafiniMacroCalendar/2.0)",
+        "Accept": "text/html",
     })
     with urlopen(request, timeout=12) as response:
-        data = json.loads(response.read(3_000_001))
-    if not isinstance(data, dict) or not isinstance(data.get("events"), list):
-        raise ValueError("Risposta calendario non valida")
-    if data.get("total") is not None and int(data["total"]) > len(data["events"]):
-        raise ValueError("Calendario incompleto: paginazione necessaria")
-    return data["events"]
+        payload = response.read(2_000_001)
+    if len(payload) > 2_000_000:
+        raise ValueError("Risposta troppo grande")
+    return payload.decode("utf-8", errors="replace")
 
 
-def _prepare(raw, today):
-    result = []
-    seen = set()
-    for event in raw:
-        if not isinstance(event, dict) or event.get("status") == "cancelled":
+def _event(d, hour, minute, kind, provider, source, *, detail=""):
+    local = datetime(d.year, d.month, d.day, hour, minute, tzinfo=NY).astimezone(ROME)
+    return {"day": local.date(), "clock": local.strftime("%H:%M"),
+            "kind": kind, "priority": "ALTA", "status": "scheduled",
+            "provider": provider, "source": source, "detail": detail}
+
+
+def _date_month(mon, day, year):
+    return datetime.strptime(f"{mon} {day} {year}", "%B %d %Y").date()
+
+
+def _time_et(value):
+    m = re.search(r"(\d{1,2}):(\d{2})\s*(AM|PM)", value, re.I)
+    if not m:
+        return None
+    h = int(m.group(1)) % 12 + (12 if m.group(3).upper() == "PM" else 0)
+    return h, int(m.group(2))
+
+
+def _bea_events(first, last):
+    parser = TableRows()
+    parser.feed(_read(BEA_URL))
+    events = []
+    for row in parser.rows:
+        if len(row) < 2:
             continue
-        # La fonte è già filtrata per country=US; ulteriore verifica se presente.
-        country = str(event.get("country") or "").upper()
-        if country and country not in ("US", "USA", "UNITED STATES"):
+        joined = " | ".join(row)
+        m = re.search(r"\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})\s+(\d{1,2}):(\d{2})\s*(AM|PM)", joined, re.I)
+        if not m:
             continue
-        kind = _kind(event)
-        if not kind:
-            continue
-        dt = _rome_time(event)
-        if dt is None:
-            # Un orario ignoto non viene inventato; conserva la data dichiarata.
-            try:
-                declared = datetime.fromisoformat(str(event.get("date"))[:10]).date()
-            except ValueError:
-                continue
-            if declared < today:
-                continue
-            day, clock = declared, "Orario da verificare"
+        headline = row[-1]
+        if re.search(r"Personal Income and Outlays", headline, re.I):
+            kind = "PCE / Redditi e consumi"
+        elif re.search(r"\bGDP\b", headline, re.I):
+            kind = "PIL USA (GDP)"
+        elif re.search(r"International Trade in Goods and Services", headline, re.I):
+            kind = "Bilancia commerciale USA"
         else:
-            day, clock = dt.date(), dt.strftime("%H:%M")
-            if day < today:
-                continue
-        identity = (day.isoformat(), kind, clock)
-        if identity in seen:
             continue
-        seen.add(identity)
-        status = str(event.get("status") or "").lower()
-        result.append({
-            "day": day, "clock": clock, "kind": kind,
-            "priority": "ALTA" if kind in HIGH_PRIORITY else "SECONDARIA",
-            "status": status,
-            "source": _source_link(event, kind),
-            "provider": "FinanceCalendar",
-            "official_schedule": False,
-        })
-        # La conferenza segue alle 14:30 ET una decisione FOMC ordinaria
-        # alle 14:00 ET, come da calendario Fed. Non derivarla per
-        # riunioni straordinarie o decisioni con orario diverso.
-        if kind == "FOMC" and dt is not None:
-            et = dt.astimezone(NEW_YORK)
-            if et.hour == 14 and et.minute == 0:
-                press = et + timedelta(minutes=30)
-                local_press = press.astimezone(ROME)
-                press_key = (local_press.date().isoformat(),
-                             "Conferenza stampa Fed", local_press.strftime("%H:%M"))
-                if press_key not in seen:
-                    seen.add(press_key)
-                    result.append({
-                        "day": local_press.date(),
-                        "clock": local_press.strftime("%H:%M"),
-                        "kind": "Conferenza stampa Fed", "priority": "ALTA",
-                        "status": status,
-                        "source": OFFICIAL["Conferenza stampa Fed"],
-                        "inferred_schedule": "14:30 ET da FOMC ordinario 14:00 ET",
-                    })
-    return sorted(result, key=lambda e: (e["day"], e["clock"], e["kind"]))
+        for year in range(first.year, last.year + 1):
+            d = _date_month(m.group(1), m.group(2), year)
+            if first <= d <= last:
+                clock = _time_et(m.group(3) + ":" + m.group(4) + " " + m.group(5))
+                if clock:
+                    events.append(_event(d, *clock, kind, "BEA", BEA_URL, detail=headline))
+    return events
 
 
-def merge_calendars(finance_events, bls_events, *, finance_ok, bls_ok):
-    """Calendari indipendenti, BLS autorevole su 4 serie.
-
-    Una mancanza FinanceCalendar NON elimina CPI/PPI/NFP/JOLTS.
-    Se gli orari delle due fonti divergono, prevale BLS e viene mostrato
-    il conflitto esplicitamente, senza doppie news Pine.
-    """
-    pairs = {}
-    messages = []
-    for event in finance_events:
-        pairs[(event["day"], event["kind"])] = dict(event)
-    for bls in bls_events:
-        key = (bls["day"], bls["kind"])
-        previous = pairs.get(key)
-        chosen = dict(bls)
-        if previous is not None:
-            chosen["provider"] = "BLS + FinanceCalendar"
-            chosen["finance_source"] = previous.get("source")
-            chosen["status"] = previous.get("status") or "scheduled"
-            if previous["clock"] != bls["clock"]:
-                chosen["source_warning"] = (
-                    "Orario discordante: BLS " + bls["clock"] +
-                    ", FinanceCalendar " + previous["clock"])
-                messages.append(
-                    f"{bls['day']:%d/%m} {bls['kind']}: orari diversi "
-                    f"(BLS {bls['clock']}, FinanceCalendar {previous['clock']}).")
-        elif finance_ok:
-            chosen["source_warning"] = "Assente nel feed FinanceCalendar; confermato BLS"
-            messages.append(
-                f"{bls['day']:%d/%m} {bls['kind']}: presente in BLS, "
-                "assente in FinanceCalendar.")
-        elif not finance_ok:
-            chosen["source_warning"] = "Fonte FinanceCalendar non verificabile"
-        pairs[key] = chosen
-    if not bls_ok:
-        messages.append("Calendario BLS non verificabile: CPI/PPI/NFP/JOLTS senza doppio controllo.")
-    if not finance_ok:
-        messages.append("FinanceCalendar non verificabile: mostrati comunque gli eventi BLS.")
-    return (
-        sorted(pairs.values(), key=lambda e: (e["day"], e["clock"], e["kind"])),
-        messages,
-    )
+def _census_events(first, last):
+    parser = TableRows()
+    parser.feed(_read(CENSUS_URL))
+    events = []
+    for row in parser.rows:
+        joined = " | ".join(row)
+        m = re.search(r"\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s+(20\d{2})\b", joined)
+        if not m:
+            continue
+        d = _date_month(*m.groups())
+        if not first <= d <= last:
+            continue
+        clock = _time_et(joined)
+        if not clock:
+            continue
+        low = joined.lower()
+        if "retail" in low and ("sales" in low or "food services" in low):
+            kind = "Vendite al dettaglio USA"
+        elif "durable goods" in low:
+            kind = "Ordini beni durevoli"
+        elif "new residential construction" in low:
+            kind = "Housing Starts"
+        else:
+            continue
+        events.append(_event(d, *clock, kind, "Census", CENSUS_URL))
+    return events
 
 
+def _fed_events(first, last):
+    # Verifica che il sito ufficiale sia raggiungibile e contenga la sezione 2026.
+    content = _read(FED_URL)
+    if "2026 FOMC Meetings" not in re.sub(r"<[^>]+>", " ", content):
+        raise ValueError("Calendario FOMC 2026 non riconosciuto")
+    events = []
+    if first.year <= 2026 <= last.year:
+        for month, day in FOMC_2026:
+            d = date(2026, month, day)
+            if first <= d <= last:
+                events.append(_event(d, 14, 0, "FOMC — decisione tassi",
+                                     "Fed", FED_URL, detail="Orario standard da verificare"))
+                events.append(_event(d, 14, 30, "Conferenza stampa Fed",
+                                     "Fed", FED_URL, detail="Orario ordinario da verificare"))
+    return events
+
+
+def _ism_events(first, last):
+    # Richiede calendario ufficiale raggiungibile; niente ricostruzioni arbitrarie.
+    content = _read(ISM_URL)
+    if "2026" not in content or "Manufacturing" not in content:
+        raise ValueError("Calendario ISM 2026 non riconosciuto")
+    events = []
+    if first.year <= 2026 <= last.year:
+        for month, days in ISM_2026.items():
+            for i, day in enumerate(days):
+                d = date(2026, month, day)
+                if first <= d <= last:
+                    events.append(_event(
+                        d, 10, 0,
+                        "ISM Manufacturing PMI" if i == 0 else "ISM Services PMI",
+                        "ISM", ISM_URL))
+    return events
+
+
+@st.cache_data(ttl=1800, max_entries=12, show_spinner=False)
 def load_calendar(first_day, last_day):
-    """Fonti separate: se una fallisce, l'altra resta visibile.
-
-    Restituisce eventi e diagnostica. Nessun evento viene ricostruito da
-    stime; l'assenza dei feed non è equiparata a nessuna news.
-    """
     from bls_calendar import fetch_bls
-    fc, bls = [], []
-    fc_error = bls_error = None
-    try:
-        api_key = str(st.secrets.get("FINANCE_CALENDAR_API_KEY", "")).strip()
-        if not api_key:
-            # Do not log or display credentials.
-            raise ValueError("Chiave FINANCE_CALENDAR_API_KEY non trovata nei Secrets Streamlit")
-        fc = _prepare(_fetch(first_day.isoformat(), last_day.isoformat(),
-                             api_key), first_day)
-    except Exception as exc:
-        # Status is safe to display; NEVER reveal API keys, request headers or body.
-        from urllib.error import HTTPError, URLError
-        if isinstance(exc, HTTPError):
-            explanations = {
-                400: "HTTP 400: parametri calendario non accettati",
-                401: "HTTP 401: chiave API non riconosciuta o non attiva",
-                402: "HTTP 402: piano/attivazione FinanceCalendar richiesta",
-                403: "HTTP 403: chiave revocata o accesso non autorizzato",
-                429: "HTTP 429: limite richieste FinanceCalendar raggiunto",
-                500: "HTTP 500: errore del server FinanceCalendar",
-                503: "HTTP 503: servizio FinanceCalendar indisponibile",
-            }
-            fc_error = explanations.get(exc.code, f"HTTP {exc.code} da FinanceCalendar")
-        elif isinstance(exc, ValueError):
-            fc_error = str(exc) if str(exc).startswith("Chiave FINANCE_CALENDAR_API_KEY") else (
-                "Risposta API calendario non valida: " + type(exc).__name__)
-        elif isinstance(exc, (TimeoutError, URLError)):
-            fc_error = "Timeout o connessione FinanceCalendar non disponibile"
-        else:
-            fc_error = f"Errore FinanceCalendar: {type(exc).__name__}"
-    try:
-        bls = fetch_bls(first_day, last_day)
-    except Exception as exc:
-        bls_error = type(exc).__name__
-    if fc_error and bls_error:
-        raise RuntimeError(
-            "Entrambe le fonti macro non verificabili "
-            f"(FinanceCalendar {fc_error}; BLS {bls_error}).")
-    merged, messages = merge_calendars(
-        fc, bls, finance_ok=fc_error is None, bls_ok=bls_error is None)
-    return merged, {
-        "financecalendar_ok": fc_error is None,
-        "bls_ok": bls_error is None,
-        "financecalendar_error": fc_error,
-        "bls_error": bls_error,
-        "messages": messages,
-        "source_count": {"FinanceCalendar": len(fc), "BLS": len(bls)},
+    events, failures, healthy = [], {}, []
+    providers = {
+        "BLS": lambda: fetch_bls(first_day, last_day),
+        "BEA": lambda: _bea_events(first_day, last_day),
+        "Census": lambda: _census_events(first_day, last_day),
+        "Fed": lambda: _fed_events(first_day, last_day),
+        "ISM": lambda: _ism_events(first_day, last_day),
+    }
+    for name, fetch in providers.items():
+        try:
+            result = fetch()
+            events.extend(result)
+            healthy.append(name)
+        except Exception as exc:
+            failures[name] = type(exc).__name__
+    unique = {}
+    for e in events:
+        key = (e["day"], e["clock"], e["kind"])
+        if key not in unique:
+            unique[key] = e
+    return sorted(unique.values(), key=lambda e: (e["day"], e["clock"], e["kind"])), {
+        "healthy": healthy, "failed": failures, "complete": not failures,
+        "sources_count": len(healthy), "total_count": len(providers),
     }
 
 
 def render():
     now = datetime.now(ROME)
     today = now.date()
-    st.markdown(
-        '<div style="display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap;'
-        'margin:0 0 0.65rem 0">'
-        '<h3 style="margin:0;padding:0">Calendario macro USA — eventi da monitorare</h3>'
-        '<span style="font-size:0.82rem;color:#999">Fonti: '
-        '<a href="https://www.bls.gov/schedule/news_release/" target="_blank" '
-        'rel="noopener noreferrer">Calendario ufficiale BLS</a> · '
-        '<a href="https://www.financecalendar.com" target="_blank" '
-        'rel="noopener noreferrer">Finance Calendar</a></span>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-    try:
-        # Solo oggi e prossimi 7 giorni. Per audit di date passate esistono
-        # i test BLS e le fonti, senza una sezione "Ieri" nella dashboard.
-        events, health = load_calendar(today, today + timedelta(days=7))
-    except RuntimeError as exc:
-        st.error("Entrambe le fonti del calendario macro non sono verificabili. "
-                 "Non interpretare il calendario vuoto come assenza di news.")
-        st.caption(str(exc))
-        return
-    if not health["bls_ok"]:
-        st.warning("BLS non verificabile: gli eventi ufficiali CPI/PPI/NFP/JOLTS "
-                   "non hanno un controllo indipendente.")
-    elif not health["financecalendar_ok"]:
-        st.warning(
-            "Calendario macro PARZIALE: FinanceCalendar non disponibile. "
-            "Il BLS copre solo CPI, PPI, NFP e JOLTS; non dedurre "
-            "che non ci siano altre news USA."
-        )
-        with st.expander("Diagnostica FinanceCalendar", expanded=True):
-            st.write(health.get("financecalendar_error") or "Errore non identificato")
-            st.caption("Chiave letta da Streamlit Secrets come FINANCE_CALENDAR_API_KEY. "
-                       "Nessuna credenziale viene mostrata.")
-    for message in health["messages"]:
-        if message.startswith("Calendario BLS") or message.startswith("FinanceCalendar"):
-            continue
-        if message.startswith(f"{today:%d/%m}"):
-            st.caption("Controllo fonti macro: " + message)
-
+    st.markdown("### Calendario macro USA — eventi da monitorare")
+    st.caption("Fonti gratuite: " + " · ".join(
+        f"[{name}]({url})" for name, url in SOURCES.items()
+    ))
+    events, health = load_calendar(today, today + timedelta(days=7))
+    if not health["healthy"]:
+        st.error("Fonti macro non raggiungibili. Calendario non verificabile: NON significa nessuna news.")
+    elif not health["complete"]:
+        st.warning("Calendario PARZIALE: " +
+                   ", ".join(health["healthy"]) +
+                   " disponibili; mancano: " + ", ".join(health["failed"]) +
+                   ". Non escludere news USA assenti dall'elenco.")
+    else:
+        st.caption("Fonti verificate: " + ", ".join(health["healthy"]) +
+                   ". Copertura selettiva degli eventi principali, non calendario esaustivo.")
+    with st.expander("Diagnostica fonti gratuite", expanded=False):
+        for name in SOURCES:
+            if name in health["healthy"]:
+                st.write(f"✅ {name}: raggiungibile")
+            else:
+                st.write(f"⚠️ {name}: {health['failed'].get(name, 'non disponibile')}")
     today_events = [e for e in events if e["day"] == today]
-    urgent = [e for e in today_events if e["priority"] == "ALTA"]
-    secondary = [e for e in today_events if e["priority"] == "SECONDARIA"]
-
-    def event_line(item, show_day=False):
-        scheduled = " · orario Fed previsto" if item.get("inferred_schedule") else ""
-        released = " · pubblicato (secondo il calendario)" if item["status"] == "released" else ""
-        tentative = " · data/orario da verificare" if item["status"] == "estimated" else ""
-        date_text = f"{item['day']:%d/%m/%Y} · " if show_day else ""
-        label = f"**{date_text}{item['clock']} Roma** — **{item['kind']}**{scheduled}"
-        if item["kind"] in ("FOMC", "Conferenza stampa Fed"):
-            label = f":red[{label}]"
-        st.markdown(
-            f"{label}{released}{tentative} · [Fonte]({item['source']})"
-        )
-
-    # Unica scheda scura, eventi prioritari su righe separate.
-    # I dati e la costruzione dei collegamenti restano invariati.
-    st.markdown("""
-<style>
-.st-key-macro_calendar_panel { background:#090a0c !important; }
-.macro-priority-card {
-    background:transparent; border:none;
-    border-radius:0; padding:0; color:#f4f5f6;
-}
-.macro-priority-card .macro-alert {color:#ff4b4b;font-weight:750;margin-bottom:10px;}
-.macro-priority-card .macro-event {padding:7px 0;line-height:1.5;}
-.macro-priority-card .macro-event + .macro-event {border-top:1px solid #292b30;}
-.macro-priority-card a {color:#66b5ff;}
-</style>
-""", unsafe_allow_html=True)
-    with st.container(border=True, key="macro_calendar_panel"):
-        from magnificent7_earnings import render as render_m7, render_upcoming as render_m7_upcoming
+    upcoming = [e for e in events if e["day"] > today]
+    from magnificent7_earnings import render as render_m7, render_upcoming as render_m7_upcoming
+    with st.container(border=True):
         left, right = st.columns(2, gap="large")
         with left:
-            if urgent:
-                from html import escape as html_escape
-                headline = (f"ATTENZIONE — {len(urgent)} "
-                            f"{'evento prioritario' if len(urgent) == 1 else 'eventi prioritari'} oggi")
-                event_html = []
-                for item in urgent:
-                    extra = " · orario Fed previsto" if item.get("inferred_schedule") else ""
-                    released = " · pubblicato (secondo il calendario)" if item["status"] == "released" else ""
-                    tentative = " · data/orario da verificare" if item["status"] == "estimated" else ""
-                    label = f"{item['clock']} Roma — {item['kind']}"
-                    red = item["kind"] in ("FOMC", "Conferenza stampa Fed")
-                    label_color = "#ff646a" if red else "#f4f5f6"
-                    event_html.append(
-                        '<div class="macro-event">'
-                        f'<span style="color:{label_color};font-weight:650">{html_escape(label)}</span>'
-                        f'{html_escape(extra + released + tentative)}'
-                        f' · <a href="{html_escape(item["source"], quote=True)}" target="_blank" rel="noopener noreferrer">Fonte</a>'
-                        '</div>'
-                    )
-                st.markdown(
-                    '<div class="macro-priority-card">'
-                    f'<div class="macro-alert">{html_escape(headline)}</div>'
-                    + ''.join(event_html) + '</div>',
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.markdown(
-                    ('<div class="macro-priority-card">' +
-                     ('Nessun evento macro USA ad alta priorità confermato oggi.</div>'
-                      if health["bls_ok"] and health["financecalendar_ok"] else
-                      'Calendario incompleto: non è possibile escludere news USA oggi.</div>')),
-                    unsafe_allow_html=True,
-                )
-            if secondary:
-                with st.expander(f"Altri eventi USA di oggi · {len(secondary)}", expanded=False):
-                    for item in secondary:
-                        event_line(item)
-
+            st.markdown("**Eventi macro USA di oggi**")
+            if not today_events:
+                st.caption("Nessun evento rilevato nelle fonti disponibili. Non equivale a nessuna news.")
+            for e in today_events:
+                st.markdown(f"**{e['clock']} Roma — {e['kind']}** · {e['provider']} · [Fonte]({e['source']})")
+                if e.get("detail"):
+                    st.caption(e["detail"])
         with right:
             upcoming_earnings, earnings_sources = render_m7(today)
-        upcoming = [e for e in events if e["day"] > today]
-        next_macro, next_earnings = st.columns(2, gap="large")
-        with next_macro:
+        col_macro, col_earn = st.columns(2, gap="large")
+        with col_macro:
             with st.expander("Prossimi dati macro USA · 7 giorni", expanded=False):
-                if upcoming:
-                    for item in upcoming:
-                        priority = " · priorità secondaria" if item["priority"] == "SECONDARIA" else ""
-                        st.markdown(
-                            f"**{item['day']:%d/%m/%Y} · {item['clock']} Roma** — "
-                            f"**{item['kind']}**{priority}"
-                            f"{' · orario Fed previsto' if item.get('inferred_schedule') else ''}"
-                            f" · [Fonte]({item['source']})"
-                        )
-                else:
-                    if health["financecalendar_ok"] and health["bls_ok"]:
-                        st.caption("Nessun evento macro monitorato nei prossimi 7 giorni.")
-                    else:
-                        st.warning("Calendario incompleto: prossimi eventi non verificabili.")
-        with next_earnings:
+                if not upcoming:
+                    st.caption("Nessun evento nelle fonti disponibili; copertura non esaustiva.")
+                for e in upcoming:
+                    st.markdown(f"**{e['day']:%d/%m/%Y} · {e['clock']} Roma — {e['kind']}** · {e['provider']} · [Fonte]({e['source']})")
+        with col_earn:
             with st.expander("Trimestrali Magnifiche 7 — prossimi 7 giorni", expanded=False):
                 render_m7_upcoming(upcoming_earnings, earnings_sources)
-        st.caption("Orari Europe/Rome con ora legale automatica · "
-                   "FOMC: conferenza 30 minuti dopo la decisione ordinaria, "
-                   "da confermare sul calendario Fed.")
+    st.caption("Orari Europe/Rome, conversione America/New_York con DST automatico. "
+               "Calendario eventi programmati: non conferma avvenuta pubblicazione.")
