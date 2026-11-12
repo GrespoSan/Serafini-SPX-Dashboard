@@ -45,7 +45,10 @@ def latest_gex_reading(week, store, logs):
 
     # Replays are named by their nominal slot. Their VERIFIED real download
     # clock is read from the matching saved pair before comparing to official.
-    files = store.list(f"replay-edge/{week}/")
+    try:
+        files = store.list(f"replay-edge/{week}/")
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
+        files = []
     names = []
     for item in files:
         name = str(item.get("name", ""))
