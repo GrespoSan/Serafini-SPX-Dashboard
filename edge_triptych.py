@@ -447,6 +447,7 @@ def show(week, store, logs=None, *, on_valid_gex=None):
             "17:00" if source_label.startswith("USA · 10:00")
             else "15:50" if source_label.startswith("Pomeriggio ·")
             else "07:30" if source_label.startswith("Mattina")
+            else "20:30" if source_label.startswith("Sera · 13:30")
             else "Rilevamento ufficiale"
         )
         current_es = None
