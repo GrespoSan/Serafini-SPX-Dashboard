@@ -233,241 +233,250 @@ def show_replay(week, store, plotter, logs=None):
         )
         return
     names = [slot for slot, _ in slots]
-    current = st.selectbox("Rilevamento Replay da studiare", names, index=len(names)-1,
-                           key=f"edge_replay_clock_{week}_{day}")
-    index = names.index(current)
-    earlier = names[:index]
-    previous_default = earlier[-1] if earlier else "Nessuno"
-    compare = st.selectbox(
-        "Confronta con",
-        ["Nessuno"] + earlier,
-        index=(earlier.index(previous_default)+1 if earlier else 0),
-        key=f"edge_replay_compare_{week}_{day}_{current}",
-        help="Solo orari precedenti della stessa giornata e stesso modello Edge.",
-    )
-    try:
-        compact, sidecar, edge, clock = _cached_pair(week, day, current, store)
-    except (RuntimeError, ValueError, TypeError, KeyError, OverflowError) as exc:
-        st.warning(f"Fotografia Edge {current} non verificabile: {exc}")
-        return
-    if classify_0dte_download(day, compact.get("download_rome"))["post_expiry"]:
-        st.warning("La fotografia è successiva alla scadenza SPXW 0DTE: "
-                   "il confronto 0DTE non è valido.")
-        return
-    shift = _basis(week, day)
-    if shift is None:
-        st.warning("Differenziale ES−SPX non disponibile per la data selezionata. "
-                   "Apri «ANALISI NET GAMMA» e verifica il differenziale della "
-                   "stessa giornata; non mostro coordinate ES non verificate.")
-        return
-    previous_sidecar = None
-    previous_edge = None
-    if compare != "Nessuno":
+    # Layout first, controls second: Streamlit container placeholders keep
+    # Replay selectors immediately BELOW the triptych disclaimer and ABOVE
+    # the curve/laboratory, while their state still drives all earlier plots.
+    summary_panel = st.container()
+    replay_controls_panel = st.container()
+    curve_lab_panel = st.container()
+    with replay_controls_panel:
+        current = st.selectbox("Rilevamento Replay da studiare", names, index=len(names)-1,
+                               key=f"edge_replay_clock_{week}_{day}")
+        index = names.index(current)
+        earlier = names[:index]
+        previous_default = earlier[-1] if earlier else "Nessuno"
+        compare = st.selectbox(
+            "Confronta con",
+            ["Nessuno"] + earlier,
+            index=(earlier.index(previous_default)+1 if earlier else 0),
+            key=f"edge_replay_compare_{week}_{day}_{current}",
+            help="Solo orari precedenti della stessa giornata e stesso modello Edge.",
+        )
+    with summary_panel:
         try:
-            _, previous_sidecar, previous_edge, previous_clock = _cached_pair(
-                week, day, compare, store)
-            if not same_model(sidecar, previous_sidecar):
-                st.warning("Confronto numerico fra i due orari sospeso: versione "
-                           "Edge, scadenza o qualità non coerenti.")
-                previous_edge = None
+            compact, sidecar, edge, clock = _cached_pair(week, day, current, store)
         except (RuntimeError, ValueError, TypeError, KeyError, OverflowError) as exc:
-            st.warning(f"Il rilevamento {compare} non è confrontabile: {exc}")
-            previous_edge = None
-    # Il Cash SPX Cboe resta fisso fuori RTH. Le candele future ES sono
-    # una fonte separata, usata SOLO per la quotazione ES e lo zoom.
-    # Caricarle prima dei KPI evita di spacciare SPX+offset per prezzo ES.
-    try:
-        candles = load_es_candles(day, required_until=clock)
-        candles = candles_up_to(candles, clock)
-    except (ValueError, TypeError, RuntimeError, KeyError, OverflowError) as exc:
-        candles = None
-        st.caption(f"Candele ES non disponibili: {exc}. GEX e Serafini restano visibili.")
-    last_es = _verified_es_last_candle(candles, clock)
-    model_clock = _model_valuation_context(edge, clock)
-    cash_spot = float(edge["spot_spx"])
-    equivalent = cash_spot + shift
-
-    good = edge.get("quality_sufficient") is True
-    st.caption(
-        f"Replay {current} · download {clock:%H:%M:%S} Roma · "
-        f"Cboe {compact['cboe_timestamp_original']} (fuso non dichiarato) · "
-        f"SHA-256 {sidecar['cboe_sha256'][:12]} · motore Edge indipendente "
-        f"{str(edge.get('model_version', 'N/D'))}"
-    )
-    if not good:
-        st.warning(
-            f"QUALITÀ EDGE INSUFFICIENTE ({float(edge['quality_pct']):.2f}%). "
-            "I valori sono soltanto diagnostici; regime Gamma N/D. "
-            "Nessun dato viene pubblicato in Trend Daily."
-        )
-    else:
-        st.caption(
-            f"Qualità Edge: {float(edge['quality_pct']):.2f}% · "
-            "Copertura del modello, NON freschezza del prezzo cash SPX. "
-            "Segno, Call/Put e NET GEX modellati sulla catena Cboe completa."
-        )
-    cash_trade_note, cash_trade_status = describe_spx_trade(
-        edge.get("spx_cash_last_trade_time"), clock)
-    st.caption(cash_trade_note)
-    if cash_trade_status == "anomalia":
-        st.warning("Timestamp cash SPX successivo al download: "
-                   "verificare i dati Cboe prima di interpretare il modello.")
-    if model_clock["prior_cash_session"]:
-        st.warning(
-            "RIFERIMENTO SPX NON LIVE: il modello GEX utilizza una valutazione "
-            f"del {model_clock['label']} Roma (seduta cash precedente). "
-            "Gli strike Wall e il Gamma Flip sono modellati su questo "
-            "riferimento, NON ricalcolati sul prezzo corrente del future ES."
-        )
-    else:
-        st.caption(f"Valutazione modello GEX: {model_clock['label']} Roma.")
-
-    cols = st.columns(5)
-    with cols[0]:
-        st.metric("ES future · ultima chiusura 5m",
-                  f"{last_es['price']:,.2f}" if last_es is not None else "N/D")
-        if last_es is not None:
-            st.caption(f"Barra {last_es['clock']} Roma · {last_es['source']}")
-        else:
-            st.caption("ES 5m non verificabile entro il download. "
-                       "Nessun prezzo future ricostruito.")
-    for column, title, field in zip(cols[1:4],
-                                    ("Put Wall", "Gamma Flip", "Call Wall"),
-                                    ("put_wall_spx", "gamma_flip_spx", "call_wall_spx")):
-        with column:
-            _metric_price(title, edge.get(field), shift,
-                          previous_edge.get(field) if previous_edge else None)
-    with cols[4]:
-        # Riutilizza la formattazione semantica già adottata nel confronto
-        # ufficiale: il colore interessa il VALORE, non solo l'eventuale delta.
-        from edge_triptych import _colored_edge_metric, _format_edge_quality
-        _colored_edge_metric(
-            cols[4], "Regime Edge",
-            str(edge.get("regime", "N/D")) if good else "N/D",
-            edge.get("regime") if good else None,
-        )
-    st.caption(
-        f"Base della struttura GEX: SPX Cboe {cash_spot:,.2f} "
-        f"· conversione teorica ES {equivalent:,.2f} "
-        f"(differenziale ES−SPX {shift:+.2f}). "
-        "NON è una quotazione ES corrente. Put Wall, Gamma Flip e Call Wall "
-        "sono strike SPX convertiti con lo stesso differenziale fisso."
-    )
-    metrics = st.columns(4)
-    for col, title, key in zip(metrics[:3],
-                               ("NET GEX", "Call GEX", "Put GEX"),
-                               ("net_gex", "call_gex", "put_gex")):
-        amount = float(edge[key])
-        old = (float(previous_edge[key]) if previous_edge else None)
-        with col:
-            if key == "net_gex":
-                # In Streamlit st.metric il valore resta bianco anche quando
-                # e' negativo: colorare il VALORE usando il segno reale Edge,
-                # mantenendo separata la variazione rispetto al Replay scelto.
-                _colored_edge_metric(col, title,
-                                     format_gex_billions(amount, signed=True),
-                                     amount)
-                if old is not None:
-                    col.caption(f"Δ {(amount - old)/1e9:+.2f} mld")
-            else:
-                st.metric(title, format_gex_billions(amount, signed=True),
-                          delta=(f"{(amount - old)/1e9:+.2f} mld"
-                                 if old is not None else None))
-    with metrics[3]:
-        # Il segno modellato è già rappresentato dal Regime Edge:
-        # mostra qui una misura indipendente sulla qualità dell'analisi.
-        quality = edge.get("quality_pct")
-        st.metric(
-            "Qualità Edge",
-            _format_edge_quality(quality),
-        )
-    if previous_edge is not None:
-        st.caption(
-            f"Δ rispetto al Replay {compare} · stesso modello e scadenza "
-            "0DTE, qualità validata in entrambe le fotografie."
-        )
-    serafini_rows = choose_rows(compact["profiles"]["0DTE"], extended=True)
-    # La visualizzazione segue il prezzo ES verificato; la geometria degli
-    # strike GEX continua a usare SPX + base e i dati grezzi NON cambiano.
-    price = last_es["price"] if last_es is not None else equivalent
-    prices = [price] + [float(row["strike_spx"]) + shift for row in serafini_rows]
-    prices += [float(row["strike_spx"]) + shift for row in edge["rows"]]
-    if candles is not None and not candles.empty:
-        prices += candles["high"].tolist() + candles["low"].tolist()
-    mode = st.radio(
-        "Scala verticale condivisa",
-        ("Zoom ±100 punti", "Vista completa"),
-        horizontal=True, key=f"edge_replay_zoom_{week}_{day}",
-    )
-    bounds = (price-100, price+100) if mode.startswith("Zoom") else (min(prices)-10, max(prices)+10)
-    chart = plotter(edge, serafini_rows, candles, shift, bounds,
-                    reading_clock=clock.strftime("%H:%M:%S"))
-    st.plotly_chart(chart, width="stretch",
-                    key=f"edge_replay_chart_{week}_{day}_{current}_{compare}")
-    st.caption(
-        "Confronto informativo su dati 0DTE: Edge usa posizioni dei dealer "
-        "MODELLATE, non osservate. NET GAMMA Serafini ed Edge sono distinti."
-    )
-    with st.expander("Curva teorica GEX Edge", expanded=False):
-        curve = edge.get("curve") or []
-        if curve:
-            fig = go.Figure(go.Scatter(
-                x=[float(row["spot_spx"])+shift for row in curve],
-                y=[float(row["net_gex"])/1e9 for row in curve],
-                mode="lines", name=f"Replay {current}"))
-            if previous_edge is not None and previous_edge.get("curve"):
-                fig.add_trace(go.Scatter(
-                    x=[float(row["spot_spx"])+shift for row in previous_edge["curve"]],
-                    y=[float(row["net_gex"])/1e9 for row in previous_edge["curve"]],
-                    mode="lines", name=f"Replay {compare}",
-                    line=dict(dash="dash")))
-            fig.add_hline(y=0, line_dash="dot", line_color="#e8ba55")
-            fig.update_layout(xaxis_title="Scenario SPX convertito in coordinate ES",
-                              yaxis_title="NET GEX miliardi USD/1%",
-                              height=420)
-            st.plotly_chart(fig, width="stretch")
-        else:
-            st.info("Curva teorica non presente nel report Edge.")
-
-    # The Replay triptych stays untouched. ONLY the standalone scenario
-    # laboratory defaults to the latest official Cboe curve, if valid.
-    st.caption("**Fonte del Laboratorio GEX:** la curva ufficiale e il Replay "
-               "sono fotografie distinte. Nessuna fusione dei valori.")
-    lab_source = st.radio(
-        "Fotografia per il Laboratorio GEX",
-        ("Ultimo download ufficiale", f"Replay {current}"),
-        key=f"edge_lab_source_{week}_{day}",
-        horizontal=True,
-    )
-    lab_edge, lab_clock, lab_slot = edge, clock, current
-    source_kind, lab_last_es = "Replay", last_es
-    if lab_source == "Ultimo download ufficiale":
-        try:
-            lab_edge, lab_clock, lab_slot, source_filename = (
-                _latest_official_edge_for_lab(week, store, logs or [], day, shift))
-            source_kind, lab_last_es = "Ufficiale", None
-            st.caption(f"Laboratorio: **UFFICIALE {lab_slot}** · "
-                       f"download reale {lab_clock:%d/%m/%Y %H:%M:%S} Roma · "
-                       f"fotografia {source_filename}. "
-                       "Curva Edge calcolata su questa catena originale, "
-                       "non dal Replay.")
-            if lab_edge.get("quality_sufficient") is not True:
-                st.warning("Qualità GEX del download ufficiale insufficiente: "
-                           "curva soltanto diagnostica.")
-        except (ValueError, RuntimeError, TypeError, KeyError, OSError) as exc:
-            st.warning("Laboratorio ufficiale non disponibile: " + str(exc)[:160] +
-                       ". Per visualizzare il Replay, selezionalo sopra.")
+            st.warning(f"Fotografia Edge {current} non verificabile: {exc}")
             return
-    current_es = None
-    if day == datetime.now(ROME).date():
+        if classify_0dte_download(day, compact.get("download_rome"))["post_expiry"]:
+            st.warning("La fotografia è successiva alla scadenza SPXW 0DTE: "
+                       "il confronto 0DTE non è valido.")
+            return
+        shift = _basis(week, day)
+        if shift is None:
+            st.warning("Differenziale ES−SPX non disponibile per la data selezionata. "
+                       "Apri «ANALISI NET GAMMA» e verifica il differenziale della "
+                       "stessa giornata; non mostro coordinate ES non verificate.")
+            return
+        previous_sidecar = None
+        previous_edge = None
+        if compare != "Nessuno":
+            try:
+                _, previous_sidecar, previous_edge, previous_clock = _cached_pair(
+                    week, day, compare, store)
+                if not same_model(sidecar, previous_sidecar):
+                    st.warning("Confronto numerico fra i due orari sospeso: versione "
+                               "Edge, scadenza o qualità non coerenti.")
+                    previous_edge = None
+            except (RuntimeError, ValueError, TypeError, KeyError, OverflowError) as exc:
+                st.warning(f"Il rilevamento {compare} non è confrontabile: {exc}")
+                previous_edge = None
+        # Il Cash SPX Cboe resta fisso fuori RTH. Le candele future ES sono
+        # una fonte separata, usata SOLO per la quotazione ES e lo zoom.
+        # Caricarle prima dei KPI evita di spacciare SPX+offset per prezzo ES.
         try:
-            current_es = _latest_es_quote(day)
-        except (ValueError, RuntimeError, TypeError, KeyError, OverflowError,
-                OSError):
-            pass
-    show_price_lab(
-        lab_edge, shift, lab_last_es,
-        key=f"edge_scenario_{week}_{day}_{source_kind}_{lab_slot}",
-        download_clock=lab_clock, slot=lab_slot, source_kind=source_kind,
-        current_es=current_es,
-    )
+            candles = load_es_candles(day, required_until=clock)
+            candles = candles_up_to(candles, clock)
+        except (ValueError, TypeError, RuntimeError, KeyError, OverflowError) as exc:
+            candles = None
+            st.caption(f"Candele ES non disponibili: {exc}. GEX e Serafini restano visibili.")
+        last_es = _verified_es_last_candle(candles, clock)
+        model_clock = _model_valuation_context(edge, clock)
+        cash_spot = float(edge["spot_spx"])
+        equivalent = cash_spot + shift
+
+        good = edge.get("quality_sufficient") is True
+        st.caption(
+            f"Replay {current} · download {clock:%H:%M:%S} Roma · "
+            f"Cboe {compact['cboe_timestamp_original']} (fuso non dichiarato) · "
+            f"SHA-256 {sidecar['cboe_sha256'][:12]} · motore Edge indipendente "
+            f"{str(edge.get('model_version', 'N/D'))}"
+        )
+        if not good:
+            st.warning(
+                f"QUALITÀ EDGE INSUFFICIENTE ({float(edge['quality_pct']):.2f}%). "
+                "I valori sono soltanto diagnostici; regime Gamma N/D. "
+                "Nessun dato viene pubblicato in Trend Daily."
+            )
+        else:
+            st.caption(
+                f"Qualità Edge: {float(edge['quality_pct']):.2f}% · "
+                "Copertura del modello, NON freschezza del prezzo cash SPX. "
+                "Segno, Call/Put e NET GEX modellati sulla catena Cboe completa."
+            )
+        cash_trade_note, cash_trade_status = describe_spx_trade(
+            edge.get("spx_cash_last_trade_time"), clock)
+        st.caption(cash_trade_note)
+        if cash_trade_status == "anomalia":
+            st.warning("Timestamp cash SPX successivo al download: "
+                       "verificare i dati Cboe prima di interpretare il modello.")
+        if model_clock["prior_cash_session"]:
+            st.warning(
+                "RIFERIMENTO SPX NON LIVE: il modello GEX utilizza una valutazione "
+                f"del {model_clock['label']} Roma (seduta cash precedente). "
+                "Gli strike Wall e il Gamma Flip sono modellati su questo "
+                "riferimento, NON ricalcolati sul prezzo corrente del future ES."
+            )
+        else:
+            st.caption(f"Valutazione modello GEX: {model_clock['label']} Roma.")
+
+        cols = st.columns(5)
+        with cols[0]:
+            st.metric("ES future · ultima chiusura 5m",
+                      f"{last_es['price']:,.2f}" if last_es is not None else "N/D")
+            if last_es is not None:
+                st.caption(f"Barra {last_es['clock']} Roma · {last_es['source']}")
+            else:
+                st.caption("ES 5m non verificabile entro il download. "
+                           "Nessun prezzo future ricostruito.")
+        for column, title, field in zip(cols[1:4],
+                                        ("Put Wall", "Gamma Flip", "Call Wall"),
+                                        ("put_wall_spx", "gamma_flip_spx", "call_wall_spx")):
+            with column:
+                _metric_price(title, edge.get(field), shift,
+                              previous_edge.get(field) if previous_edge else None)
+        with cols[4]:
+            # Riutilizza la formattazione semantica già adottata nel confronto
+            # ufficiale: il colore interessa il VALORE, non solo l'eventuale delta.
+            from edge_triptych import _colored_edge_metric, _format_edge_quality
+            _colored_edge_metric(
+                cols[4], "Regime Edge",
+                str(edge.get("regime", "N/D")) if good else "N/D",
+                edge.get("regime") if good else None,
+            )
+        st.caption(
+            f"Base della struttura GEX: SPX Cboe {cash_spot:,.2f} "
+            f"· conversione teorica ES {equivalent:,.2f} "
+            f"(differenziale ES−SPX {shift:+.2f}). "
+            "NON è una quotazione ES corrente. Put Wall, Gamma Flip e Call Wall "
+            "sono strike SPX convertiti con lo stesso differenziale fisso."
+        )
+        metrics = st.columns(4)
+        for col, title, key in zip(metrics[:3],
+                                   ("NET GEX", "Call GEX", "Put GEX"),
+                                   ("net_gex", "call_gex", "put_gex")):
+            amount = float(edge[key])
+            old = (float(previous_edge[key]) if previous_edge else None)
+            with col:
+                if key == "net_gex":
+                    # In Streamlit st.metric il valore resta bianco anche quando
+                    # e' negativo: colorare il VALORE usando il segno reale Edge,
+                    # mantenendo separata la variazione rispetto al Replay scelto.
+                    _colored_edge_metric(col, title,
+                                         format_gex_billions(amount, signed=True),
+                                         amount)
+                    if old is not None:
+                        col.caption(f"Δ {(amount - old)/1e9:+.2f} mld")
+                else:
+                    st.metric(title, format_gex_billions(amount, signed=True),
+                              delta=(f"{(amount - old)/1e9:+.2f} mld"
+                                     if old is not None else None))
+        with metrics[3]:
+            # Il segno modellato è già rappresentato dal Regime Edge:
+            # mostra qui una misura indipendente sulla qualità dell'analisi.
+            quality = edge.get("quality_pct")
+            st.metric(
+                "Qualità Edge",
+                _format_edge_quality(quality),
+            )
+        if previous_edge is not None:
+            st.caption(
+                f"Δ rispetto al Replay {compare} · stesso modello e scadenza "
+                "0DTE, qualità validata in entrambe le fotografie."
+            )
+        serafini_rows = choose_rows(compact["profiles"]["0DTE"], extended=True)
+        # La visualizzazione segue il prezzo ES verificato; la geometria degli
+        # strike GEX continua a usare SPX + base e i dati grezzi NON cambiano.
+        price = last_es["price"] if last_es is not None else equivalent
+        prices = [price] + [float(row["strike_spx"]) + shift for row in serafini_rows]
+        prices += [float(row["strike_spx"]) + shift for row in edge["rows"]]
+        if candles is not None and not candles.empty:
+            prices += candles["high"].tolist() + candles["low"].tolist()
+        mode = st.radio(
+            "Scala verticale condivisa",
+            ("Zoom ±100 punti", "Vista completa"),
+            horizontal=True, key=f"edge_replay_zoom_{week}_{day}",
+        )
+        bounds = (price-100, price+100) if mode.startswith("Zoom") else (min(prices)-10, max(prices)+10)
+        chart = plotter(edge, serafini_rows, candles, shift, bounds,
+                        reading_clock=clock.strftime("%H:%M:%S"))
+        st.plotly_chart(chart, width="stretch",
+                        key=f"edge_replay_chart_{week}_{day}_{current}_{compare}")
+        st.caption(
+            "Confronto informativo su dati 0DTE: Edge usa posizioni dei dealer "
+            "MODELLATE, non osservate. NET GAMMA Serafini ed Edge sono distinti."
+        )
+    with curve_lab_panel:
+        with st.expander("Curva teorica GEX Edge", expanded=False):
+            curve = edge.get("curve") or []
+            if curve:
+                fig = go.Figure(go.Scatter(
+                    x=[float(row["spot_spx"])+shift for row in curve],
+                    y=[float(row["net_gex"])/1e9 for row in curve],
+                    mode="lines", name=f"Replay {current}"))
+                if previous_edge is not None and previous_edge.get("curve"):
+                    fig.add_trace(go.Scatter(
+                        x=[float(row["spot_spx"])+shift for row in previous_edge["curve"]],
+                        y=[float(row["net_gex"])/1e9 for row in previous_edge["curve"]],
+                        mode="lines", name=f"Replay {compare}",
+                        line=dict(dash="dash")))
+                fig.add_hline(y=0, line_dash="dot", line_color="#e8ba55")
+                fig.update_layout(xaxis_title="Scenario SPX convertito in coordinate ES",
+                                  yaxis_title="NET GEX miliardi USD/1%",
+                                  height=420)
+                st.plotly_chart(fig, width="stretch")
+            else:
+                st.info("Curva teorica non presente nel report Edge.")
+
+        # The Replay triptych stays untouched. ONLY the standalone scenario
+        # laboratory defaults to the latest official Cboe curve, if valid.
+        st.caption("**Fonte del Laboratorio GEX:** la curva ufficiale e il Replay "
+                   "sono fotografie distinte. Nessuna fusione dei valori.")
+        lab_source = st.radio(
+            "Fotografia per il Laboratorio GEX",
+            ("Ultimo download ufficiale", f"Replay {current}"),
+            key=f"edge_lab_source_{week}_{day}",
+            horizontal=True,
+        )
+        lab_edge, lab_clock, lab_slot = edge, clock, current
+        source_kind, lab_last_es = "Replay", last_es
+        if lab_source == "Ultimo download ufficiale":
+            try:
+                lab_edge, lab_clock, lab_slot, source_filename = (
+                    _latest_official_edge_for_lab(week, store, logs or [], day, shift))
+                source_kind, lab_last_es = "Ufficiale", None
+                st.caption(f"Laboratorio: **UFFICIALE {lab_slot}** · "
+                           f"download reale {lab_clock:%d/%m/%Y %H:%M:%S} Roma · "
+                           f"fotografia {source_filename}. "
+                           "Curva Edge calcolata su questa catena originale, "
+                           "non dal Replay.")
+                if lab_edge.get("quality_sufficient") is not True:
+                    st.warning("Qualità GEX del download ufficiale insufficiente: "
+                               "curva soltanto diagnostica.")
+            except (ValueError, RuntimeError, TypeError, KeyError, OSError) as exc:
+                st.warning("Laboratorio ufficiale non disponibile: " + str(exc)[:160] +
+                           ". Per visualizzare il Replay, selezionalo sopra.")
+                return
+        current_es = None
+        if day == datetime.now(ROME).date():
+            try:
+                current_es = _latest_es_quote(day)
+            except (ValueError, RuntimeError, TypeError, KeyError, OverflowError,
+                    OSError):
+                pass
+        show_price_lab(
+            lab_edge, shift, lab_last_es,
+            key=f"edge_scenario_{week}_{day}_{source_kind}_{lab_slot}",
+            download_clock=lab_clock, slot=lab_slot, source_kind=source_kind,
+            current_es=current_es,
+        )
