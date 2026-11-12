@@ -27,11 +27,14 @@ def _latest_verified_replay(week, slots, _store):
                 continue
             if clock > now + timedelta(minutes=5):
                 continue
-            if replay is None or clock > replay["clock"]:
-                replay = {
-                    "kind": "Replay", "day": day,
-                    "clock": clock, "slot": slot, "filename": None,
-                }
+            replay = {
+                "kind": "Replay", "day": day,
+                "clock": clock, "slot": slot, "filename": None,
+            }
+            # The slot name is a chronological index. Stop at the newest
+            # verified slot to avoid downloading every Edge sidecar each rerun;
+            # the ACTUAL clock above is still used against official Cboe.
+            break
         if replay is not None:
             break
     return replay
@@ -69,8 +72,8 @@ def latest_gex_reading(week, store, logs):
             "clock": stamp, "slot": label, "filename": filename,
         })
 
-    # Replays are named by their nominal slot. Their VERIFIED real download
-    # clock is read from the matching saved pair before comparing to official.
+    # Replay slots are enumerated newest-first; only the newest VALID pair
+    # is downloaded. Its verified real download clock is compared with official.
     try:
         files = store.list(f"replay-edge/{week}/")
     except (RuntimeError, ValueError, TypeError, KeyError, OSError):
