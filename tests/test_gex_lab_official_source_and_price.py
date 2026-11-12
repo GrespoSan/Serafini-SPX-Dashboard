@@ -40,8 +40,8 @@ class OfficialLabSourceTests(unittest.TestCase):
                       {"spot_spx": 7650, "net_gex": 15e9}],
         }
         logs = [{"name": "official-log-01.json"}]
-        with patch("gamma_section._snapshot_log_index", return_value=index), \\
-             patch("edge_triptych._cached_official_snapshot", return_value=raw) as fetch, \\
+        with patch("gamma_section._snapshot_log_index", return_value=index), \
+             patch("edge_triptych._cached_official_snapshot", return_value=raw) as fetch, \
              patch("edge_auto.result_from_snapshot", return_value=report) as calc:
             e, stamp, logical, filename = _latest_official_edge_for_lab(
                 "2026-W46", object(), logs, day, 23.0)
@@ -67,8 +67,8 @@ class OfficialLabSourceTests(unittest.TestCase):
         invalid = {"sha256": hashlib.sha256(raw).hexdigest(),
                    "symbol": "SPX", "mode": "0DTE",
                    "expiries": ["2026-11-13"]}
-        with patch("gamma_section._snapshot_log_index", return_value=index), \\
-             patch("edge_triptych._cached_official_snapshot", return_value=raw), \\
+        with patch("gamma_section._snapshot_log_index", return_value=index), \
+             patch("edge_triptych._cached_official_snapshot", return_value=raw), \
              patch("edge_auto.result_from_snapshot", return_value=invalid):
             with self.assertRaisesRegex(ValueError, "non coerente"):
                 _latest_official_edge_for_lab(
