@@ -170,9 +170,11 @@ class CurveDisplayTests(unittest.TestCase):
         lab = (ROOT / "gex_price_sensitivity_lab.py").read_text(encoding="utf-8")
         self.assertNotIn("from net_gamma import", lab)
         self.assertIn("scenario_gex(curve, delayed_price - basis)", lab)
-        self.assertIn("Prezzo minimo ES della curva", lab)
-        self.assertIn("Prezzo massimo ES della curva", lab)
-        self.assertNotIn("curve_extrema(curve, basis)", lab)
+        self.assertIn("Prezzo ES al minimo GEX", lab)
+        self.assertIn("Prezzo ES al massimo GEX", lab)
+        self.assertIn("curve_extrema(curve, basis)", lab)
+        self.assertNotIn('min_col.metric("Prezzo minimo ES della curva"', lab)
+        self.assertNotIn('max_col.metric("Prezzo massimo ES della curva"', lab)
 
 
 if __name__ == "__main__":
