@@ -126,7 +126,10 @@ def _bea_events(first, last):
 
 def _census_events(first, last):
     parser = TableRows()
-    parser.feed(_read(CENSUS_URL))
+    census_year_url = f"https://www.census.gov/economic-indicators/{first.year}-calendar-listview.html"
+    parser.feed(_read(census_year_url))
+    if not parser.rows:
+        raise ValueError("Tabella calendario Census assente")
     events = []
     for row in parser.rows:
         joined = " | ".join(row)
@@ -148,14 +151,14 @@ def _census_events(first, last):
             kind = "Housing Starts"
         else:
             continue
-        events.append(_event(d, *clock, kind, "Census", CENSUS_URL))
+        events.append(_event(d, *clock, kind, "Census", census_year_url))
     return events
 
 
 def _fed_events(first, last):
     # Verifica che il sito ufficiale sia raggiungibile e contenga la sezione 2026.
     content = _read(FED_URL)
-    if "2026 FOMC Meetings" not in re.sub(r"<[^>]+>", " ", content):
+    if not re.search(r"2026\s+FOMC\s+Meetings", re.sub(r"<[^>]+>", " ", content), re.I):
         raise ValueError("Calendario FOMC 2026 non riconosciuto")
     events = []
     if first.year <= 2026 <= last.year:
