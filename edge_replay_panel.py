@@ -328,7 +328,10 @@ def show_replay(week, store, plotter, logs=None):
                 "riferimento, NON ricalcolati sul prezzo corrente del future ES."
             )
         else:
-            st.caption(f"Valutazione modello GEX: {model_clock['label']} Roma.")
+            st.markdown(
+                f"**Valutazione modello GEX · REPLAY {current}: "
+                f"{model_clock['label']} Roma**"
+            )
 
         cols = st.columns(5)
         with cols[0]:
@@ -455,14 +458,36 @@ def show_replay(week, store, plotter, logs=None):
                 lab_edge, lab_clock, lab_slot, source_filename = (
                     _latest_official_edge_for_lab(week, store, logs or [], day, shift))
                 source_kind, lab_last_es = "Ufficiale", None
-                st.caption(f"Laboratorio: **UFFICIALE {lab_slot}** · "
-                           f"download reale {lab_clock:%d/%m/%Y %H:%M:%S} Roma · "
-                           f"fotografia {source_filename}. "
-                           "Curva Edge calcolata su questa catena originale, "
-                           "non dal Replay.")
+                st.markdown(
+                    f"**Laboratorio GEX · UFFICIALE {lab_slot} · "
+                    f"download {lab_clock:%d/%m/%Y %H:%M:%S} Roma**"
+                )
+                st.caption(
+                    f"Fotografia ufficiale: {source_filename}. "
+                    "Curva GEX calcolata su questa catena Cboe originale; "
+                    f"NON sul Replay {current}."
+                )
+                quality_value = lab_edge.get("quality_pct")
+                try:
+                    quality_text = (f"{float(quality_value):.2f}%"
+                                    if quality_value is not None else "N/D")
+                except (ValueError, TypeError, OverflowError):
+                    quality_text = "N/D"
                 if lab_edge.get("quality_sufficient") is not True:
-                    st.warning("Qualità GEX del download ufficiale insufficiente: "
-                               "curva soltanto diagnostica.")
+                    st.warning(
+                        f"**UFFICIALE {lab_slot} · validazione GEX Edge NON "
+                        f"superata** (copertura GEX: {quality_text}). "
+                        "La curva è soltanto diagnostica. "
+                        f"Il valore di qualità riportato sopra appartiene "
+                        f"al Replay {current}, "
+                        "una fotografia DIFFERENTE e successiva: non indica "
+                        "la qualità del download ufficiale. Il download Cboe "
+                        "può essere presente anche se il filtro di qualità "
+                        "del MODELLO GEX non è superato."
+                    )
+                else:
+                    st.caption(f"**UFFICIALE {lab_slot}:** validazione "
+                               f"GEX Edge superata · copertura {quality_text}.")
             except (ValueError, RuntimeError, TypeError, KeyError, OSError) as exc:
                 st.warning("Laboratorio ufficiale non disponibile: " + str(exc)[:160] +
                            ". Per visualizzare il Replay, selezionalo sopra.")
