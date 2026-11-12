@@ -279,8 +279,8 @@ def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario",
         historical_curve = None
         historical_slot = None
         if history_options and history_loader is not None:
-            with st.expander("Confronto Replay storico (facoltativo)",
-                             expanded=False):
+            if st.checkbox("Confronta con un Replay storico (facoltativo)",
+                           value=False, key=f"{key}_enable_history"):
                 historical_slot = st.selectbox(
                     "Rilevamento Replay da confrontare nella curva",
                     ["Nessuno"] + list(history_options),
