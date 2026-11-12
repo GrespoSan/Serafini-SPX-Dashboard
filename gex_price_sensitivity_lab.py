@@ -253,18 +253,24 @@ def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario",
             st.info("Prezzo fuori dai punti della curva: "
                     "nessun confronto teorico affidabile calcolabile.")
             return
-        # Prices are the X-axis endpoints, NOT the NET GEX Y-axis peaks.
-        min_col, max_col = st.columns(2)
-        min_col.metric("Prezzo minimo ES della curva", f"{lower:,.2f}")
-        min_col.caption(
-            f"Limite teorico inferiore · SPX {points[0][0]:,.2f} · "
-            f"NET GEX {points[0][1]/1e9:+.2f} mld"
-        )
-        max_col.metric("Prezzo massimo ES della curva", f"{upper:,.2f}")
-        max_col.caption(
-            f"Limite teorico superiore · SPX {points[-1][0]:,.2f} · "
-            f"NET GEX {points[-1][1]/1e9:+.2f} mld"
-        )
+        # Prezzi sull'asse X corrispondenti al MINIMO e MASSIMO GEX
+        # dell'asse Y, non i limiti sinistro/destro del dominio dello scenario.
+        # I punti della curva Edge sono gia' congelati: niente fitting.
+        extrema = curve_extrema(curve, basis)
+        if extrema is not None:
+            trough = extrema["min"]
+            peak = extrema["max"]
+            min_col, max_col = st.columns(2)
+            min_col.metric("Prezzo ES al minimo GEX", f"{trough['es']:,.2f}")
+            min_col.caption(
+                f"Minimo NET GEX {trough['net_gex']/1e9:+.2f} mld USD "
+                f"· SPX {trough['spx']:,.2f}"
+            )
+            max_col.metric("Prezzo ES al massimo GEX", f"{peak['es']:,.2f}")
+            max_col.caption(
+                f"Massimo NET GEX {peak['net_gex']/1e9:+.2f} mld USD "
+                f"· SPX {peak['spx']:,.2f}"
+            )
 
         a, b, c = st.columns(3)
         _signed_gex_metric(a, "NET GEX originale", actual_gex)
