@@ -482,8 +482,12 @@ def show_replay(week, store, plotter, logs=None):
                         f"al Replay {current}, "
                         "una fotografia DIFFERENTE e successiva: non indica "
                         "la qualità del download ufficiale. Il download Cboe "
-                        "può essere presente anche se il filtro di qualità "
-                        "del MODELLO GEX non è superato."
+                        "può essere corretto anche se il filtro Edge "
+                        "del MODELLO GEX non è superato: almeno il 98% "
+                        "del GEX assoluto stimato nella banda ±5% "
+                        "deve risultare coperto da contratti validi, "
+                        "con stima quantificabile. Non è un controllo "
+                        "sulla riuscita del download."
                     )
                 else:
                     st.caption(f"**UFFICIALE {lab_slot}:** validazione "
