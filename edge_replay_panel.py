@@ -121,7 +121,86 @@ def _model_valuation_context(edge, clock):
         return {"label": "N/D", "prior_cash_session": False}
 
 
-def show_replay(week, store, plotter):
+@st.cache_data(ttl=120, max_entries=8, show_spinner=False)
+def _latest_es_quote(day):
+    """Latest REAL, closed ES 5-minute bar available today, even if delayed.
+
+    Separate from snapshot-price and Replay candle cutoff: always label its
+    actual date/time and source; no look-ahead on historical Replay days.
+    """
+    now = datetime.now(ROME)
+    if day != now.date():
+        return None
+    candles = load_es_candles(day, required_until=now)
+    if candles is None or candles.empty:
+        return None
+    if "bar_close" not in candles or "close" not in candles:
+        return None
+    valid = candles.loc[candles["bar_close"] <= now].sort_values("bar_close")
+    if valid.empty:
+        return None
+    last = valid.iloc[-1]
+    stamp = last["bar_close"]
+    price = float(last["close"])
+    age = (now - stamp).total_seconds() / 60
+    if not (math.isfinite(price) and price > 0 and 0 <= age):
+        return None
+    return {
+        "price": price, "clock": stamp.astimezone(ROME).strftime("%d/%m %H:%M"),
+        "source": str(candles.attrs.get("candle_source", "ES 5m")),
+        "age_minutes": age,
+    }
+
+
+def _latest_official_edge_for_lab(week, store, logs, day, shift):
+    """Newest OFFICIAL Cboe download, never an intraday Replay sidecar.
+
+    Reuses the existing pinned Edge analysis of the SAME raw SPX snapshot.
+    The curve is computed from the official original; it is not a Replay
+    sidecar and does not change the Serafini NET GAMMA pipeline.
+    """
+    import hashlib
+    from gamma_section import _snapshot_log_index
+    from edge_triptych import _cached_official_snapshot
+    from edge_auto import result_from_snapshot
+
+    index = _snapshot_log_index(
+        week, tuple(str(item["name"]) for item in logs), store)
+    official_prefixes = (
+        "Mattina 07:30",
+        "Pomeriggio · 08:50 Chicago",
+        "USA · 10:00 Chicago",
+        "07:46 Chicago · ufficiale",
+    )
+    candidates = []
+    for path, (label, _, actual) in index.items():
+        if (not path.startswith(f"{week}/snapshots/SPX_CBOE_{day:%Y%m%d}_")
+                or not any(label.startswith(p) for p in official_prefixes)
+                or not isinstance(actual, datetime)
+                or actual.tzinfo is None or actual.astimezone(ROME).date() != day):
+            continue
+        candidates.append((actual, path, label))
+    if not candidates:
+        raise ValueError("Nessun download SPX UFFICIALE del giorno nei log.")
+    clock, source_path, label = max(candidates, key=lambda item: item[0])
+    filename = source_path.rsplit("/", 1)[-1]
+    raw = _cached_official_snapshot(week, filename, store)
+    edge = result_from_snapshot(raw, float(shift))
+    if (edge.get("sha256") != hashlib.sha256(raw).hexdigest()
+            or edge.get("symbol") != "SPX"
+            or edge.get("mode") != "0DTE"
+            or edge.get("expiries") != [day.isoformat()]):
+        raise ValueError(
+            "Catena 0DTE della fotografia ufficiale non coerente: "
+            "nessun dato GEX sostitutivo.")
+    logical = ("17:00" if label.startswith("USA · 10:00")
+               else "15:50" if label.startswith("Pomeriggio ·")
+               else "14:46" if label.startswith("07:46 Chicago")
+               else "07:30")
+    return edge, clock.astimezone(ROME), logical, filename
+
+
+def show_replay(week, store, plotter, logs=None):
     iso_year, iso_week = map(int, week.split("-W"))
     monday = date.fromisocalendar(iso_year, iso_week, 1)
     weekdays = [monday + timedelta(days=i) for i in range(5)]
@@ -348,8 +427,45 @@ def show_replay(week, store, plotter):
         else:
             st.info("Curva teorica non presente nel report Edge.")
 
-    # Laboratorio indipendente DOPO la curva teorica. Calcoli ufficiali
-    # Edge e Serafini invariati, pannello sempre chiuso di default.
-    show_price_lab(edge, shift, last_es,
-                   key=f"edge_scenario_{week}_{day}_{current}",
-                   download_clock=clock, slot=current)
+    # The Replay triptych stays untouched. ONLY the standalone scenario
+    # laboratory defaults to the latest official Cboe curve, if valid.
+    st.caption("**Fonte del Laboratorio GEX:** la curva ufficiale e il Replay "
+               "sono fotografie distinte. Nessuna fusione dei valori.")
+    lab_source = st.radio(
+        "Fotografia per il Laboratorio GEX",
+        ("Ultimo download ufficiale", f"Replay {current}"),
+        key=f"edge_lab_source_{week}_{day}",
+        horizontal=True,
+    )
+    lab_edge, lab_clock, lab_slot = edge, clock, current
+    source_kind, lab_last_es = "Replay", last_es
+    if lab_source == "Ultimo download ufficiale":
+        try:
+            lab_edge, lab_clock, lab_slot, source_filename = (
+                _latest_official_edge_for_lab(week, store, logs or [], day, shift))
+            source_kind, lab_last_es = "Ufficiale", None
+            st.caption(f"Laboratorio: **UFFICIALE {lab_slot}** · "
+                       f"download reale {lab_clock:%d/%m/%Y %H:%M:%S} Roma · "
+                       f"fotografia {source_filename}. "
+                       "Curva Edge calcolata su questa catena originale, "
+                       "non dal Replay.")
+            if lab_edge.get("quality_sufficient") is not True:
+                st.warning("Qualità GEX del download ufficiale insufficiente: "
+                           "curva soltanto diagnostica.")
+        except (ValueError, RuntimeError, TypeError, KeyError, OSError) as exc:
+            st.warning("Laboratorio ufficiale non disponibile: " + str(exc)[:160] +
+                       ". Per visualizzare il Replay, selezionalo sopra.")
+            return
+    current_es = None
+    if day == datetime.now(ROME).date():
+        try:
+            current_es = _latest_es_quote(day)
+        except (ValueError, RuntimeError, TypeError, KeyError, OverflowError,
+                OSError):
+            pass
+    show_price_lab(
+        lab_edge, shift, lab_last_es,
+        key=f"edge_scenario_{week}_{day}_{source_kind}_{lab_slot}",
+        download_clock=lab_clock, slot=lab_slot, source_kind=source_kind,
+        current_es=current_es,
+    )
