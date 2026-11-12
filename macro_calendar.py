@@ -300,10 +300,32 @@ def load_calendar(first_day, last_day):
     fc_error = bls_error = None
     try:
         api_key = str(st.secrets.get("FINANCE_CALENDAR_API_KEY", "")).strip()
+        if not api_key:
+            # Do not log or display credentials.
+            raise ValueError("Chiave FINANCE_CALENDAR_API_KEY non trovata nei Secrets Streamlit")
         fc = _prepare(_fetch(first_day.isoformat(), last_day.isoformat(),
                              api_key), first_day)
     except Exception as exc:
-        fc_error = type(exc).__name__
+        # Status is safe to display; NEVER reveal API keys, request headers or body.
+        from urllib.error import HTTPError, URLError
+        if isinstance(exc, HTTPError):
+            explanations = {
+                400: "HTTP 400: parametri calendario non accettati",
+                401: "HTTP 401: chiave API non riconosciuta o non attiva",
+                402: "HTTP 402: piano/attivazione FinanceCalendar richiesta",
+                403: "HTTP 403: chiave revocata o accesso non autorizzato",
+                429: "HTTP 429: limite richieste FinanceCalendar raggiunto",
+                500: "HTTP 500: errore del server FinanceCalendar",
+                503: "HTTP 503: servizio FinanceCalendar indisponibile",
+            }
+            fc_error = explanations.get(exc.code, f"HTTP {exc.code} da FinanceCalendar")
+        elif isinstance(exc, ValueError):
+            fc_error = str(exc) if str(exc).startswith("Chiave FINANCE_CALENDAR_API_KEY") else (
+                "Risposta API calendario non valida: " + type(exc).__name__)
+        elif isinstance(exc, (TimeoutError, URLError)):
+            fc_error = "Timeout o connessione FinanceCalendar non disponibile"
+        else:
+            fc_error = f"Errore FinanceCalendar: {type(exc).__name__}"
     try:
         bls = fetch_bls(first_day, last_day)
     except Exception as exc:
@@ -343,16 +365,24 @@ def render():
         # Solo oggi e prossimi 7 giorni. Per audit di date passate esistono
         # i test BLS e le fonti, senza una sezione "Ieri" nella dashboard.
         events, health = load_calendar(today, today + timedelta(days=7))
-    except RuntimeError:
+    except RuntimeError as exc:
         st.error("Entrambe le fonti del calendario macro non sono verificabili. "
                  "Non interpretare il calendario vuoto come assenza di news.")
+        st.caption(str(exc))
         return
     if not health["bls_ok"]:
         st.warning("BLS non verificabile: gli eventi ufficiali CPI/PPI/NFP/JOLTS "
                    "non hanno un controllo indipendente.")
     elif not health["financecalendar_ok"]:
-        st.caption("FinanceCalendar temporaneamente non disponibile · "
-                   "gli eventi BLS sono comunque visibili.")
+        st.warning(
+            "Calendario macro PARZIALE: FinanceCalendar non disponibile. "
+            "Il BLS copre solo CPI, PPI, NFP e JOLTS; non dedurre "
+            "che non ci siano altre news USA."
+        )
+        with st.expander("Diagnostica FinanceCalendar", expanded=True):
+            st.write(health.get("financecalendar_error") or "Errore non identificato")
+            st.caption("Chiave letta da Streamlit Secrets come FINANCE_CALENDAR_API_KEY. "
+                       "Nessuna credenziale viene mostrata.")
     for message in health["messages"]:
         if message.startswith("Calendario BLS") or message.startswith("FinanceCalendar"):
             continue
@@ -424,7 +454,7 @@ def render():
                     ('<div class="macro-priority-card">' +
                      ('Nessun evento macro USA ad alta priorità confermato oggi.</div>'
                       if health["bls_ok"] and health["financecalendar_ok"] else
-                      'Nessun evento prioritario verificabile oggi: almeno una fonte non disponibile.</div>')),
+                      'Calendario incompleto: non è possibile escludere news USA oggi.</div>')),
                     unsafe_allow_html=True,
                 )
             if secondary:
@@ -448,7 +478,10 @@ def render():
                             f" · [Fonte]({item['source']})"
                         )
                 else:
-                    st.caption("Nessun evento macro in calendario nei prossimi 7 giorni.")
+                    if health["financecalendar_ok"] and health["bls_ok"]:
+                        st.caption("Nessun evento macro monitorato nei prossimi 7 giorni.")
+                    else:
+                        st.warning("Calendario incompleto: prossimi eventi non verificabili.")
         with next_earnings:
             with st.expander("Trimestrali Magnifiche 7 — prossimi 7 giorni", expanded=False):
                 render_m7_upcoming(upcoming_earnings, earnings_sources)
