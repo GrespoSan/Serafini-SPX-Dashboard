@@ -183,7 +183,8 @@ def _publish_official_header_unchanged(week, store, logs, on_valid_gex):
             return
         from gamma_section import _snapshot_download_clock
         clock = _snapshot_download_clock(store, week, logs or [], snapshot)
-        on_valid_gex(prepare_daily_gex(e, day, clock))
+        if e.get("quality_sufficient") is True:
+            on_valid_gex(prepare_daily_gex(e, day, clock))
     except (RuntimeError, ValueError, KeyError, TypeError, OverflowError,
             OSError, ImportError):
         return
