@@ -165,13 +165,13 @@ def _add_delayed_es_marker(chart, *, es_price, gex_on_curve):
 
 def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario",
                    download_clock=None, slot=None, source_kind="Replay",
-                   current_es=None):
+                   current_es=None, history_options=(), history_loader=None):
     """Laboratorio aperto di default, senza richieste network o scritture.
 
     Curva scenario = stessi OI/IV/valutazione del report Edge. Conversione
     ES->SPX con offset congelato e dichiarato. Nessuna previsione intraday.
     """
-    with st.expander("LABORATORIO GEX — scenario prezzo (sperimentale)",
+    with st.expander("Curva teorica GEX Edge — scenario prezzo (sperimentale)",
                      expanded=True):
         snapshot_time, valuation_time = _gex_reference_times(
             download_clock, edge.get("valuation"))
@@ -185,23 +185,17 @@ def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario",
             f"{slot or ''}: {valuation_time}**"
         )
         st.caption(
-            "La fotografia Cboe e la valutazione teorica sono orari distinti. "
-            "Il modello usa la curva della fonte selezionata, senza "
-            "mescolare ufficiale e Replay."
+            "Unica curva GEX 0DTE della fotografia più recente, Replay oppure "
+            "download Cboe: nessuna fusione di fotografie. La valutazione del "
+            "modello non coincide necessariamente con l'ora del download. "
+            "Lo scenario è WHAT-IF: OI, IV e scadenza congelati; non aggiorna "
+            "Wall, Flip o posizioni dei dealer e non genera segnali."
         )
-        st.caption(
-            "Lo scenario usa esclusivamente la curva GEX della fotografia "
-            "Cboe indicata sopra (archiviata per Replay, calcolata dal motore "
-            "Edge per Ufficiale). Cambiare prezzo NON acquisisce nuove opzioni "
-            "e non aggiorna la data di valutazione; l'orario effettivo di "
-            "esecuzione del motore non è archiviato separatamente."
-        )
-        st.caption(
-            "Ricerca WHAT-IF, non un nuovo indicatore né un segnale di trading. "
-            "Si usa la curva teorica già calcolata dal motore Edge sulla "
-            "stessa fotografia Cboe, con OI, IV e scadenza congelati. "
-            "NON si ricostruiscono nuove Put/Call Wall o Gamma Flip."
-        )
+        if edge.get("quality_sufficient") is not True:
+            st.warning(
+                "Copertura del modello Edge insufficiente o non verificabile: "
+                "curva soltanto diagnostica. Non è un errore del download Cboe."
+            )
         curve = edge.get("curve") or []
         if len(curve) < 2:
             st.info("La fotografia non contiene una curva teorica GEX "
@@ -259,18 +253,18 @@ def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario",
             st.info("Prezzo fuori dai punti della curva: "
                     "nessun confronto teorico affidabile calcolabile.")
             return
-        # The chart's extrema are maxima/minima GEX of its sampled points,
-        # not the first/last x-axis prices and not put/call walls.
-        extrema = curve_extrema(curve, basis)
-        if extrema is not None:
-            peak_col, trough_col = st.columns(2)
-            high, low = extrema["max"], extrema["min"]
-            peak_col.metric("Massimo curva GEX",
-                            f"{high['net_gex']/1e9:+.2f} mld USD")
-            peak_col.caption(f"ES {high['es']:,.2f} · SPX {high['spx']:,.2f}")
-            trough_col.metric("Minimo curva GEX",
-                              f"{low['net_gex']/1e9:+.2f} mld USD")
-            trough_col.caption(f"ES {low['es']:,.2f} · SPX {low['spx']:,.2f}")
+        # Prices are the X-axis endpoints, NOT the NET GEX Y-axis peaks.
+        min_col, max_col = st.columns(2)
+        min_col.metric("Prezzo minimo ES della curva", f"{lower:,.2f}")
+        min_col.caption(
+            f"Limite teorico inferiore · SPX {points[0][0]:,.2f} · "
+            f"NET GEX {points[0][1]/1e9:+.2f} mld"
+        )
+        max_col.metric("Prezzo massimo ES della curva", f"{upper:,.2f}")
+        max_col.caption(
+            f"Limite teorico superiore · SPX {points[-1][0]:,.2f} · "
+            f"NET GEX {points[-1][1]/1e9:+.2f} mld"
+        )
 
         a, b, c = st.columns(3)
         _signed_gex_metric(a, "NET GEX originale", actual_gex)
@@ -280,11 +274,57 @@ def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario",
         # non confondere una discrepanza numerica con un effetto-prezzo.
         _signed_gex_metric(c, "Δ teorico dalla curva al cash SPX",
                            model_at_scenario - baseline_curve, suffix="mld")
+        # Historical Replay is an OPTIONAL comparison of a distinct curve;
+        # it never changes the main triptych, GEX KPIs or active latest source.
+        historical_curve = None
+        historical_slot = None
+        if history_options and history_loader is not None:
+            if st.checkbox("Confronta con un Replay storico (facoltativo)",
+                           value=False, key=f"{key}_enable_history"):
+                historical_slot = st.selectbox(
+                    "Rilevamento Replay da confrontare nella curva",
+                    ["Nessuno"] + list(history_options),
+                    key=f"{key}_historical_curve",
+                )
+                if historical_slot != "Nessuno":
+                    try:
+                        earlier_edge = history_loader(historical_slot)
+                        if (earlier_edge.get("mode") == edge.get("mode") == "0DTE"
+                                and earlier_edge.get("expiries") == edge.get("expiries")
+                                and earlier_edge.get("model_version") == edge.get("model_version")
+                                and earlier_edge.get("quality_sufficient") is True
+                                and edge.get("quality_sufficient") is True):
+                            historical_curve = earlier_edge.get("curve") or None
+                        else:
+                            st.warning("Confronto sospeso: qualità, scadenza o "
+                                       "versione del modello non coerenti.")
+                    except (RuntimeError, ValueError, TypeError, KeyError,
+                            OverflowError, OSError) as exc:
+                        st.warning(f"Replay storico non verificabile: {exc}")
+
         chart = go.Figure()
         chart.add_trace(go.Scatter(
             x=[x+basis for x, _ in points],
             y=[y/1e9 for _, y in points],
             mode="lines", name="Curva Edge archiviata"))
+        if historical_curve:
+            try:
+                old_points = sorted((float(row["spot_spx"]) + basis,
+                                     float(row["net_gex"]) / 1e9)
+                                    for row in historical_curve)
+                if all(math.isfinite(x) and math.isfinite(y)
+                       for x, y in old_points):
+                    chart.add_trace(go.Scatter(
+                        x=[x for x, _ in old_points],
+                        y=[y for _, y in old_points],
+                        mode="lines", name=f"Replay {historical_slot} · confronto",
+                        line=dict(dash="dash")))
+                    st.caption(
+                        f"Linea tratteggiata: Replay storico {historical_slot}. "
+                        "La curva corrente, i KPI e lo scenario non cambiano."
+                    )
+            except (ValueError, TypeError, KeyError, OverflowError):
+                pass
         chart.add_vline(x=cash_spot+basis, line_dash="dash",
                         line_color="#a0a0a0")
         chart.add_vline(x=float(value), line_dash="dot",

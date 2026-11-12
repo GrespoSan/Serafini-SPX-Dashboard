@@ -12,7 +12,8 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import plotly.graph_objects as go
 
-from edge_replay_panel import _latest_official_edge_for_lab, _latest_es_quote
+from edge_replay_panel import _latest_es_quote
+from edge_latest_source import latest_gex_reading, _latest_verified_replay
 from gex_price_sensitivity_lab import (
     _add_delayed_es_marker, curve_extrema, scenario_gex,
 )
@@ -21,94 +22,88 @@ ROME = ZoneInfo("Europe/Rome")
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class OfficialLabSourceTests(unittest.TestCase):
-    def test_1700_official_is_selected_after_1546_replay(self):
-        day = date(2026, 11, 12)
-        early = datetime(2026, 11, 12, 15, 51, tzinfo=ROME)
-        official = datetime(2026, 11, 12, 17, 1, tzinfo=ROME)
-        first = "2026-W46/snapshots/SPX_CBOE_20261112_morning.json.gz"
-        second = "2026-W46/snapshots/SPX_CBOE_20261112_evening.json.gz"
-        index = {
-            first: ("Pomeriggio · 08:50 Chicago", "15:51", early),
-            second: ("USA · 10:00 Chicago (17:00 ordinario)", "17:01", official),
-        }
-        raw = b"official-original-cboe"
-        report = {
-            "sha256": hashlib.sha256(raw).hexdigest(),
-            "symbol": "SPX", "mode": "0DTE", "expiries": [day.isoformat()],
-            "curve": [{"spot_spx": 7600, "net_gex": 10e9},
-                      {"spot_spx": 7650, "net_gex": 15e9}],
-        }
-        logs = [{"name": "official-log-01.json"}]
-        with patch("gamma_section._snapshot_log_index", return_value=index), \
-             patch("edge_triptych._cached_official_snapshot", return_value=raw) as fetch, \
-             patch("edge_auto.result_from_snapshot", return_value=report) as calc:
-            e, stamp, logical, filename = _latest_official_edge_for_lab(
-                "2026-W46", object(), logs, day, 23.0)
-        self.assertIs(e, report)
-        self.assertEqual(stamp, official)
-        self.assertEqual(logical, "17:00")
-        self.assertEqual(filename, second.rsplit("/", 1)[1])
-        calc.assert_called_once_with(raw, 23.0)
-        self.assertEqual(fetch.call_args.args[1], filename)
+class FakeStore:
+    def __init__(self, snapshot_names=(), replay_names=()):
+        self.snapshot_names = list(snapshot_names)
+        self.replay_names = list(replay_names)
 
-    def test_no_official_source_is_not_replaced_with_replay(self):
+    def list(self, path):
+        if path.endswith("/snapshots/"):
+            return [{"name": name} for name in self.snapshot_names]
+        if path.startswith("replay-edge/"):
+            return [{"name": name} for name in self.replay_names]
+        return []
+
+
+class LatestSourceTests(unittest.TestCase):
+    """Real download timestamps, no source radio and no cross-source mixing."""
+
+    def setUp(self):
+        _latest_verified_replay.clear()
+        self.day = (datetime.now(ROME) - timedelta(days=1)).date()
+        self.week = f"{self.day.isocalendar().year}-W{self.day.isocalendar().week:02d}"
+        self.snapshot = f"SPX_CBOE_{self.day:%Y%m%d}_155925.json.gz"
+        self.path = f"{self.week}/snapshots/{self.snapshot}"
+        self.replay = f"{self.day.isoformat()}_18-30.json"
+        self.official_clock = datetime.combine(
+            self.day, datetime.min.time(), tzinfo=ROME).replace(
+                hour=17, minute=0, second=18)
+        self.replay_clock = self.official_clock.replace(hour=18, minute=30)
+
+    def test_later_official_beats_earlier_replay(self):
+        early = self.official_clock.replace(hour=15, minute=46)
+        store = FakeStore([self.snapshot], [self.replay])
+        index = {self.path: ("USA 17:00", "17:00", self.official_clock)}
+        with patch("gamma_section._snapshot_log_index", return_value=index), \
+             patch("edge_latest_source.read_pair", return_value=(
+                 {}, {}, {"mode":"0DTE"}, early)):
+            chosen = latest_gex_reading(
+                self.week, store, [{"name": "official.json"}])
+        self.assertEqual(chosen["kind"], "Ufficiale")
+        self.assertEqual(chosen["filename"], self.snapshot)
+        self.assertEqual(chosen["clock"], self.official_clock)
+
+    def test_later_replay_beats_earlier_official(self):
+        store = FakeStore([self.snapshot], [self.replay])
+        index = {self.path: ("USA 17:00", "17:00", self.official_clock)}
+        with patch("gamma_section._snapshot_log_index", return_value=index), \
+             patch("edge_latest_source.read_pair", return_value=(
+                 {}, {}, {"mode":"0DTE"}, self.replay_clock)):
+            chosen = latest_gex_reading(
+                self.week, store, [{"name": "official.json"}])
+        self.assertEqual(chosen["kind"], "Replay")
+        self.assertEqual(chosen["clock"], self.replay_clock)
+        self.assertEqual(chosen["slot"], "18:30")
+
+    def test_invalid_latest_replay_does_not_hide_official(self):
+        store = FakeStore([self.snapshot], [self.replay])
+        index = {self.path: ("USA 17:00", "17:00", self.official_clock)}
+        with patch("gamma_section._snapshot_log_index", return_value=index), \
+             patch("edge_latest_source.read_pair", side_effect=ValueError("SHA errato")):
+            chosen = latest_gex_reading(self.week, store, [])
+        self.assertEqual(chosen["kind"], "Ufficiale")
+
+    def test_no_source_and_single_curve_controls(self):
         with patch("gamma_section._snapshot_log_index", return_value={}):
-            with self.assertRaisesRegex(ValueError, "Nessun download SPX UFFICIALE"):
-                _latest_official_edge_for_lab(
-                    "2026-W46", object(), [], date(2026, 11, 12), 23)
+            self.assertIsNone(latest_gex_reading(self.week, FakeStore(), []))
+        edge = (ROOT / "edge_triptych.py").read_text(encoding="utf-8")
+        replay = (ROOT / "edge_replay_panel.py").read_text(encoding="utf-8")
+        lab = (ROOT / "gex_price_sensitivity_lab.py").read_text(encoding="utf-8")
+        self.assertNotIn('"Fonte dei rilevamenti GEX"', edge)
+        self.assertNotIn('"Fotografia per il Laboratorio GEX"', replay)
+        self.assertNotIn('with st.expander("Curva teorica GEX Edge"', replay)
+        self.assertNotIn('with st.expander("Curva teorica GEX",', edge)
+        self.assertIn("latest_gex_reading(week, store, logs or [])", edge)
+        self.assertIn('key=f"{key}_historical_curve"', lab)
 
-    def test_wrong_official_0dte_expiry_is_not_used(self):
-        day = date(2026, 11, 12)
-        path = "2026-W46/snapshots/SPX_CBOE_20261112_1731.json.gz"
-        index = {path: ("USA · 10:00 Chicago", "17:01",
-                        datetime(2026, 11, 12, 17, 1, tzinfo=ROME))}
-        raw = b"official-cboe"
-        invalid = {"sha256": hashlib.sha256(raw).hexdigest(),
-                   "symbol": "SPX", "mode": "0DTE",
-                   "expiries": ["2026-11-13"]}
-        with patch("gamma_section._snapshot_log_index", return_value=index), \
-             patch("edge_triptych._cached_official_snapshot", return_value=raw), \
-             patch("edge_auto.result_from_snapshot", return_value=invalid):
-            with self.assertRaisesRegex(ValueError, "non coerente"):
-                _latest_official_edge_for_lab(
-                    "2026-W46", object(), [], day, 23)
-
-    def test_replay_controls_render_below_summary_and_before_curve(self):
+    def test_main_replay_latest_independent_of_optional_curve_history(self):
         panel = (ROOT / "edge_replay_panel.py").read_text(encoding="utf-8")
         start = panel.index("def show_replay(")
         body = panel[start:]
-        self.assertLess(body.index("summary_panel = st.container()"),
-                        body.index("replay_controls_panel = st.container()"))
-        self.assertLess(body.index("replay_controls_panel = st.container()"),
-                        body.index("curve_lab_panel = st.container()"))
-        self.assertLess(body.index("with replay_controls_panel:"),
-                        body.index('current = st.selectbox("Rilevamento Replay da studiare"'))
-        self.assertLess(body.index("with summary_panel:"),
-                        body.index("Confronto informativo su dati 0DTE"))
-        self.assertLess(body.index("Confronto informativo su dati 0DTE"),
-                        body.index('with st.expander("Curva teorica GEX Edge"'))
-        self.assertLess(body.index("with curve_lab_panel:"),
-                        body.index('with st.expander("Curva teorica GEX Edge"'))
-        self.assertIn('compare = st.selectbox(', body)
-        self.assertEqual(body.count('Rilevamento Replay da studiare'), 1)
-        self.assertIn("Valutazione modello GEX · REPLAY", body)
-
-    def test_official_quality_warning_is_not_confused_with_replay(self):
-        panel = (ROOT / "edge_replay_panel.py").read_text(encoding="utf-8")
-        self.assertIn("validazione GEX Edge NON", panel)
-        self.assertIn("qualità del download ufficiale", panel)
-        self.assertIn("una fotografia DIFFERENTE", panel)
-        self.assertIn("quality_pct", panel)
-        self.assertIn("download {lab_clock:%d/%m/%Y %H:%M:%S}", panel)
-
-    def test_laboratory_default_official_and_replay_remains_available(self):
-        replay = (ROOT / "edge_replay_panel.py").read_text(encoding="utf-8")
-        official = (ROOT / "edge_triptych.py").read_text(encoding="utf-8")
-        self.assertIn('("Ultimo download ufficiale", f"Replay {current}")', replay)
-        self.assertIn('source_kind, lab_last_es = "Ufficiale", None', replay)
-        self.assertIn('show_replay(week, store, _plot, logs=logs or [])', official)
-        self.assertIn('source_kind="Ufficiale"', official)
+        self.assertIn('current = str(selected["slot"])', body)
+        self.assertIn('compare = "Nessuno"', body)
+        self.assertIn('history_options=names[:index]', body)
+        self.assertNotIn('current = st.selectbox("Rilevamento Replay da studiare"', body)
 
 
 class DelayedESQuoteTests(unittest.TestCase):
@@ -175,7 +170,9 @@ class CurveDisplayTests(unittest.TestCase):
         lab = (ROOT / "gex_price_sensitivity_lab.py").read_text(encoding="utf-8")
         self.assertNotIn("from net_gamma import", lab)
         self.assertIn("scenario_gex(curve, delayed_price - basis)", lab)
-        self.assertIn("curve_extrema(curve, basis)", lab)
+        self.assertIn("Prezzo minimo ES della curva", lab)
+        self.assertIn("Prezzo massimo ES della curva", lab)
+        self.assertNotIn("curve_extrema(curve, basis)", lab)
 
 
 if __name__ == "__main__":

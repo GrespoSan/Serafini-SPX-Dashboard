@@ -183,7 +183,8 @@ def _publish_official_header_unchanged(week, store, logs, on_valid_gex):
             return
         from gamma_section import _snapshot_download_clock
         clock = _snapshot_download_clock(store, week, logs or [], snapshot)
-        on_valid_gex(prepare_daily_gex(e, day, clock))
+        if e.get("quality_sufficient") is True:
+            on_valid_gex(prepare_daily_gex(e, day, clock))
     except (RuntimeError, ValueError, KeyError, TypeError, OverflowError,
             OSError, ImportError):
         return
@@ -191,121 +192,71 @@ def _publish_official_header_unchanged(week, store, logs, on_valid_gex):
 
 def show(week, store, logs=None, *, on_valid_gex=None):
     with st.expander("GEX EDGE — CONFRONTO", expanded=False):
-        source_mode = st.radio(
-            "Fonte dei rilevamenti GEX",
-            ("Replay intraday", "Download ufficiali"),
-            horizontal=True, key=f"edge_compare_source_{week}",
-            help="Replay: report Edge indipendenti calcolati dalla stessa catena "
-                 "Cboe e archiviati agli orari intraday. Ufficiali: metodo "
-                 "preesistente, che rimane disponibile.",
+        from edge_latest_source import latest_gex_reading
+        try:
+            latest = latest_gex_reading(week, store, logs or [])
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError) as exc:
+            st.warning(f"Archivio GEX non verificabile: {exc}")
+            return
+        if latest is None:
+            st.info("Nessun rilevamento GEX verificato disponibile nella settimana.")
+            return
+        st.markdown(
+            f"**Ultimo rilevamento GEX · {latest['kind'].upper()} · "
+            f"{latest['clock']:%d/%m/%Y %H:%M:%S} Roma**"
         )
-        if source_mode == "Replay intraday":
-            # GEX Trend Daily resta basato sulla fotografia UFFICIALE
-            # selezionata nel pannello Serafini (nessuna contaminazione).
+        st.caption(
+            "Selezione automatica tra Replay intraday e download Cboe ufficiali, "
+            "in base all'orario effettivo verificato. Il metodo NET GAMMA "
+            "Serafini resta indipendente."
+        )
+        if latest["kind"] == "Replay":
             _publish_official_header_unchanged(
                 week, store, logs or [], on_valid_gex)
             from edge_replay_panel import show_replay
-            show_replay(week, store, _plot, logs=logs or [])
+            show_replay(week, store, _plot, logs=logs or [], selected=latest)
             return
-        st.caption("Download ufficiali: calcolo Edge e NET GAMMA sulla stessa "
-                   "catena Cboe verificata. La selezione precedente è preservata.")
-        reading_clock = None
-        ctx=st.session_state.get(f"gamma_compare_context_{week}")
-        reading=st.radio("Rilevamento da confrontare",("Ultimo rilevamento","Mattina 07:30"),horizontal=True,key=f"edge_compare_reading_{week}")
-        # Modalità automatica fissa; l’importazione JSON resta disponibile nel codice.
-        source="Automatico · stessa fotografia Serafini"
-        if source.startswith("Automatico"):
-            if not ctx or not ctx.get("snapshot"):
-                st.info("Apri NET GAMMA 0DTE / Weekly e seleziona la fotografia da confrontare.")
-                return
-            if ctx.get("offset") is None:
-                st.warning("Differenziale ES−SPX non disponibile per la fotografia selezionata.")
-                return
-            try:
-                from edge_auto import result_from_snapshot
-                day_for_choice=ctx["day"]
-                if isinstance(day_for_choice,str):
-                    day_for_choice=date.fromisoformat(day_for_choice)
-                candidates=sorted(
-                    item["name"] for item in store.list(f"{week}/snapshots/")
-                    if item.get("name","").startswith("SPX_CBOE_"+day_for_choice.strftime("%Y%m%d")+"_")
-                )
-                if not candidates:
-                    st.warning("Nessuna fotografia della giornata selezionata disponibile.");return
-                if reading=="Mattina 07:30":
-                    from gamma_section import _acquisition_label
-                    morning=[name for name in candidates if _acquisition_label(store,week,logs or [],name)=="Mattina 07:30"]
-                    if not morning:
-                        st.warning("Non è presente una fotografia identificata dal registro come Mattina 07:30.");return
-                    selected_name=morning[-1]
-                else:
-                    # Names contain the original CBOE timestamp, not the download time.
-                    # Prefer the latest logged download to avoid misleading ordering.
-                    from datetime import timezone
-                    from zoneinfo import ZoneInfo
-                    import json
-                    registered=[]
-                    for log in logs or []:
-                        try:
-                            info=json.loads(store.download(f"{week}/logs/{log['name']}"))
-                            source_file=str(info.get("file","")).rsplit("/",1)[-1]
-                            raw_time=info.get("download_rome") or info.get("download_utc")
-                            if source_file not in candidates or not raw_time:
-                                continue
-                            timestamp=datetime.fromisoformat(str(raw_time).replace("Z","+00:00"))
-                            if timestamp.tzinfo is None:
-                                continue
-                            registered.append((timestamp.astimezone(timezone.utc),source_file))
-                        except (TypeError,ValueError,KeyError):
-                            continue
-                    if not registered:
-                        st.warning("I registri di acquisizione non indicano l'ultimo download: impossibile identificarlo con certezza.");return
-                    selected_name=max(registered)[1]
-                raw=store.download(f"{week}/snapshots/{selected_name}")
-                e=result_from_snapshot(raw,float(ctx["offset"]))
-                from gamma_section import _snapshot_download_clock
-                download_clock=_snapshot_download_clock(store,week,logs or [],selected_name)
-                reading_clock = download_clock
-            except Exception as err:
-                st.error("Calcolo Edge automatico non disponibile: "+str(err))
-                st.info("È ancora possibile caricare il report JSON Edge selezionando la modalità alternativa.")
-                return
-        else:
-            file=st.file_uploader("Report Edge GEX (JSON)",type=["json"],key="edge_compare_json_3col")
-            if file is None:
-                st.info("Esporta «Confronto Edge per SPX (JSON)» dall'app Edge e caricalo qui.")
-                return
-            try:
-                e=read_report(file.getvalue())
-            except (ValueError,KeyError,TypeError) as err:
-                st.error(str(err));return
-        if not ctx:
-            st.warning("Apri prima NET GAMMA 0DTE/Weekly e scegli la fotografia e il riferimento Serafini.")
+
+        # Latest official chain: calculate both profiles on exactly the same
+        # original bytes. No active Serafini historical selection is reused.
+        from edge_replay_panel import _basis
+        from edge_auto import result_from_snapshot
+        from net_gamma import read_snapshot, profile
+        day = latest["day"]
+        selected_name = latest["filename"]
+        full_clock = latest["clock"]
+        reading_clock = full_clock.strftime("%H:%M:%S")
+        shift = _basis(week, day)
+        if shift is None:
+            st.warning(
+                "Differenziale ES−SPX verificato non disponibile per il giorno "
+                "dell'ultimo download: coordinate ES GEX sospese."
+            )
             return
         try:
-            day=ctx["day"]
-            if isinstance(day,str):day=date.fromisoformat(day)
-            if e["mode"]!="0DTE" or e["expiries"]!=[day.isoformat()]:
-                st.warning("Edge non è 0DTE della stessa giornata Serafini: confronto sospeso.")
-                return
-            if ctx.get("offset") is None or e.get("es_basis") is None:
-                st.warning("Manca il differenziale ES−SPX in uno dei due sistemi.")
-                return
-            shift=_number(e["es_basis"])
-            if abs(shift-float(ctx["offset"]))>0.51:
-                st.warning("Differenziali ES−SPX diversi: confronto sospeso.")
-                return
-            sr,name=_matching_serafini(store,week,e["sha256"],day,float(ctx["ref"]))
-            if sr is None:
-                st.warning("Fotografia CBOE Edge non trovata identica nell'archivio Serafini (SHA-256): nessun confronto Serafini disegnato.")
-                return
-        except Exception as err:
-            st.error("Impossibile verificare la fotografia Serafini: "+str(err));return
+            raw = _cached_official_snapshot(week, selected_name, store)
+            digest = hashlib.sha256(raw).hexdigest()
+            e = result_from_snapshot(raw, float(shift))
+            snapshot = read_snapshot(raw)
+            reference = float(snapshot["data"]["prev_day_close"])
+            if (not math.isfinite(reference) or reference <= 0
+                    or e.get("sha256") != digest
+                    or e.get("symbol") != "SPX"
+                    or e.get("mode") != "0DTE"
+                    or e.get("expiries") != [day.isoformat()]):
+                raise ValueError("Identità o scadenza della catena 0DTE non coerente")
+            serafini = profile(snapshot, day, reference)
+            sr = serafini["rows"]
+            if not sr:
+                raise ValueError("Profilo Serafini vuoto per la stessa fotografia")
+        except (RuntimeError, ValueError, TypeError, KeyError,
+                OverflowError, OSError) as exc:
+            st.warning(f"Download Cboe più recente non verificabile: {exc}")
+            return
         st.markdown(f"**Fotografia Cboe ore {reading_clock} Roma**" if reading_clock else
                     "**Fotografia Cboe — orario del download non disponibile**")
-        # GEX only: read the ORIGINAL Cboe index timestamp, not option
-        # quote times and not the model/download timestamp.
-        cash_trade_time = extract_spx_trade_time(raw) if source.startswith("Automatico") else None
+        # SPX last-trade timestamp is distinct from download and model times.
+        cash_trade_time = extract_spx_trade_time(raw)
         cash_note, _ = describe_spx_trade(cash_trade_time)
         st.caption(cash_note)
         price=float(e["spot_spx"])+shift
@@ -317,9 +268,9 @@ def show(week, store, logs=None, *, on_valid_gex=None):
             "È una conversione teorica degli strike, NON una quotazione "
             "corrente del future ES. Qualità Edge non significa spot aggiornato."
         )
-        if e.get("valuation"):
-            st.caption(f"Valutazione del modello Edge: {e['valuation']} "
-                       "(orario del modello, diverso dal download).")
+        from gex_price_sensitivity_lab import _gex_reference_times
+        _, valuation_text = _gex_reference_times(full_clock, e.get("valuation"))
+        st.markdown(f"**Valutazione modello GEX: {valuation_text}**")
         for c,key,lab in zip(p[1:4],("put_wall_spx","gamma_flip_spx","call_wall_spx"),("Put Wall","Gamma Flip","Call Wall")):
             v=e.get(key);c.metric(lab,f"{float(v)+shift:,.2f}" if v is not None else "N/D")
         _colored_edge_metric(p[4], "Regime Edge", str(e.get("regime", "N/D")), e.get("regime"))
@@ -335,7 +286,7 @@ def show(week, store, logs=None, *, on_valid_gex=None):
             # Only publish the SAME verified Edge metrics to Trend Daily.
             # A transient callback is passed by app.py for this rerun: no
             # session_state value can survive a failed later Cboe download.
-            if on_valid_gex is not None:
+            if on_valid_gex is not None and e.get("quality_sufficient") is True:
                 from edge_daily_gex import prepare_daily_gex
                 try:
                     duplicate = prepare_daily_gex(e, day, reading_clock)
@@ -369,7 +320,9 @@ def show(week, store, logs=None, *, on_valid_gex=None):
                     "Edge selezionato; nessun valore ricostruito dalle "
                     "sole barre del grafico.")
         try:
-            candles=load_es_candles(day)
+            from replay_prices import candles_up_to
+            candles=load_es_candles(day, required_until=full_clock)
+            candles=candles_up_to(candles, full_clock)
             if candles.empty:raise ValueError("Nessuna candela disponibile")
         except Exception as err:
             candles=None
@@ -389,67 +342,10 @@ def show(week, store, logs=None, *, on_valid_gex=None):
             "**Call Wall** (puntinato verde) · **Put Wall** (puntinato rosso) · "
             "**Gamma Flip** (tratteggio giallo). Linee più marcate sul prezzo ES."
         )
-        with st.expander("Curva teorica GEX",expanded=False):
-            curve=e.get("curve",[])
-            curve_title = (f"Curva teorica GEX 0DTE — fotografia Cboe ore {reading_clock} Roma"
-                           if reading_clock else "Curva teorica GEX 0DTE — orario del rilevamento non disponibile")
-            if curve:
-                # Estremi ricavati dagli stessi punti mostrati nel grafico.
-                valid_points = [
-                    (_number(r["spot_spx"]) + shift, _number(r["net_gex"]) / 1e9)
-                    for r in curve
-                ]
-                valid_points = [(x, y) for x, y in valid_points
-                                if math.isfinite(x) and math.isfinite(y)]
-                if valid_points:
-                    max_point = max(valid_points, key=lambda point: point[1])
-                    min_point = min(valid_points, key=lambda point: point[1])
-                    st.markdown(
-                        f"**{curve_title} · Max {max_point[1]:+.2f} mld (ES {max_point[0]:,.2f})"
-                        f" · Min {min_point[1]:+.2f} mld (ES {min_point[0]:,.2f})**"
-                    )
-                    f=go.Figure(go.Scatter(x=[p[0] for p in valid_points],
-                                           y=[p[1] for p in valid_points],mode="lines"))
-                    f.add_hline(y=0, line_dash="dash", line_color="#f4c95d", line_width=1.5)
-                    st.plotly_chart(f,width="stretch")
-                    st.markdown(
-                        "**Come leggere la curva teorica GEX**\n\n"
-                        "**A cosa serve?** Se l'SPX raggiungesse un determinato prezzo, "
-                        "come cambierebbe l'esposizione Gamma complessiva delle opzioni 0DTE considerate? "
-                        "La curva mostra il GEX ricalcolato per diversi prezzi ipotetici "
-                        "partendo dalla stessa fotografia Cboe, senza ipotizzare nuove operazioni "
-                        "o variazioni delle posizioni aperte.\n\n"
-                        "**Sopra lo zero (GEX positivo):** in determinate condizioni, "
-                        "le coperture dei dealer possono contrastare i movimenti del prezzo, "
-                        "favorendo una maggiore stabilità. "
-                        "**Sotto lo zero (GEX negativo):** le coperture possono invece "
-                        "amplificare i movimenti e la volatilità.\n\n"
-                        "**Il passaggio attraverso lo zero** identifica un Gamma Flip teorico. "
-                        "La curva non prevede la direzione del mercato e non costituisce "
-                        "un segnale automatico di acquisto o vendita."
-                    )
-                else:
-                    st.markdown(f"**{curve_title}**")
-            else:
-                st.markdown(f"**{curve_title}**")
-
-        # Also offer the laboratory on a selected OFFICIAL Edge snapshot.
-        # This never mixes official exposure with any Replay sidecar.
+        # Same latest official snapshot as the three aligned graphs;
+        # no second source selector, no repeated standalone curve.
         from gex_price_sensitivity_lab import show_price_lab
         from edge_replay_panel import _latest_es_quote
-        from gamma_section import _snapshot_log_index
-        idx = _snapshot_log_index(
-            week, tuple(str(item["name"]) for item in (logs or [])), store)
-        source_row = idx.get(f"{week}/snapshots/{selected_name}")
-        full_clock = source_row[2] if source_row else None
-        source_label = source_row[0] if source_row else ""
-        logical_slot = (
-            "17:00" if source_label.startswith("USA · 10:00")
-            else "15:50" if source_label.startswith("Pomeriggio ·")
-            else "07:30" if source_label.startswith("Mattina")
-            else "20:30" if source_label.startswith("Sera · 13:30")
-            else "Rilevamento ufficiale"
-        )
         current_es = None
         if day == datetime.now(ZoneInfo("Europe/Rome")).date():
             try:
@@ -459,7 +355,6 @@ def show(week, store, logs=None, *, on_valid_gex=None):
         show_price_lab(
             e, shift,
             key=f"edge_official_scenario_{week}_{day}_{selected_name}",
-            download_clock=full_clock,
-            slot=logical_slot, source_kind="Ufficiale",
-            current_es=current_es,
+            download_clock=full_clock, slot=reading_clock,
+            source_kind="Ufficiale", current_es=current_es,
         )

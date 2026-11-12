@@ -63,6 +63,8 @@ def result_from_snapshot(raw:bytes, offset:float):
         "call_gex":result["call_gex"],"put_gex":result["put_gex"],
         "modeled_gamma_sign":result["modeled_gamma_sign"],
         "quality_pct":result["quality_pct"],
+        "quality_sufficient":result["quality_sufficient"],
+        "quality_unbounded":result["quality_unbounded"],
         "rows":[{"strike_spx":float(row["strike"]),"call_gex":float(row["call_gex"]),
                  "put_gex":float(row["put_gex"]),"net_gex":float(row["net_gex"])}
                 for _,row in frame.iterrows()],

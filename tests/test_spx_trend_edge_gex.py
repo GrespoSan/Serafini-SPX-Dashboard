@@ -217,8 +217,11 @@ class EdgeDailyKPITests(unittest.TestCase):
         self.assertIn("on_valid_gex=trend_edge_gex.update", app)
         self.assertIn("trend_edge_gex.clear()", app)
         self.assertIn("modeled_gex=trend_edge_gex or None", app)
-        self.assertLess(edge.index("_matching_serafini(store,week,e"),
+        self.assertLess(edge.index('e.get("sha256") != digest'),
                         edge.index("on_valid_gex(duplicate)"))
+        self.assertLess(edge.index("serafini = profile(snapshot, day, reference)"),
+                        edge.index("on_valid_gex(duplicate)"))
+        self.assertIn('e.get("quality_sufficient") is True', edge)
         self.assertIn("prepare_daily_gex(e, day, reading_clock)", edge)
         self.assertIn("compact_gex_kpi_html(modeled_gex)", trend)
         self.assertIn("compact_gex_caption(modeled_gex)", trend)
