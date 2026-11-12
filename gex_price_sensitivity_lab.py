@@ -177,8 +177,17 @@ def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario",
             download_clock, edge.get("valuation"))
         slot_text = f" · {source_kind} {slot}" if slot else f" · {source_kind}"
         st.markdown(
-            f"**Fotografia Cboe del calcolo GEX:** {snapshot_time}{slot_text}  "
-            f"\\n**Valutazione teorica del modello:** {valuation_time}"
+            f"**Fotografia Cboe del calcolo GEX · {source_kind.upper()}** "
+            f"{slot or ''}: {snapshot_time}"
+        )
+        st.markdown(
+            f"**Valutazione modello GEX · {source_kind.upper()} "
+            f"{slot or ''}: {valuation_time}**"
+        )
+        st.caption(
+            "La fotografia Cboe e la valutazione teorica sono orari distinti. "
+            "Il modello usa la curva della fonte selezionata, senza "
+            "mescolare ufficiale e Replay."
         )
         st.caption(
             "Lo scenario usa esclusivamente la curva GEX della fotografia "
