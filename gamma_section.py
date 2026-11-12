@@ -960,6 +960,25 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                 snap, core, expiry, ref, snap['data'].get('current_price'))
         except (ValueError, TypeError, KeyError, OverflowError):
             visual_profiles[title] = core
+    # Solo riepilogo visivo NET / CALL / PUT delle scadenze mostrate.
+    # Non modifica profili, selezione 25+25, Gamma, grafici o Pine.
+    shown_profiles = [p for p in visual_profiles.values() if p.get('rows')]
+    if shown_profiles:
+        shown_rows = [row for p in shown_profiles for row in p['rows']]
+        net_summary = sum(float(row['net_gamma']) for row in shown_rows)
+        call_summary = sum(float(row['call_gamma_component']) for row in shown_rows)
+        put_summary = sum(float(row['put_gamma_component']) for row in shown_rows)
+
+        def _gamma_it(value, signed=False):
+            formatted = f'{value:+,.2f}' if signed else f'{value:,.2f}'
+            return formatted.replace(',', '_').replace('.', ',').replace('_', '.')
+
+        net_col, call_col, put_col = st.columns(3)
+        net_col.metric('NET GAMMA · Call − Put',
+                       _gamma_it(net_summary, signed=True))
+        call_col.metric('GAMMA CALL (+)',
+                        _gamma_it(call_summary, signed=True))
+        put_col.metric('GAMMA PUT (−)', '−' + _gamma_it(put_summary))
     shared_bounds = profile_gamma_bounds(visual_profiles.values())
     st.caption('Tooltip: componente Call positiva, componente Put negativa e saldo netto '
                'della formula Serafini (OI + Volume) × Gamma; non valori monetari delle posizioni.')
