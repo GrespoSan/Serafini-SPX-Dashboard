@@ -19,7 +19,8 @@ CENSUS_URL = "https://www.census.gov/economic-indicators/calendar-listview.html"
 FED_URL = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
 ISM_URL = "https://www.ismworld.org/supply-management-news-and-reports/reports/rob-report-calendar"
 SOURCES = {"BLS": BLS_URL, "BEA": BEA_URL, "Census": CENSUS_URL,
-           "Fed": FED_URL, "ISM": ISM_URL}
+           "Fed": FED_URL, "ISM": ISM_URL,
+           "Jobless Claims": "https://fred.stlouisfed.org/releases/calendar?rid=180&y=2026"}
 # Pubblicazioni ISM 2026, dal calendario ufficiale, non regole stimate.
 ISM_2026 = {
     1: (5, 7), 2: (2, 4), 3: (2, 4), 4: (1, 6),
@@ -173,10 +174,9 @@ def _fed_events(first, last):
 
 
 def _ism_events(first, last):
-    # Richiede calendario ufficiale raggiungibile; niente ricostruzioni arbitrarie.
-    content = _read(ISM_URL)
-    if "2026" not in content or "Manufacturing" not in content:
-        raise ValueError("Calendario ISM 2026 non riconosciuto")
+    """Date dal calendario ufficiale ISM 2026, non richiede chiamate HTTP.
+    Non estendere a 2027 senza pubblicazione di un nuovo calendario.
+    """
     events = []
     if first.year <= 2026 <= last.year:
         for month, days in ISM_2026.items():
@@ -186,15 +186,43 @@ def _ism_events(first, last):
                     events.append(_event(
                         d, 10, 0,
                         "ISM Manufacturing PMI" if i == 0 else "ISM Services PMI",
-                        "ISM", ISM_URL))
+                        "ISM", ISM_URL,
+                        detail="Calendario ISM ufficiale 2026 (verifica eventuali variazioni)"))
     return events
 
+
+def _claims_events(first, last):
+    """Legge calendario FRED per l'anno 2026: ogni data deve comparire
+    esplicitamente nella pagina 2026 del report, no ricorrenze presunte.
+    Gli orari nella pagina FRED sono US Central e la pubblicazione ordinaria
+    e alle 07:30 CT = 08:30 ET. Non dedurre dati effettivamente rilasciati.
+    """
+    url = "https://fred.stlouisfed.org/releases/calendar?rid=180&y=2026"
+    html = _read(url)
+    readable = re.sub(r"<[^>]*>", " ", html)
+    readable = " ".join(readable.split())
+    if "Unemployment Insurance Weekly Claims Report" not in readable:
+        raise ValueError("Calendario FRED claims non riconosciuto")
+    out = []
+    names = ("January", "February", "March", "April", "May", "June",
+             "July", "August", "September", "October", "November", "December")
+    for month in names:
+        for m in re.finditer(r"\\b" + month + r"\\s+(\\d{1,2}),?\\s+2026\\b", readable, re.I):
+            snippet = readable[m.end():m.end()+190]
+            if "Unemployment Insurance Weekly Claims Report" not in snippet:
+                continue
+            d = _date_month(month, m.group(1), "2026")
+            if first <= d <= last:
+                out.append(_event(d, 8, 30, "Richieste iniziali sussidio (Jobless Claims)",
+                                  "FRED / DOL", url))
+    return out
 
 @st.cache_data(ttl=1800, max_entries=12, show_spinner=False)
 def load_calendar(first_day, last_day):
     from bls_calendar import fetch_bls
     events, failures, healthy = [], {}, []
     providers = {
+        "Jobless Claims": lambda: _claims_events(first_day, last_day),
         "BLS": lambda: fetch_bls(first_day, last_day),
         "BEA": lambda: _bea_events(first_day, last_day),
         "Census": lambda: _census_events(first_day, last_day),
