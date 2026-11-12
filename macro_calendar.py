@@ -126,35 +126,51 @@ def _bea_events(first, last):
 
 
 def _census_events(first, last):
-    parser = TableRows()
-    census_year_url = f"https://www.census.gov/economic-indicators/{first.year}-calendar-listview.html"
-    parser.feed(_read(census_year_url))
-    if not parser.rows:
-        raise ValueError("Tabella calendario Census assente")
+    """Calendario Census ufficiale: colonne Indicator | Release Date | Time | Period.
+    Esempio URL verificato: /economic-indicators/calendar-listview-2026.html.
+    Non confondere sito raggiungibile con calendario correttamente estratto.
+    """
     events = []
-    for row in parser.rows:
-        joined = " | ".join(row)
-        m = re.search(r"\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s+(20\d{2})\b", joined)
-        if not m:
-            continue
-        d = _date_month(*m.groups())
-        if not first <= d <= last:
-            continue
-        clock = _time_et(joined)
-        if not clock:
-            continue
-        low = joined.lower()
-        if "retail" in low and ("sales" in low or "food services" in low):
-            kind = "Vendite al dettaglio USA"
-        elif "durable goods" in low:
-            kind = "Ordini beni durevoli"
-        elif "new residential construction" in low:
-            kind = "Housing Starts"
-        else:
-            continue
-        events.append(_event(d, *clock, kind, "Census", census_year_url))
+    for year in range(first.year, last.year + 1):
+        url = f"https://www.census.gov/economic-indicators/calendar-listview-{year}.html"
+        parser = TableRows()
+        parser.feed(_read(url))
+        if not parser.rows:
+            raise ValueError(f"Census {year}: nessuna tabella riconosciuta")
+        recognized_rows = 0
+        for row in parser.rows:
+            if len(row) < 3:
+                continue
+            indicator, release_date, release_time = row[:3]
+            m = re.search(
+                r"\b(January|February|March|April|May|June|July|August|September|October|November|December)"
+                r"\s+(\d{1,2}),?\s+(20\d{2})\b", release_date, re.I)
+            clock = _time_et(release_time)
+            if not m or clock is None:
+                continue
+            recognized_rows += 1
+            d = _date_month(*m.groups())
+            if not first <= d <= last:
+                continue
+            low = indicator.lower()
+            if "advance monthly sales for retail and food services" in low:
+                kind = "Vendite al dettaglio USA (Retail Sales)"
+            elif "advance report on durable goods" in low:
+                kind = "Ordini beni durevoli USA"
+            elif "new residential construction" in low:
+                kind = "Housing Starts / Permessi edilizi"
+            elif "new residential sales" in low:
+                kind = "Vendite nuove abitazioni"
+            elif "construction spending" in low:
+                kind = "Spesa costruzioni"
+            elif "manufacturing and trade: inventories and sales" in low:
+                kind = "Scorte imprese USA"
+            else:
+                continue
+            events.append(_event(d, *clock, kind, "Census", url))
+        if recognized_rows == 0:
+            raise ValueError(f"Census {year}: zero righe calendario interpretabili")
     return events
-
 
 def _fed_events(first, last):
     # Verifica che il sito ufficiale sia raggiungibile e contenga la sezione 2026.
@@ -220,7 +236,7 @@ def _claims_events(first, last):
 @st.cache_data(ttl=1800, max_entries=12, show_spinner=False)
 def load_calendar(first_day, last_day):
     from bls_calendar import fetch_bls
-    events, failures, healthy = [], {}, []
+    events, failures, healthy, counts = [], {}, [], {}
     providers = {
         "Jobless Claims": lambda: _claims_events(first_day, last_day),
         "BLS": lambda: fetch_bls(first_day, last_day),
@@ -234,6 +250,7 @@ def load_calendar(first_day, last_day):
             result = fetch()
             events.extend(result)
             healthy.append(name)
+            counts[name] = len(result)
         except Exception as exc:
             failures[name] = type(exc).__name__
     unique = {}
@@ -244,6 +261,7 @@ def load_calendar(first_day, last_day):
     return sorted(unique.values(), key=lambda e: (e["day"], e["clock"], e["kind"])), {
         "healthy": healthy, "failed": failures, "complete": not failures,
         "sources_count": len(healthy), "total_count": len(providers),
+        "counts": counts,
     }
 
 
@@ -268,7 +286,7 @@ def render():
     with st.expander("Diagnostica fonti gratuite", expanded=False):
         for name in SOURCES:
             if name in health["healthy"]:
-                st.write(f"✅ {name}: raggiungibile")
+                st.write(f"✅ {name}: fonte letta · {health['counts'].get(name, 0)} eventi nei prossimi 7 giorni")
             else:
                 st.write(f"⚠️ {name}: {health['failed'].get(name, 'non disponibile')}")
     today_events = [e for e in events if e["day"] == today]
