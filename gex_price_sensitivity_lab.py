@@ -127,8 +127,45 @@ def _add_price_reference_markers(chart, *, original_es, original_gex_on_curve,
     ))
 
 
+def curve_extrema(curve, es_basis):
+    """Sampled extrema of the existing saved/modelled Edge curve (no fitting)."""
+    try:
+        points = [(float(row["spot_spx"]), float(row["net_gex"]))
+                  for row in curve]
+        basis = float(es_basis)
+        if len(points) < 2 or not math.isfinite(basis) or not all(
+                math.isfinite(x) and math.isfinite(y) for x, y in points):
+            return None
+        high = max(points, key=lambda point: point[1])
+        low = min(points, key=lambda point: point[1])
+        return {"max": {"es": high[0] + basis, "spx": high[0],
+                        "net_gex": high[1]},
+                "min": {"es": low[0] + basis, "spx": low[0],
+                        "net_gex": low[1]}}
+    except (ValueError, TypeError, KeyError, OverflowError):
+        return None
+
+
+def _add_delayed_es_marker(chart, *, es_price, gex_on_curve):
+    """Visual-only third marker, independent of original and scenario."""
+    chart.add_vline(x=float(es_price), line_dash="dash",
+                    line_color="#4cc6e5", line_width=1.5)
+    chart.add_trace(go.Scatter(
+        x=[float(es_price)], y=[float(gex_on_curve) / 1e9],
+        mode="markers", name="Ultimo ES disponibile",
+        marker=dict(size=11, color="#4cc6e5",
+                    line=dict(color="#10222c", width=1.2)),
+        hovertemplate=(
+            "Ultimo ES disponibile (non live)<br>"
+            "ES %{x:,.2f}<br>"
+            "NET GEX sulla curva fissa %{y:+.2f} mld USD<extra></extra>"
+        ),
+    ))
+
+
 def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario",
-                   download_clock=None, slot=None):
+                   download_clock=None, slot=None, source_kind="Replay",
+                   current_es=None):
     """Laboratorio aperto di default, senza richieste network o scritture.
 
     Curva scenario = stessi OI/IV/valutazione del report Edge. Conversione
@@ -138,14 +175,15 @@ def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario",
                      expanded=True):
         snapshot_time, valuation_time = _gex_reference_times(
             download_clock, edge.get("valuation"))
-        slot_text = f" · Replay {slot}" if slot else ""
+        slot_text = f" · {source_kind} {slot}" if slot else f" · {source_kind}"
         st.markdown(
             f"**Fotografia Cboe del calcolo GEX:** {snapshot_time}{slot_text}  "
             f"\\n**Valutazione teorica del modello:** {valuation_time}"
         )
         st.caption(
-            "Lo scenario viene interpolato dalla curva GEX salvata per "
-            "questa fotografia. Cambiare prezzo NON acquisisce nuove opzioni "
+            "Lo scenario usa esclusivamente la curva GEX della fotografia "
+            "Cboe indicata sopra (archiviata per Replay, calcolata dal motore "
+            "Edge per Ufficiale). Cambiare prezzo NON acquisisce nuove opzioni "
             "e non aggiorna la data di valutazione; l'orario effettivo di "
             "esecuzione del motore non è archiviato separatamente."
         )
@@ -212,6 +250,19 @@ def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario",
             st.info("Prezzo fuori dai punti della curva: "
                     "nessun confronto teorico affidabile calcolabile.")
             return
+        # The chart's extrema are maxima/minima GEX of its sampled points,
+        # not the first/last x-axis prices and not put/call walls.
+        extrema = curve_extrema(curve, basis)
+        if extrema is not None:
+            peak_col, trough_col = st.columns(2)
+            high, low = extrema["max"], extrema["min"]
+            peak_col.metric("Massimo curva GEX",
+                            f"{high['net_gex']/1e9:+.2f} mld USD")
+            peak_col.caption(f"ES {high['es']:,.2f} · SPX {high['spx']:,.2f}")
+            trough_col.metric("Minimo curva GEX",
+                              f"{low['net_gex']/1e9:+.2f} mld USD")
+            trough_col.caption(f"ES {low['es']:,.2f} · SPX {low['spx']:,.2f}")
+
         a, b, c = st.columns(3)
         _signed_gex_metric(a, "NET GEX originale", actual_gex)
         _signed_gex_metric(b, "NET GEX teorico allo scenario",
@@ -236,6 +287,44 @@ def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario",
             scenario_es=float(value),
             scenario_gex_on_curve=model_at_scenario,
         )
+        # Third reference uses a separate delayed ES 5-minute CLOSED bar.
+        # Never invent a live quote or change the original Edge curve.
+        if isinstance(current_es, dict):
+            try:
+                delayed_price = float(current_es["price"])
+                delayed_time = str(current_es["clock"])
+                delayed_source = str(current_es["source"])
+                delayed_age = float(current_es["age_minutes"])
+                if not (math.isfinite(delayed_price) and delayed_price > 0
+                        and math.isfinite(delayed_age) and delayed_age >= 0):
+                    raise ValueError("Prezzo corrente non valido")
+                projected = scenario_gex(curve, delayed_price - basis)
+                if projected is not None:
+                    _add_delayed_es_marker(
+                        chart, es_price=delayed_price, gex_on_curve=projected)
+                    st.caption(
+                        f"**Ultimo ES disponibile (non live):** "
+                        f"{delayed_price:,.2f} · candela 5m chiusa "
+                        f"{delayed_time} Roma · fonte {delayed_source} "
+                        f"· ritardo {delayed_age:.0f} min. "
+                        "Il punto azzurro è interpolato sulla curva GEX "
+                        "della fotografia, non è un nuovo calcolo dealer.")
+                else:
+                    st.caption(
+                        f"**Ultimo ES disponibile (non live):** "
+                        f"{delayed_price:,.2f} · candela 5m chiusa "
+                        f"{delayed_time} Roma · {delayed_source} "
+                        f"· ritardo {delayed_age:.0f} min. "
+                        "Fuori dall'intervallo della curva: nessun punto GEX "
+                        "o estrapolazione inventati.")
+                    chart.add_vline(x=delayed_price, line_dash="dash",
+                                    line_color="#4cc6e5")
+            except (TypeError, ValueError, KeyError, OverflowError):
+                st.caption("Ultimo prezzo ES non verificabile: riferimento non disegnato.")
+        else:
+            st.caption(
+                "Ultimo prezzo ES non disponibile per questa data: "
+                "nessun riferimento fittizio. Lo scenario resta indipendente.")
         chart.add_hline(y=0, line_dash="dash", line_color="#777777")
         chart.update_layout(
             title="Sensibilità teorica GEX alla variazione del prezzo",
