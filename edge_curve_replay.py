@@ -252,6 +252,11 @@ def render(store, week, logs):
         label = f"{f['clock']:%H:%M:%S} · {f['origin']}"
         labels.append(label)
         layout = go.Layout(title=f"GEX 0DTE · {day:%d/%m/%Y} · {label}")
+        # L'asse temporale avanza col fotogramma: nessun prezzo futuro.
+        layout.xaxis2 = dict(range=[
+            datetime.combine(day, datetime.min.time(), tzinfo=ROME),
+            f["clock"] + timedelta(minutes=5),
+        ])
         if prices_range:
             layout.yaxis2 = dict(range=prices_range)
         frames_plotly.append(go.Frame(
@@ -269,7 +274,9 @@ def render(store, week, logs):
                    range=[min(x_values)-x_margin, max(x_values)+x_margin]),
         yaxis=dict(title="NET GEX · mld USD / 1%",
                    range=[min(y_values)-y_margin, max(y_values)+y_margin]),
-        xaxis2=dict(title="Orario Roma · close ES 5 minuti", tickformat="%H:%M"),
+        xaxis2=dict(title="Orario Roma · close ES 5 minuti", tickformat="%H:%M",
+                    range=[datetime.combine(day, datetime.min.time(), tzinfo=ROME),
+                           good[0]["clock"] + timedelta(minutes=5)]),
         yaxis2=dict(title="ES future", range=first_range) if first_range else dict(title="ES future"),
         legend=dict(orientation="h", y=1.13),
         updatemenus=[dict(type="buttons", direction="left",
@@ -311,6 +318,7 @@ def render(store, week, logs):
             "ES 5m verificato": _last_price(es, f["clock"]),
             "Versione modello": f["edge"].get("model_version"),
             "SHA Cboe": f["sha"][:12],
+            "Timestamp Cboe originale": f["timestamp"],
         })
     st.dataframe(table, hide_index=True, width="stretch")
     st.caption(f"{len(good)} curve disponibili · fonte prezzo ES: {es_source}. "
@@ -318,5 +326,13 @@ def render(store, week, logs):
                "il punto azzurro sulla curva è una INTERPOLAZIONE, non un nuovo "
                "calcolo GEX. Massimi/minimi sono estremi campionati della curva. "
                "La qualità insufficiente indica un risultato diagnostico.")
+    repeated = len(good) - len({f["sha"] for f in good})
+    if repeated:
+        st.warning(f"{repeated} fotogrammi condividono una catena Cboe già "
+                   "presente in giornata: non considerarli nuove osservazioni "
+                   "indipendenti.")
+    st.caption("Gli assi della curva mantengono una scala comune calcolata sulle "
+               "fotografie archiviate della giornata: utile per la comparazione "
+               "VISIVA, non utilizzabile come informazione disponibile ex ante.")
     if omitted:
         st.caption(f"Rilevamenti esclusi ({len(omitted)}): " + "; ".join(omitted[:12]))
