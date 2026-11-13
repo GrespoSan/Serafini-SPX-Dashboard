@@ -9,7 +9,7 @@ import hashlib
 import json
 import math
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -22,7 +22,15 @@ from pine_news_overlay import append_news
 
 ROME = ZoneInfo("Europe/Rome")
 SLOTS = (("07:30", None), ("13:30", "07:30"),
-         ("15:50", "07:30"), ("20:30", "15:50"))
+         ("15:50", "07:30"), ("20:30", "15:50"))  # historical prior to 16 Nov
+
+def slots_for_day(day):
+    """Prospective frozen slots, never reinterpret prior Market Map exports."""
+    if day >= date(2026, 11, 16):
+        return (("07:30", None), ("14:46", "07:30"),
+                ("16:16", "07:30"), ("17:46", "16:16"),
+                ("20:30", "17:46"))
+    return SLOTS
 
 
 def basis_for_today(path, day, now):
@@ -178,7 +186,7 @@ def generate(today, now, basis, sources, news, news_status, output_dir):
     output_dir.mkdir(parents=True, exist_ok=True)
     produced = []
     skipped = {}
-    for slot, prior in SLOTS:
+    for slot, prior in slots_for_day(today):
         src = sources.get(slot)
         older = sources.get(prior) if prior else None
         if not src or not safe_source(src, now):

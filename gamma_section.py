@@ -15,7 +15,7 @@ from gamma_brief import select_key_levels, operational_summary, transition_zones
 from pine_export import make_pine
 from pine_compare import make_pine_comparison
 from pine_sources import load_export_profiles
-from acquisition_schedule import official_export_slots, CUTOFF_1446
+from acquisition_schedule import official_export_slots, CUTOFF_1446, CUTOFF_1616_1746
 from gamma_scale import profile_gamma_bounds, gamma_components
 from serafini_sigma import serafini_cash_levels, add_sigma_markers
 from operational_levels import find_candidates, proposed_levels, candidate_csv
@@ -154,7 +154,11 @@ def _snapshot_log_index(week, log_names, _store):
         elif slot == '46 15 * * 1-5':
             label='Pomeriggio 15:46'
         elif slot == '50 15 * * 1-5':
-            label='Pomeriggio · 08:50 Chicago'
+            label='Pomeriggio · 08:50 Chicago (storico)'
+        elif slot == '16 16 * * 1-5':
+            label='Ufficiale · 09:16 Chicago (slot 16:16)'
+        elif slot == '46 17 * * 1-5':
+            label='Ufficiale · 10:46 Chicago (slot 17:46)'
         elif slot == '30 20 * * 1-5':
             label='Sera · 13:30 Chicago'
         elif slot == '30 15 * * 1-5':
@@ -1236,9 +1240,10 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
         from asia_gamma import render_auto as render_asia_gamma
         render_asia_gamma(day, asia_c1, asia_p1, level_context=asia_level_context)
     st.subheader('Esporta i profili su TradingView — 5 situazioni')
-    st.caption('Secondo Pine ufficiale: 07:46 Chicago (slot logico 14:46), '
-               'disponibile dal 12/11/2026. Il rilevamento 13:30 resta nel Replay; '
-               'gli export storici non vengono rinominati o ricostruiti.')
+    st.caption('Dal 16/11/2026: 09:16 e 10:46 Chicago, slot logici 16:16 e 17:46 '
+               '(nel disallineamento DST sono 15:16 e 16:46 Roma). '
+               '14:46 rimane 07:46 Chicago dal 12/11. '
+               'I Pine storici 15:50 e 17:00 non sono rinominati.')
     scripts = {}
     export_issues = {}
     if offset is None or not math.isfinite(offset):
@@ -1248,13 +1253,18 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
             sources = _pine_export_data(week, day, len(logs), store, logs)
             # Esportazioni ufficiali correnti; 13:30 consultabile solo nel Replay.
             # Nessun 14:46 fittizio per le giornate prima del 12/11/2026.
-            plans = (
-                ('07:30', None),
-                ('14:46', '07:30'),
-                ('15:50', '07:30'),
-                ('17:00', '15:50'),
-                ('20:30', None),
-            )
+            if day >= CUTOFF_1616_1746:
+                plans = (
+                    ('07:30', None), ('14:46', '07:30'),
+                    ('16:16', '07:30'), ('17:46', '16:16'),
+                    ('20:30', None),
+                )
+            else:
+                plans = (
+                    ('07:30', None), ('14:46', '07:30'),
+                    ('15:50', '07:30'), ('17:00', '15:50'),
+                    ('20:30', None),
+                )
             for slot, preceding_slot in plans:
                 current = sources.get(slot)
                 preceding_frame = sources.get(preceding_slot) if preceding_slot else None
@@ -1314,13 +1324,22 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
                        "Le esportazioni NET GAMMA restano utilizzabili.")
 
     columns = st.columns(5, gap='small')
-    descriptions = (
-        ('07:30', '07:30 · 0DTE + Weekly'),
-        ('14:46', '07:30 0DTE → 14:46 0DTE + Weekly · 07:46 Chicago'),
-        ('15:50', '07:30 0DTE → 15:50 0DTE + Weekly'),
-        ('17:00', '15:50 0DTE → 17:00 0DTE + Weekly'),
-        ('20:30', '20:30 · SOLO 0DTE + Weekly correnti (nessun precedente)'),
-    )
+    if day >= CUTOFF_1616_1746:
+        descriptions = (
+            ('07:30', '07:30 · 0DTE + Weekly'),
+            ('14:46', '07:30 → 14:46 · 07:46 Chicago'),
+            ('16:16', '07:30 → 16:16 · 09:16 Chicago · 0DTE + Weekly'),
+            ('17:46', '16:16 → 17:46 · 10:46 Chicago · 0DTE + Weekly'),
+            ('20:30', '20:30 · SOLO 0DTE + Weekly correnti'),
+        )
+    else:
+        descriptions = (
+            ('07:30', '07:30 · 0DTE + Weekly'),
+            ('14:46', '07:30 0DTE → 14:46 0DTE + Weekly · 07:46 Chicago'),
+            ('15:50', '07:30 0DTE → 15:50 0DTE + Weekly'),
+            ('17:00', '15:50 0DTE → 17:00 0DTE + Weekly'),
+            ('20:30', '20:30 · SOLO 0DTE + Weekly correnti (nessun precedente)'),
+        )
     for index, (slot, description) in enumerate(descriptions, 1):
         with columns[index - 1]:
             script = scripts.get(slot)

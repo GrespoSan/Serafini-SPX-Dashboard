@@ -13,6 +13,7 @@ on:
       - 'ai_report.py'
       - 'research_gamma_replay_ui.py'
       - 'tests/test_slot_1446_cutover.py'
+      - 'tests/test_slot_1616_1746_chicago.py'
       - '.github/workflows/spx-slot-1446-migration-tests.yml'
   workflow_dispatch:
 
@@ -34,3 +35,5 @@ jobs:
         run: python -m pip install --quiet -r requirements.txt
       - name: Verify 13:30 history and 14:46 new official Pine/AI/Replay
         run: python -m unittest discover -s tests -p 'test_slot_1446_cutover.py' -v
+      - name: Verify Chicago 09:16/10:46 cutover and same-minute Replay
+        run: python -m unittest discover -s tests -p 'test_slot_1616_1746_chicago.py' -v

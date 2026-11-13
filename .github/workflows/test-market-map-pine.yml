@@ -8,6 +8,10 @@ on:
       - 'pine_gex_overlay.py'
       - 'pine_gex_sources.py'
       - 'pine_sources.py'
+      - 'acquisition_schedule.py'
+      - 'gamma_replay.py'
+      - 'gamma_section.py'
+      - 'tests/test_slot_1616_1746_chicago.py'
       - 'emergency_pine.py'
       - 'tests/test_pine_gex_style.py'
       - 'pine_news_overlay.py'
@@ -34,3 +38,4 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_pine_compare.py' -v
       - run: python -m unittest discover -s tests -p 'test_pine_gex_style.py' -v
       - run: python -m unittest discover -s tests -p 'test_emergency_pine.py' -v
+      - run: python -m unittest discover -s tests -p 'test_slot_1616_1746_chicago.py' -v
