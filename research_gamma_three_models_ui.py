@@ -205,6 +205,50 @@ def _daily_view(measurements):
         "gli stessi 50 strike. Edge è su tutta la catena 0DTE: "
         "l'ampiezza percentuale NON misura automaticamente un edge di trading."
     )
+
+    # Seconda vista per l'ipotesi di ricerca originale: gamma POSITIVO
+    # sopra uno spot SPX congelato al PRIMO download disponibile.
+    fixed_spot = float(base["spot"])
+    components = (
+        ("Serafini · gamma positivo sopra", "NET GAMMA Serafini"),
+        ("Solo OI · gamma positivo sopra", "NET GAMMA solo OI"),
+        ("Edge · GEX positivo sopra (50 strike)", "GEX Edge per strike (mld / 1%)"),
+    )
+    positive_by_field = {}
+    for label, key in components:
+        samples = []
+        for _, analysis in good:
+            above = [row[key] for row in analysis["rows"]
+                     if row["Strike SPX"] > fixed_spot]
+            if not above or any(v is None for v in above):
+                samples.append(None)
+            else:
+                samples.append(math.fsum(max(float(v), 0.) for v in above))
+        positive_by_field[label] = samples
+    positive_chart = go.Figure()
+    for label, samples in positive_by_field.items():
+        initial = samples[0]
+        values = [
+            100. * (v - initial) / initial
+            if initial is not None and initial > 0 and v is not None else None
+            for v in samples
+        ]
+        positive_chart.add_trace(go.Scatter(
+            x=times, y=values, mode="lines+markers", name=label))
+    positive_chart.add_hline(y=0, line_dash="dash", line_color="#777")
+    positive_chart.update_layout(
+        title=f"Contrazione gamma positivo sopra SPX {fixed_spot:,.2f} · soglia FISSA",
+        xaxis=dict(title="Download · ora Roma", tickformat="%H:%M"),
+        yaxis_title="Variazione % dal primo valore positivo disponibile",
+        height=420, hovermode="x unified")
+    st.plotly_chart(positive_chart, width="stretch")
+    st.caption(
+        "La soglia SPX è fissata al PRIMO snapshot, non spostata in base "
+        "ai prezzi futuri. I 50 strike Serafini sono identici tra fotografie. "
+        "Edge usa qui SOLO gli stessi 50 strike, non il NET GEX full-chain: "
+        "se mancano strike o la base è zero il valore è N/D. "
+        "Non è una dimostrazione di effetto sui prezzi ES."
+    )
     st.dataframe([{
         "Download Roma": clock.strftime("%H:%M:%S"),
         "Serafini · 50": r["serafini_sum50"],
