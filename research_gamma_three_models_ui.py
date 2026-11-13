@@ -274,6 +274,30 @@ def _daily_view(measurements):
         "l'ampiezza percentuale NON misura automaticamente un edge di trading."
     )
 
+    # Differenza OI+Volume vs solo OI su SCALA comune della stessa grandezza.
+    decomposition = go.Figure()
+    for label, key, color in (
+        ("Serafini · OI+Volume", "serafini_sum50", "#5c94e8"),
+        ("Solo OI", "oi_sum50", "#e5ba55"),
+        ("Contributo netto Volume", "volume_sum50", "#19a984"),
+    ):
+        decomposition.add_trace(go.Scatter(
+            x=times, y=[r[key] for _, r in good],
+            mode="lines+markers", name=label,
+            line=dict(color=color, width=2)))
+    decomposition.add_hline(y=0, line_dash="dash", line_color="#888")
+    decomposition.update_layout(
+        title="Come evolve la differenza attribuibile al Volume",
+        xaxis=dict(title="Ora del download Roma", tickformat="%H:%M"),
+        yaxis_title="NET GAMMA · stessa scala per tutte le curve",
+        height=400, hovermode="x unified")
+    st.plotly_chart(decomposition, width="stretch",
+                    key="research_gamma_daily_volume_component")
+    st.caption("Serafini = Solo OI + contributo netto Volume in ogni orario. "
+               "Il contributo non è osservazione delle posizioni dei dealer; "
+               "l'Open Interest può essere aggiornato con frequenza diversa "
+               "dal volume cumulativo.")
+
     # Seconda vista per l'ipotesi di ricerca originale: gamma POSITIVO
     # sopra uno spot SPX congelato al PRIMO download disponibile.
     fixed_spot = float(base["spot"])
@@ -381,6 +405,10 @@ def render(week, store, logs):
 
     st.divider()
     st.markdown("**Evoluzione delle tre misure nella giornata (solo ufficiali)**")
+    st.caption("I grafici sopra confrontano TRE FORMULE su UNA fotografia. "
+               "Il pulsante sotto confronta invece diversi ORARI, quando "
+               "sono disponibili almeno due download ufficiali validi. "
+               "Una sola fotografia mattutina non misura ancora evoluzione.")
     day_key = f"gamma_three_models_daily_{week}_{day}"
     if st.button("Calcola tutte le fotografie ufficiali del giorno",
                  key=f"gamma_three_models_all_{week}_{day}"):
