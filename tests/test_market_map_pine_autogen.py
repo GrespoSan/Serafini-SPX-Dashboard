@@ -1,10 +1,11 @@
 """No-network regression of unattended Pine generator; never use future-day data."""
 import tempfile
 import unittest
+from unittest.mock import patch
 from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
-from market_map_pine_autogen import generate, safe_source
+from market_map_pine_autogen import generate, safe_source, get_news
 
 ROME=ZoneInfo("Europe/Rome")
 DAY=date(2026,11,6)
@@ -21,6 +22,38 @@ def src(slot):
                         "Weekly":group("2026-11-13")}}
 
 class PointInTime(unittest.TestCase):
+    def test_current_public_calendar_api_verified_point_in_time(self):
+        event = {"day": DAY, "clock": "14:30", "kind": "CPI",
+                 "provider": "BLS", "source": "https://www.bls.gov/"}
+        other = {**event, "day": date(2026, 11, 7)}
+        with patch("macro_calendar.load_calendar",
+                   return_value=([event, other],
+                                 {"healthy": ["BLS", "BEA", "ISM"],
+                                  "complete": True})):
+            events, status = get_news(DAY)
+            self.assertEqual(events, [event])
+            self.assertEqual(status, "VERIFIED_AT_GENERATION")
+
+    def test_partial_or_unavailable_calendar_fails_closed(self):
+        event = {"day": DAY, "clock": "14:30", "kind": "CPI"}
+        with patch("macro_calendar.load_calendar",
+                   return_value=([event], {"healthy": ["BLS"],
+                                           "complete": False})):
+            news, status = get_news(DAY)
+            self.assertEqual(news, [event])
+            self.assertEqual(status, "PARTIAL_CALENDAR_UNVERIFIED")
+            with tempfile.TemporaryDirectory() as tmp:
+                result = generate(DAY, NOW, 25,
+                                  {"20:30": src("20:30")},
+                                  news, status, Path(tmp))
+                self.assertEqual(result["produced"], [])
+                self.assertEqual(
+                    result["skipped"]["20:30"], "WAIT_NEWS_SOURCE_UNVERIFIED")
+        with patch("macro_calendar.load_calendar",
+                   side_effect=RuntimeError("provider not reachable")):
+            self.assertEqual(get_news(DAY),
+                             ([], "UNAVAILABLE_RuntimeError"))
+
     def test_four_slots(self):
         inputs={slot:src(slot) for slot in ("07:30","13:30","15:50","20:30")}
         with tempfile.TemporaryDirectory() as tmp:
