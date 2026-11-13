@@ -160,8 +160,8 @@ def _one_snapshot_view(result):
         rows=2, cols=1, shared_xaxes=True, vertical_spacing=.12,
         row_heights=[.56, .44],
         subplot_titles=(
-            "Confronto su IDENTICA scala: Serafini vs solo OI",
-            "Differenza per strike = contributo netto del Volume",
+            "Serafini vs solo OI · stessa scala",
+            "Contributo netto del Volume per strike",
         ))
     for field, label, color in (
         ("NET GAMMA Serafini", "OI + Volume (Serafini)", "#5c94e8"),
@@ -181,10 +181,20 @@ def _one_snapshot_view(result):
                              line_color="#8b8b8b", line_dash="dash")
         diagnostic.add_vline(x=spot, row=row_i, col=1,
                              line_color="#9c9c9c", line_dash="dot")
+    st.caption(
+        f"Spot SPX della fotografia: {spot:,.2f} · linea verticale puntinata"
+    )
     diagnostic.update_layout(
-        height=640, hovermode="x unified",
-        legend=dict(orientation="h", y=1.14),
-        title=f"Spot SPX della fotografia: {spot:,.2f} · linea verticale puntinata")
+        height=690,
+        hovermode="x unified",
+        showlegend=True,
+        legend=dict(
+            orientation="h", x=0, y=1.14,
+            xanchor="left", yanchor="bottom",
+            font=dict(size=12),
+        ),
+        margin=dict(t=118, b=52, l=55, r=28),
+    )
     diagnostic.update_xaxes(title="Strike SPX", row=2, col=1)
     st.plotly_chart(diagnostic, width="stretch",
                     key="research_gamma_volume_difference")
