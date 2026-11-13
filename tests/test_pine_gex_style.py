@@ -132,8 +132,9 @@ class PineGexStyleTests(unittest.TestCase):
             "gex_put_wall_spx": "7500.0",
             "gex_gamma_flip_spx": "7581.84",
         }
-        csv_bytes = ("".join(f"{k},{v}\\n" for k,v in meta.items())
-                     + "profile,expiry,strike_spx,price_es,net_gamma\\n").encode()
+        csv_bytes = (chr(10).join(f"{k},{v}" for k, v in meta.items())
+                     + chr(10) + "profile,expiry,strike_spx,price_es,net_gamma"
+                     + chr(10)).encode()
         expected = {"call_wall_spx": 7550., "put_wall_spx": 7500.,
                     "gamma_flip_spx": 7581.84}
         self.assertEqual(verified_official_gex_csv(
