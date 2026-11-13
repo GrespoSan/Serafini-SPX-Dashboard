@@ -56,52 +56,42 @@ def levels_for_export(store, week, day: date, slot, frame, logs):
         return None
 
     if frame.get("origin") in ("UFFICIALE", "STUDIO STORICO DA ARCHIVIO"):
-        from gamma_replay import official_slots_for_day
-        from gamma_replay import _download_clock
-        slots = official_slots_for_day(day)
-        if slot not in slots:
+        # Reuse the exact original selected and validated by _official_frames.
+        # A SECOND scan of the scheduled logs could miss the correct file due
+        # to timestamp formatting / cron alias differences and quietly
+        # generate 'na' for every GEX level despite a valid Edge report.
+        path = frame.get("snapshot_path")
+        if (not isinstance(path, str)
+                or not path.startswith(f"{week}/snapshots/SPX_CBOE_")
+                or not path.endswith(".json.gz")):
             return None
-        expected_schedule = slots[slot]
-        for log in logs:
-            try:
-                row = json.loads(store.download(f"{week}/logs/{log['name']}"))
-                clock = _download_clock(row)
-                if (row.get("scheduled_slot") != expected_schedule
-                        or row.get("rome_date") != day.isoformat()
-                        or row.get("status") not in ("NUOVO", "INVARIATO")
-                        or not str(row.get("file", "")).startswith(f"{week}/snapshots/")
-                        or clock is None
-                        or clock.strftime("%H:%M:%S") != source_clock):
-                    continue
-                raw = store.download(row["file"])
-                from net_gamma import read_snapshot, profile
-                snapshot = read_snapshot(raw)
-                if (str(snapshot.get("timestamp")) != str(cboe_stamp)
-                        or not math.isclose(
-                            float(snapshot["data"]["current_price"]),
-                            float(source_spot), abs_tol=0.01)):
-                    continue
-                # Cross-check against Serafini levels of the frame used to
-                # generate THIS Pine. This disambiguates same-clock uploads.
-                reference = float(frame.get("reference_spx") or 0)
-                if reference <= 0:
-                    continue
-                recalculated = profile(snapshot, day, reference)["rows"]
-                original = (frame.get("profiles") or {}).get("0DTE", {}).get("rows") or []
-                if (len(recalculated) != len(original)
-                        or any(
-                            abs(float(a["strike_spx"]) - float(b["strike_spx"])) > 1e-6
-                            or abs(float(a["net_gamma"]) - float(b["net_gamma"])) > 1e-6
-                            for a, b in zip(recalculated, original))):
-                    continue
-                from edge_auto import result_from_snapshot
-                edge = result_from_snapshot(raw, 0.0)
-                return _clean_levels(edge, day, spot=source_spot,
-                                     sha256=hashlib.sha256(raw).hexdigest())
-            except (ValueError, KeyError, TypeError, RuntimeError,
-                    OSError, OverflowError, ImportError):
-                continue
-        return None
+        try:
+            raw = store.download(path)
+            from net_gamma import read_snapshot, profile
+            snap = read_snapshot(raw)
+            if (str(snap.get("timestamp")) != str(cboe_stamp)
+                    or not math.isclose(
+                        float(snap["data"]["current_price"]),
+                        float(source_spot), abs_tol=0.01)):
+                return None
+            reference = float(frame.get("reference_spx") or 0)
+            if reference <= 0:
+                return None
+            original = (frame.get("profiles") or {}).get("0DTE", {}).get("rows") or []
+            recalculated = profile(snap, day, reference)["rows"]
+            if (len(recalculated) != len(original)
+                    or any(
+                        abs(float(a["strike_spx"]) - float(b["strike_spx"])) > 1e-6
+                        or abs(float(a["net_gamma"]) - float(b["net_gamma"])) > 1e-6
+                        for a, b in zip(recalculated, original))):
+                return None
+            from edge_auto import result_from_snapshot
+            edge = result_from_snapshot(raw, 0.0)
+            return _clean_levels(edge, day, spot=source_spot,
+                                 sha256=hashlib.sha256(raw).hexdigest())
+        except (ValueError, KeyError, TypeError, RuntimeError,
+                OSError, OverflowError, ImportError):
+            return None
 
     # Replay Pine uses the same validated compact/Edge pair as GEX EDGE.
     try:
