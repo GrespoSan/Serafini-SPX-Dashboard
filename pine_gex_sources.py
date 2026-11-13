@@ -85,10 +85,29 @@ def levels_for_export(store, week, day: date, slot, frame, logs):
                         or abs(float(a["net_gamma"]) - float(b["net_gamma"])) > 1e-6
                         for a, b in zip(recalculated, original))):
                 return None
-            from edge_auto import result_from_snapshot
-            edge = result_from_snapshot(raw, 0.0)
-            return _clean_levels(edge, day, spot=source_spot,
-                                 sha256=hashlib.sha256(raw).hexdigest())
+            # Attempt direct Edge first; a temporary engine/network failure
+            # must not hide independent, already verified same-chain GEX.
+            try:
+                from edge_auto import result_from_snapshot
+                edge = result_from_snapshot(raw, 0.0)
+                direct = _clean_levels(
+                    edge, day, spot=source_spot,
+                    sha256=hashlib.sha256(raw).hexdigest())
+                if direct:
+                    return direct
+            except (ValueError, KeyError, TypeError, RuntimeError,
+                    OSError, OverflowError, ImportError):
+                pass
+            # Only the SAME official 0DTE SHA, day, clock, slot and Cboe
+            # timestamp are accepted. Never use stale 17:00 levels for 07:30.
+            from gex_official_csv import verified_official_gex_csv
+            try:
+                feed = store.download("mt4/official100.csv")
+                return verified_official_gex_csv(
+                    feed, raw, day, slot, cboe_stamp, source_clock)
+            except (ValueError, KeyError, TypeError, RuntimeError,
+                    OSError, OverflowError):
+                return None
         except (ValueError, KeyError, TypeError, RuntimeError,
                 OSError, OverflowError, ImportError):
             return None
