@@ -20,7 +20,7 @@ BASIS = {"basis": 29.0, "reference_date": DAY.isoformat(), "source": "TEST"}
 REFERENCE = 7500.0
 
 
-class Clock:
+class Clock(datetime):
     @classmethod
     def now(cls, tz=None):
         return datetime(2026, 11, 4, 19, 0, tzinfo=tz)
