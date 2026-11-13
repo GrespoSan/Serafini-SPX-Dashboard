@@ -2,9 +2,14 @@
 
 Il 13:30 viene acquisito come STUDIO tramite replay.yml.
 L'ultimo slot ufficiale 13:30 è datato 11/11/2026.
-Dal 12/11/2026 il nuovo ufficiale e' 07:46 America/Chicago;\n14:46 Roma di solito, 13:46 Roma durante il disallineamento DST.
+Dal 12/11/2026 il nuovo ufficiale e' 07:46 America/Chicago;
+14:46 Roma di solito, 13:46 Roma durante il disallineamento DST.
 
-Dal 16/11/2026 09:16 e 10:46 America/Chicago sostituiscono 08:50/10:00 Chicago (slot 16:16 e 17:46).\n\nQuesta policy NON genera download: serve ad interpretare i log REALI,
+Dal 16/11/2026 09:16 e 10:46 America/Chicago sostituiscono
+08:50/10:00 Chicago (slot 16:16 e 17:46). Durante il disallineamento
+sono le 15:16 e 16:46 Roma. Non si alterano le fotografie storiche.
+
+Questa policy NON genera download: serve ad interpretare i log REALI,
 senza rinominare/retro-promuovere rilevamenti storici.
 """
 from datetime import date
