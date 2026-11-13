@@ -1,4 +1,4 @@
-name: SPX Macro News - independent BLS and FinanceCalendar
+name: SPX Macro News - public BLS BEA Census Fed ISM
 
 on:
   push:
@@ -26,13 +26,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Compile dual-source news and Pine modules
+      - name: Compile public-source news and Pine modules
         run: python -m compileall -q macro_calendar.py bls_calendar.py gamma_section.py pine_news_overlay.py
       - name: Install app dependencies
         run: python -m pip install -q -r requirements.txt
-      - name: Regression CPI November 10, BLS/FC outage, DST and source conflicts
+      - name: Regression CPI November 10, provider outages, DST and source deduplication
         run: python -m unittest discover -s tests -p 'test_macro_bls_dual_source.py' -v
-      - name: Verify authenticated FinanceCalendar and original Pine timestamps
+      - name: Verify public no-key sources and original Pine timestamps
         run: |
           python -m unittest discover -s tests -p 'test_macro_calendar_auth.py' -v
           python -m unittest discover -s tests -p 'test_pine_news_overlay.py' -v

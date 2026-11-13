@@ -59,7 +59,7 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_pine_news_overlay.py' -v
       - name: Test emergency one-snapshot current Pine without Supabase
         run: python -m unittest discover -s tests -p 'test_emergency_pine.py' -v
-      - name: Test FinanceCalendar authentication without secrets
+      - name: Test public calendar without authentication secrets
         run: python -m unittest discover -s tests -p 'test_macro_calendar_auth.py' -v
       - name: Test full-chain Edge GEX sign and Call/Put NET/Gross reconciliation
         run: python -m unittest discover -s tests -p 'test_edge_gex_exposure.py' -v
