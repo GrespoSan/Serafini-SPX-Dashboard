@@ -1,12 +1,10 @@
-"""Macro Serafini: CPI 10/11/2026 sempre segnalato anche senza FinanceCalendar."""
+"""Macro Serafini: CPI BLS and other public sources without private API keys."""
 import unittest
 from datetime import date, datetime, timezone
 from unittest.mock import patch
 
 from bls_calendar import parse_ics, parse_month_html, fetch_bls
-from macro_calendar import (
-    _kind, _prepare, _rome_time, merge_calendars, load_calendar,
-)
+from macro_calendar import load_calendar, _event
 from pine_news_overlay import append_news
 
 
@@ -89,92 +87,90 @@ END:VCALENDAR"""
         self.assertEqual(req.call_count, 2)
 
 
-class DualSourceTests(unittest.TestCase):
-    def test_fc_v2_release_at_utc_is_primary(self):
-        event = {
-            "series_code": "us-cpi", "country": "US", "date": "2026-11-10",
-            "release_at_utc": "2026-11-10T13:30:00+00:00",
-            "time_utc": "2026-11-10T15:30:00+00:00",
-            "status": "scheduled",
-        }
-        prepared = _prepare([event], NOV10)
-        self.assertEqual(prepared[0]["clock"], "14:30")
-        self.assertEqual(prepared[0]["kind"], "CPI")
+class PublicSourceTests(unittest.TestCase):
+    def tearDown(self):
+        load_calendar.clear()
 
-    def test_cpi_present_when_financecalendar_returns_empty(self):
-        with patch("macro_calendar._fetch", return_value=[]), \
-             patch("macro_calendar.st.secrets", {"FINANCE_CALENDAR_API_KEY":"test"}), \
-             patch("bls_calendar.fetch_bls", return_value=[cpi()]):
+    def test_cpi_remains_available_if_other_sources_fail(self):
+        patches = (
+            patch("bls_calendar.fetch_bls", return_value=[cpi()]),
+            patch("macro_calendar._claims_events", side_effect=OSError("offline")),
+            patch("macro_calendar._bea_events", side_effect=OSError("offline")),
+            patch("macro_calendar._census_events", side_effect=OSError("offline")),
+            patch("macro_calendar._fed_events", side_effect=OSError("offline")),
+            patch("macro_calendar._ism_events", side_effect=OSError("offline")),
+        )
+        load_calendar.clear()
+        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
             events, health = load_calendar(NOV10, NOV10)
-        self.assertEqual([(e["kind"],e["clock"]) for e in events],
-                         [("CPI","14:30")])
-        self.assertTrue(health["bls_ok"])
-        self.assertTrue(health["financecalendar_ok"])
-        self.assertTrue(any("assente" in msg for msg in health["messages"]))
+        self.assertEqual([(e["kind"], e["clock"]) for e in events],
+                         [("CPI", "14:30")])
+        self.assertIn("BLS", health["healthy"])
+        self.assertNotIn("BLS", health["failed"])
+        self.assertFalse(health["complete"])
+        self.assertEqual(len(health["failed"]), 5)
 
-    def test_cpi_still_visible_without_financecalendar_api_key(self):
-        with patch("macro_calendar.st.secrets", {}), \
-             patch("bls_calendar.fetch_bls", return_value=[cpi()]):
+    def test_all_sources_unavailable_are_not_zero_events_verified(self):
+        patches = (
+            patch("bls_calendar.fetch_bls", side_effect=OSError("unavailable")),
+            patch("macro_calendar._claims_events", side_effect=OSError("offline")),
+            patch("macro_calendar._bea_events", side_effect=OSError("offline")),
+            patch("macro_calendar._census_events", side_effect=OSError("offline")),
+            patch("macro_calendar._fed_events", side_effect=OSError("offline")),
+            patch("macro_calendar._ism_events", side_effect=OSError("offline")),
+        )
+        load_calendar.clear()
+        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
             events, health = load_calendar(NOV10, NOV10)
-        self.assertEqual(events[0]["kind"], "CPI")
-        self.assertFalse(health["financecalendar_ok"])
-        self.assertTrue(health["bls_ok"])
+        self.assertEqual(events, [])
+        self.assertEqual(health["healthy"], [])
+        self.assertFalse(health["complete"])
+        self.assertEqual(len(health["failed"]), 6)
 
-    def test_bls_time_wins_while_showing_disagreement(self):
-        fc = [{
-            **cpi(), "clock": "15:30", "source": "https://www.financecalendar.com",
-            "provider": "FinanceCalendar", "official_schedule": False,
-        }]
-        merged, warnings = merge_calendars(fc, [cpi()],
-                                          finance_ok=True, bls_ok=True)
-        self.assertEqual(len(merged), 1)
-        self.assertEqual(merged[0]["clock"], "14:30")
-        self.assertIn("Orario discordante", merged[0]["source_warning"])
-        self.assertTrue(warnings)
+    def test_duplicates_preserve_first_verified_public_source(self):
+        bea_duplicate = {**cpi(), "provider": "BEA"}
+        patches = (
+            patch("bls_calendar.fetch_bls", return_value=[cpi()]),
+            patch("macro_calendar._claims_events", return_value=[]),
+            patch("macro_calendar._bea_events", return_value=[bea_duplicate]),
+            patch("macro_calendar._census_events", return_value=[]),
+            patch("macro_calendar._fed_events", return_value=[]),
+            patch("macro_calendar._ism_events", return_value=[]),
+        )
+        load_calendar.clear()
+        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
+            events, health = load_calendar(NOV10, NOV10)
+        self.assertTrue(health["complete"])
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["provider"], "BLS")
 
-    def test_blssource_outage_does_not_hide_fc_event(self):
-        fc = _prepare([{
-            "series_code": "us-cpi", "date": "2026-11-10",
-            "release_at_utc": "2026-11-10T13:30:00+00:00",
-            "country": "US",
-        }], NOV10)
-        with patch("macro_calendar._fetch", return_value=[{
-            "series_code": "us-cpi", "date": "2026-11-10",
-            "release_at_utc": "2026-11-10T13:30:00+00:00",
-            "country": "US",
-        }]), \
-             patch("macro_calendar.st.secrets", {"FINANCE_CALENDAR_API_KEY":"x"}), \
-             patch("bls_calendar.fetch_bls", side_effect=OSError("BLS unavailable")):
-            events, status = load_calendar(NOV10, NOV10)
-        self.assertEqual(events[0]["clock"], "14:30")
-        self.assertFalse(status["bls_ok"])
+    def test_public_calendar_chicago_new_york_rome_dst_conversion(self):
+        self.assertEqual(
+            _event(date(2026, 11, 10), 8, 30, "CPI", "BLS",
+                   "https://www.bls.gov/")["clock"], "14:30")
+        self.assertEqual(
+            _event(date(2027, 3, 15), 8, 30, "CPI", "BLS",
+                   "https://www.bls.gov/")["clock"], "13:30")
 
-    def test_both_unavailable_are_not_misreported_as_zero_events(self):
-        with patch("macro_calendar.st.secrets", {}), \
-             patch("bls_calendar.fetch_bls", side_effect=OSError("BLS unavailable")):
-            with self.assertRaisesRegex(RuntimeError, "Entrambe"):
-                load_calendar(NOV10, NOV10)
-
-    def test_macro_ui_keeps_bls_link_no_yesterday_and_no_yellow_fc_warning(self):
+    def test_macro_ui_distinguishes_partial_and_unavailable(self):
         from pathlib import Path
         source = (Path(__file__).resolve().parents[1] /
                   "macro_calendar.py").read_text(encoding="utf-8")
-        self.assertIn("Calendario ufficiale BLS</a>", source)
-        self.assertNotIn('with st.expander(f"Ieri', source)
-        self.assertNotIn('st.warning("Calendario parziale:', source)
-        self.assertIn('st.caption("FinanceCalendar temporaneamente non disponibile', source)
-        self.assertIn('elif not health["financecalendar_ok"]:', source)
+        self.assertIn('st.warning("Calendario PARZIALE: "', source)
+        self.assertIn('st.error("Fonti macro non raggiungibili', source)
+        self.assertIn("BLS_URL", source)
+        self.assertIn("SOURCES", source)
+        self.assertNotIn("FINANCE_CALENDAR_API_KEY", source)
 
     def test_pine_marks_cpi_only_before_verified_download(self):
-        events=[cpi()]
+        events = [cpi()]
         before = append_news(
-            "//@version=6\nindicator('test',overlay=true)",
+            "//@version=6\\nindicator('test',overlay=true)",
             events, captured_at="2026-11-10T07:30:10+01:00")
         after = append_news(
-            "//@version=6\nindicator('test',overlay=true)",
+            "//@version=6\\nindicator('test',overlay=true)",
             events, captured_at="2026-11-10T15:50:10+01:00")
         self.assertIn("newsTime0", before)
-        # Etichetta TradingView intenzionalmente verticale C / P / I.
         self.assertIn('timestamp("Europe/Rome", 2026, 11, 10, 14, 30)', before)
         self.assertIn("newsLabel0", before)
         self.assertNotIn("newsTime0", after)
