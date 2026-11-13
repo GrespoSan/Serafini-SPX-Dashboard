@@ -189,7 +189,11 @@ def build_feed(store, day, basis_result, mode="Replay", strike_count=50, edge_ar
     else:
         # Comportamento preesistente: ultimo Replay, incluse le acquisizioni ufficiali.
         frames = _study_frames(store, week, day)
-        # Official frames take precedence for the same slot, exactly as in REPLAY.
+        # Official 09:16 Chicago (logical 16:16) and the existing study
+        # Replay 16:16 are independent originals. Keep BOTH and select by
+        # actual download time, not by the nickname.
+        if "16:16" in frames and "16:16" in official:
+            frames["16:16 · Replay"] = frames["16:16"]
         frames.update(official)
     candidates = []
     for slot, frame in frames.items():
@@ -250,7 +254,9 @@ def build_feed(store, day, basis_result, mode="Replay", strike_count=50, edge_ar
         verified = verified_edge_from_artifact(
             frame, day, artifact_dir=edge_artifacts, analyzer=edge_analyzer)
         if verified is None:
-            verified = verified_edge_from_saved_replay(store, week, day, slot, frame)
+            verified = verified_edge_from_saved_replay(
+                store, week, day,
+                "16:16" if slot == "16:16 · Replay" else slot, frame)
         if verified:
             # The existing Serafini basis is used for ALL three ES overlays.
             # No second basis download and no independent price estimation.
