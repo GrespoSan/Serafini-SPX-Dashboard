@@ -41,7 +41,7 @@ class NewChicagoOfficialSlotsTests(unittest.TestCase):
         for day, first, second in (
             (date(2026,11,16), "16:16", "17:46"),
             (date(2027,3,15), "15:16", "16:46"),
-            (date(2027,10,28), "15:16", "16:46"),
+            (date(2027,11,3), "15:16", "16:46"),
         ):
             with self.subTest(day=day):
                 self.assertEqual(datetime(day.year,day.month,day.day,9,16,
