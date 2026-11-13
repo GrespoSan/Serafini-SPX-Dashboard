@@ -39,6 +39,9 @@ gexFlipWidth = input.int(1, "Spessore", minval=1, maxval=5, group=gexGroup, inli
 float gexCallES = {call}
 float gexPutES = {put}
 float gexFlipES = {flip}
+// Una sola quota quando CW e PW coincidono entro mezzo tick ES/MES.
+// Le due linee rimangono al prezzo REALE: nessuno spostamento artificiale.
+bool gexWallsCoincident = not na(gexCallES) and not na(gexPutES) and math.abs(gexCallES - gexPutES) <= syminfo.mintick * 0.5
 var line gexCallLine = na
 var line gexPutLine = na
 var line gexFlipLine = na
@@ -67,10 +70,13 @@ if barstate.islast
     if validTicker and showGexLevels
         if not na(gexCallES)
             gexCallLine := line.new(bar_index, gexCallES, bar_index + 1, gexCallES, xloc=xloc.bar_index, extend=extend.both, color=gexCallColor, style=line.style_solid, width=gexCallWidth)
-            gexCallLabel := label.new(chart.left_visible_bar_time, gexCallES, "GEX CW " + str.tostring(gexCallES, format.mintick), xloc=xloc.bar_time, yloc=yloc.price, style=label.style_label_left, color=color.new(color.black, 75), textcolor=gexCallColor, size=size.small)
+            gexCallLabel := label.new(chart.left_visible_bar_time, gexCallES, (gexWallsCoincident ? "GEX CW = PW " : "GEX CW ") + str.tostring(gexCallES, format.mintick), xloc=xloc.bar_time, yloc=yloc.price, style=label.style_label_left, color=color.new(color.black, 75), textcolor=(gexWallsCoincident ? color.white : gexCallColor), size=size.small)
         if not na(gexPutES)
-            gexPutLine := line.new(bar_index, gexPutES, bar_index + 1, gexPutES, xloc=xloc.bar_index, extend=extend.both, color=gexPutColor, style=line.style_solid, width=gexPutWidth)
-            gexPutLabel := label.new(chart.left_visible_bar_time, gexPutES, "GEX PW " + str.tostring(gexPutES, format.mintick), xloc=xloc.bar_time, yloc=yloc.price, style=label.style_label_left, color=color.new(color.black, 75), textcolor=gexPutColor, size=size.small)
+            // Confluenza reale: base verde solida e puntini viola sopra,
+            // una sola etichetta. Quando diversi, PW torna solida viola.
+            gexPutLine := line.new(bar_index, gexPutES, bar_index + 1, gexPutES, xloc=xloc.bar_index, extend=extend.both, color=gexPutColor, style=(gexWallsCoincident ? line.style_dotted : line.style_solid), width=gexPutWidth)
+            if not gexWallsCoincident
+                gexPutLabel := label.new(chart.left_visible_bar_time, gexPutES, "GEX PW " + str.tostring(gexPutES, format.mintick), xloc=xloc.bar_time, yloc=yloc.price, style=label.style_label_left, color=color.new(color.black, 75), textcolor=gexPutColor, size=size.small)
         if not na(gexFlipES)
             gexFlipLine := line.new(bar_index, gexFlipES, bar_index + 1, gexFlipES, xloc=xloc.bar_index, extend=extend.both, color=gexFlipColor, style=line.style_dotted, width=gexFlipWidth)
             gexFlipLabel := label.new(chart.left_visible_bar_time, gexFlipES, "GEX GF " + str.tostring(gexFlipES, format.mintick), xloc=xloc.bar_time, yloc=yloc.price, style=label.style_label_left, color=color.new(color.black, 75), textcolor=gexFlipColor, size=size.small)
