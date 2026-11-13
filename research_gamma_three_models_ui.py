@@ -59,6 +59,7 @@ def oi_only_rows(snapshot, expiry, serafini_rows):
             "NET GAMMA solo OI": call_oi - put_oi,
             "Call gamma solo OI": call_oi,
             "Put gamma solo OI": put_oi,
+            "Contributo Volume · NET": original - (call_oi - put_oi),
         })
     return rows
 
@@ -99,6 +100,7 @@ def _snapshot_analysis(week, day, path, basis, _store):
         "rows": core,
         "serafini_sum50": math.fsum(r["NET GAMMA Serafini"] for r in core),
         "oi_sum50": math.fsum(r["NET GAMMA solo OI"] for r in core),
+        "volume_sum50": math.fsum(r["Contributo Volume · NET"] for r in core),
         "edge_full": float(edge["net_gex"]),
         "edge_match": sum(r["GEX Edge per strike (mld / 1%)"] is not None
                           for r in core),
@@ -109,6 +111,14 @@ def _snapshot_analysis(week, day, path, basis, _store):
 
 
 def _one_snapshot_view(result):
+    st.markdown("**Cosa cambia davvero fra Serafini e solo OI?**")
+    volume_net = result["volume_sum50"]
+    serafini_net = result["serafini_sum50"]
+    oi_net = result["oi_sum50"]
+    # Identità algebrica verificata sui 50 strike: Serafini = solo OI + volume.
+    if not math.isclose(oi_net + volume_net, serafini_net,
+                        rel_tol=1e-9, abs_tol=1e-5):
+        raise ValueError("Il contributo Volume non riconcilia Serafini")
     a, b, c = st.columns(3)
     a.metric("Serafini · 50 strike (OI + Volume)",
              f"{result['serafini_sum50']:+,.3f}")
@@ -116,6 +126,19 @@ def _one_snapshot_view(result):
              f"{result['oi_sum50']:+,.3f}")
     c.metric("NET GEX Edge · intera catena 0DTE",
              format_gex_billions(result["edge_full"], signed=True))
+    share = (100.0 * volume_net / serafini_net
+             if serafini_net != 0 else None)
+    p, q = st.columns(2)
+    p.metric("Differenza esatta: contributo netto Volume",
+             f"{volume_net:+,.3f}")
+    q.metric("Volume / NET GAMMA Serafini",
+             f"{share:+.1f}%" if share is not None else "N/D")
+    st.caption(
+        "Identità verificata: NET GAMMA Serafini = NET GAMMA solo OI "
+        "+ contributo netto del Volume. Il contributo può essere negativo "
+        "o superare il 100% quando Call e Put si compensano. "
+        "È una misura algebrica, NON la quota di posizioni dei dealer."
+    )
     st.caption(
         "I primi due sono nelle unità NET GAMMA di Serafini (50 strike). "
         "Il terzo è esposizione monetaria modellata in USD per movimento "
@@ -128,26 +151,71 @@ def _one_snapshot_view(result):
         st.warning(f"GEX Edge disponibile solo per {result['edge_match']}/50 strike: "
                    "i mancanti restano N/D, NON assumono valore zero.")
     rows = result["rows"]
-    figure = make_subplots(
+    spot = result["spot"]
+    # Evidenziare la differenza direttamente: overlay su scala UNICA + delta,
+    # separando il GEX monetario invece di assimilarne le ordinate.
+    x = [r["Strike SPX"] for r in rows]
+    delta = [r["Contributo Volume · NET"] for r in rows]
+    diagnostic = make_subplots(
+        rows=2, cols=1, shared_xaxes=True, vertical_spacing=.12,
+        row_heights=[.56, .44],
+        subplot_titles=(
+            "Confronto su IDENTICA scala: Serafini vs solo OI",
+            "Differenza per strike = contributo netto del Volume",
+        ))
+    for field, label, color in (
+        ("NET GAMMA Serafini", "OI + Volume (Serafini)", "#5c94e8"),
+        ("NET GAMMA solo OI", "Solo OI", "#e5ba55"),
+    ):
+        diagnostic.add_trace(go.Scatter(
+            x=x, y=[r[field] for r in rows], mode="lines+markers",
+            name=label, line=dict(color=color, width=2),
+            marker=dict(size=5)), row=1, col=1)
+    diagnostic.add_trace(go.Bar(
+        x=x, y=delta, name="Contributo Volume",
+        marker_color=["#1caa7b" if d >= 0 else "#df6464" for d in delta],
+        hovertemplate="Strike %{x}<br>Volume NET %{y:+.4f}<extra></extra>"
+    ), row=2, col=1)
+    for row_i in (1, 2):
+        diagnostic.add_hline(y=0, row=row_i, col=1,
+                             line_color="#8b8b8b", line_dash="dash")
+        diagnostic.add_vline(x=spot, row=row_i, col=1,
+                             line_color="#9c9c9c", line_dash="dot")
+    diagnostic.update_layout(
+        height=640, hovermode="x unified",
+        legend=dict(orientation="h", y=1.14),
+        title=f"Spot SPX della fotografia: {spot:,.2f} · linea verticale puntinata")
+    diagnostic.update_xaxes(title="Strike SPX", row=2, col=1)
+    st.plotly_chart(diagnostic, width="stretch",
+                    key="research_gamma_volume_difference")
+    st.caption("Le due linee del primo grafico hanno ESATTAMENTE la stessa "
+               "scala. Le barre inferiori mostrano per ogni strike quanto "
+               "il Volume ha modificato il NET GAMMA. "
+               "Verde = contributo netto positivo; rosso = negativo. "
+               "Non sono variazioni temporali né acquisti/vendite osservati.")
+    with st.expander("Visualizza anche i tre profili originali e tutti i 50 strike",
+                     expanded=False):
+        figure = make_subplots(
         rows=3, cols=1, shared_xaxes=True,
         row_heights=[.33, .33, .34], vertical_spacing=.08,
         subplot_titles=("NET GAMMA Serafini · OI+volume (50 strike)",
                         "NET GAMMA solo OI (stessi 50 strike)",
                         "GEX Edge modellato · strike in comune (mld USD/1%)"))
-    colors = ("#598ee2", "#e4b662", "#ba87dd")
-    for i, key in enumerate(("NET GAMMA Serafini", "NET GAMMA solo OI",
-                              "GEX Edge per strike (mld / 1%)"), 1):
-        figure.add_trace(go.Bar(
-            x=[r["Strike SPX"] for r in rows],
-            y=[r[key] for r in rows],
-            name=key, marker_color=colors[i-1]), row=i, col=1)
-        figure.add_hline(y=0, row=i, col=1, line_color="#7e7e7e",
-                         line_dash="dash", line_width=1)
-    figure.update_layout(height=900, showlegend=False, bargap=.18)
-    figure.update_xaxes(title="Strike SPX · identica selezione Serafini", row=3, col=1)
-    st.plotly_chart(figure, width="stretch",
-                    key="research_three_gamma_strike_comparison")
-    st.dataframe(rows, hide_index=True, width="stretch")
+        colors = ("#598ee2", "#e4b662", "#ba87dd")
+        for i, key in enumerate(("NET GAMMA Serafini", "NET GAMMA solo OI",
+                                  "GEX Edge per strike (mld / 1%)"), 1):
+            figure.add_trace(go.Bar(
+                x=[r["Strike SPX"] for r in rows],
+                y=[r[key] for r in rows],
+                name=key, marker_color=colors[i-1]), row=i, col=1)
+            figure.add_hline(y=0, row=i, col=1, line_color="#7e7e7e",
+                             line_dash="dash", line_width=1)
+        figure.update_layout(height=900, showlegend=False, bargap=.18)
+        figure.update_xaxes(title="Strike SPX · identica selezione Serafini",
+                            row=3, col=1)
+        st.plotly_chart(figure, width="stretch",
+                        key="research_three_gamma_strike_comparison")
+        st.dataframe(rows, hide_index=True, width="stretch")
     st.caption("I 50 strike Serafini sono scelti 25 sotto + 25 sopra il close "
                "precedente; i valori Edge per strike sono mostrati SOLO dove "
                "disponibili sulla stessa fotografia. Fonte Cboe SHA-256: "
@@ -253,6 +321,7 @@ def _daily_view(measurements):
         "Download Roma": clock.strftime("%H:%M:%S"),
         "Serafini · 50": r["serafini_sum50"],
         "Solo OI · 50": r["oi_sum50"],
+        "Volume NET · 50": r["volume_sum50"],
         "Edge · mld USD/1%": r["edge_full"] / 1e9,
         "Qualità Edge": "VALIDA" if r["quality"] else "DIAGNOSTICA",
         "Versione": r["model"],
@@ -274,11 +343,12 @@ def render(week, store, logs):
                        index=days.index(today) if today in days else 0,
                        format_func=lambda d: d.strftime("%d/%m/%Y"),
                        key=f"gamma_three_models_day_{week}")
-    basis = _basis(week, day)
-    if basis is None:
-        st.warning("Differenziale ES−SPX non verificato per questa data: "
-                   "calcolo sospeso, senza valori ricostruiti.")
-        return
+    # Questo confronto è SOLO in coordinate SPX. Edge calcola net_gex
+    # dalla catena originale, indipendente dall'offset grafico ES-SPX.
+    # Non richiedere una base ES per ricercare fotografie storiche.
+    basis = 0.0
+    st.caption("Confronto interamente in strike SPX: non richiede il "
+               "differenziale ES−SPX e non riporta livelli ES.")
     try:
         entries = _official_entries(week, day, store, logs)
     except (ValueError, RuntimeError, TypeError, KeyError, OSError) as exc:
