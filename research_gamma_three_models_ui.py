@@ -7,6 +7,7 @@ non confrontare numeri grezzi tra le tre scale.
 """
 from collections import defaultdict
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 import hashlib
 import math
 
@@ -224,7 +225,7 @@ def render(week, store, logs):
     year, number = map(int, week.split("-W"))
     monday = date.fromisocalendar(year, number, 1)
     days = [monday + timedelta(days=i) for i in range(5)]
-    today = datetime.now().date()
+    today = datetime.now(ZoneInfo("Europe/Rome")).date()
     day = st.selectbox("Giornata Cboe ufficiale", days,
                        index=days.index(today) if today in days else 0,
                        format_func=lambda d: d.strftime("%d/%m/%Y"),
