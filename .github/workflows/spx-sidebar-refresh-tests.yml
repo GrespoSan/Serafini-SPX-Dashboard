@@ -1,0 +1,35 @@
+name: SPX sidebar refresh and authentication regression
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app.py
+      - spx_refresh.py
+      - tests/test_spx_sidebar_refresh.py
+      - .github/workflows/spx-sidebar-refresh-tests.yml
+  push:
+    branches: [main]
+    paths:
+      - app.py
+      - spx_refresh.py
+      - tests/test_spx_sidebar_refresh.py
+      - .github/workflows/spx-sidebar-refresh-tests.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile sidebar and refresh without secrets or external services
+        run: python -m py_compile app.py spx_refresh.py tests/test_spx_sidebar_refresh.py
+      - name: Check both access roles and targeted cache invalidation
+        run: python -m unittest discover -s tests -p 'test_spx_sidebar_refresh.py' -v
