@@ -205,7 +205,7 @@ with st.sidebar:
                  help='Rilegge le fonti aggiornate senza uscire, cambiare ruolo o richiedere la password.'):
         from spx_refresh import refresh_current_data
         refresh_current_data()
-        st.toast('Lettura dati aggiornata dalle fonti disponibili.', icon='🔄')
+        st.toast('Aggiornamento richiesto: ricarico i dati disponibili.', icon='🔄')
     if st.button('Esci'):
         for key in ('role',):
             st.session_state.pop(key, None)
