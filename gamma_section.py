@@ -15,7 +15,7 @@ from gamma_brief import select_key_levels, operational_summary, transition_zones
 from pine_export import make_pine
 from pine_compare import make_pine_comparison
 from pine_sources import load_export_profiles
-from acquisition_schedule import official_export_slots, CUTOFF_1446
+from acquisition_schedule import official_export_slots, CUTOFF_1446, CUTOFF_1616_1746
 from gamma_scale import profile_gamma_bounds, gamma_components
 from serafini_sigma import serafini_cash_levels, add_sigma_markers
 from operational_levels import find_candidates, proposed_levels, candidate_csv
@@ -1253,7 +1253,6 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
             sources = _pine_export_data(week, day, len(logs), store, logs)
             # Esportazioni ufficiali correnti; 13:30 consultabile solo nel Replay.
             # Nessun 14:46 fittizio per le giornate prima del 12/11/2026.
-            from acquisition_schedule import CUTOFF_1616_1746
             if day >= CUTOFF_1616_1746:
                 plans = (
                     ('07:30', None), ('14:46', '07:30'),
