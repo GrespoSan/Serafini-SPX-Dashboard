@@ -239,7 +239,7 @@ def _daily_view(measurements):
     positive_chart.update_layout(
         title=f"Contrazione gamma positivo sopra SPX {fixed_spot:,.2f} · soglia FISSA",
         xaxis=dict(title="Download · ora Roma", tickformat="%H:%M"),
-        yaxis_title="Variazione % dal primo valore positivo disponibile",
+        yaxis_title="Variazione % dal primo snapshot (base zero = N/D)",
         height=420, hovermode="x unified")
     st.plotly_chart(positive_chart, width="stretch")
     st.caption(
