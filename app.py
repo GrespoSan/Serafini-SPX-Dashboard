@@ -210,7 +210,6 @@ with st.sidebar:
         for key in ('role',):
             st.session_state.pop(key, None)
         st.rerun()
-    st.caption('Snapshot SPX archiviati in Supabase Storage privato.')
 
 # Allineamento al layout Multi-Market: CONTEXTO collassato, NET GAMMA aperto,
 # selettore originale e importazione CBOE nello stesso pannello.
