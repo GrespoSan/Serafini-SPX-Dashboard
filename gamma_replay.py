@@ -79,7 +79,8 @@ def _official_frames(_store, week, day, logs):
     for slot, candidates in by_slot.items():
         for clock, item in sorted(candidates, key=lambda pair: pair[0]):
             try:
-                snap = read_snapshot(_store.download(item["file"]))
+                raw_cboe = _store.download(item["file"])
+                snap = read_snapshot(raw_cboe)
                 ref = float(snap["data"].get("prev_day_close") or 0)
                 if ref <= 0:
                     continue
@@ -122,6 +123,11 @@ def _official_frames(_store, week, day, logs):
                     "spot": snap["data"].get("current_price"),
                     "reference_spx": ref, "profiles": profiles,
                     "cboe_timestamp_original": snap.get("timestamp"),
+                    # Exact file path chosen by the Replay OFFICIAL reader.
+                    # Export GEX must use this SAME file, never reselect by
+                    # timestamp from a different log or slot.
+                    "snapshot_path": item["file"],
+                    "snapshot_download_clock": clock.strftime("%H:%M:%S"),
                 }
                 break
             except (KeyError, TypeError, ValueError, OSError, RuntimeError, OverflowError):

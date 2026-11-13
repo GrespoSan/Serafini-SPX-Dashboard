@@ -118,14 +118,48 @@ class PineGexStyleTests(unittest.TestCase):
                 FakeStore(), WEEK, DAY, "18:30",
                 {**frame, "clock": "18:31:02"}, logs=[]))
 
+    def test_verified_cloud_feed_fallback_is_exact_and_not_an_old_slot(self):
+        from gex_official_csv import verified_official_gex_csv
+        original = b"snapshot-exact-original"
+        meta = {
+            "schema": "serafini_mt4_v4", "mode": "Ufficiale",
+            "date_rome": str(DAY), "slot_rome": "17:00",
+            "download_clock_rome": "17:00:18",
+            "gex_model": "EDGE_0DTE", "gex_expiry": str(DAY),
+            "gex_source_sha256": hashlib.sha256(original).hexdigest(),
+            "gex_cboe_timestamp": "2026-11-13 15:59:26",
+            "gex_call_wall_spx": "7550.0",
+            "gex_put_wall_spx": "7500.0",
+            "gex_gamma_flip_spx": "7581.84",
+        }
+        csv_bytes = (chr(10).join(f"{k},{v}" for k, v in meta.items())
+                     + chr(10) + "profile,expiry,strike_spx,price_es,net_gamma"
+                     + chr(10)).encode()
+        expected = {"call_wall_spx": 7550., "put_wall_spx": 7500.,
+                    "gamma_flip_spx": 7581.84}
+        self.assertEqual(verified_official_gex_csv(
+            csv_bytes, original, DAY, "17:00",
+            "2026-11-13 15:59:26", "17:00:18"), expected)
+        self.assertIsNone(verified_official_gex_csv(
+            csv_bytes, original, DAY, "15:50",
+            "2026-11-13 15:59:26", "17:00:18"))
+        self.assertIsNone(verified_official_gex_csv(
+            csv_bytes, b"different-original", DAY, "17:00",
+            "2026-11-13 15:59:26", "17:00:18"))
+        self.assertIsNone(verified_official_gex_csv(
+            csv_bytes, original, DAY, "17:00",
+            "2026-11-13 15:59:26", "17:01:18"))
+
     def test_official_levels_must_match_same_raw_profile(self):
         original = b"gzip-cboe-synthetic"
         log = {"scheduled_slot": "30 7 * * 1-5",
                "rome_date": str(DAY), "status": "NUOVO",
-               "file": f"{WEEK}/snapshots/official.json.gz"}
+               "file": f"{WEEK}/snapshots/SPX_CBOE_20261113_060000.json.gz"}
         snap = {"timestamp": "source", "data": {"current_price": 7500.0}}
         rows = [{"strike_spx": 7500.0, "net_gamma": 2.0}]
         frame = {"origin": "UFFICIALE", "clock": "07:30:12",
+                 "snapshot_download_clock": "07:30:12",
+                 "snapshot_path": log["file"],
                  "spot": 7500.0, "reference_spx": 7490.0,
                  "cboe_timestamp_original": "source",
                  "profiles": {"0DTE": {"rows": rows}}}
