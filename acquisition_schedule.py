@@ -65,7 +65,11 @@ def expected_replay_slots(day):
     """14:46 e' l'ID logico del 07:46 Chicago, attivo dal 12/11."""
     return tuple(x for x in ALL_SLOTS if
                  not (x == "14:46" and day < CUTOFF_1446)
-                 and not (x == "17:46" and day < CUTOFF_1616_1746))
+                 and not (x == "17:46" and day < CUTOFF_1616_1746)
+                 # 15:50 / 17:00 were official OLD slots only; the Replay
+                 # downloader has never acquired those labels independently.
+                 and not (x in ("15:50", "17:00") and
+                          day >= CUTOFF_1616_1746))
 
 
 def official_export_slots(day):

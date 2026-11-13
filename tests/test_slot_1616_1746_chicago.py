@@ -67,6 +67,38 @@ class NewChicagoOfficialSlotsTests(unittest.TestCase):
         self.assertIn("17:46", expected_replay_slots(day))
         self.assertNotIn("17:46", expected_replay_slots(date(2026,11,13)))
 
+    def test_replay_expected_slots_exclude_retired_official_identifiers(self):
+        historical = expected_replay_slots(date(2026, 11, 13))
+        future = expected_replay_slots(date(2026, 11, 16))
+        self.assertIn("15:50", historical)
+        self.assertIn("17:00", historical)
+        self.assertNotIn("17:46", historical)
+        self.assertIn("16:16", future)
+        self.assertIn("17:46", future)
+        self.assertNotIn("15:50", future)
+        self.assertNotIn("17:00", future)
+
+    def test_comparison_default_tracks_chicago_not_constant_1550(self):
+        from gamma_section import _afternoon_default_rome
+        self.assertEqual(_afternoon_default_rome(
+            date(2026, 11, 13)).strftime("%H:%M"), "15:50")
+        for day, target in ((date(2026, 11, 16), "16:16"),
+                            (date(2027, 3, 15), "15:16"),
+                            (date(2027, 11, 3), "15:16")):
+            with self.subTest(day=day):
+                self.assertEqual(
+                    _afternoon_default_rome(day).strftime("%H:%M"), target)
+        source = (Path(__file__).resolve().parents[1] /
+                  "gamma_section.py").read_text(encoding="utf-8")
+        self.assertIn("target_afternoon = _afternoon_default_rome(day)", source)
+        self.assertIn("later, target_afternoon.hour, target_afternoon.minute", source)
+
+    def test_market_map_pine_diagnostic_is_date_aware(self):
+        source = (Path(__file__).resolve().parents[1] /
+                  "market_map_pine_autogen.py").read_text(encoding="utf-8")
+        self.assertIn("recognized = official_slots_for_day(day)", source)
+        self.assertNotIn("(OFFICIAL | LEGACY_STUDY).items()", source)
+
     def test_automatic_pine_does_not_use_obsolete_slots(self):
         day = date(2026,11,16)
         self.assertEqual(auto_slots(day),
