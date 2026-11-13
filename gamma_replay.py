@@ -178,7 +178,9 @@ def render(store, week, logs, view_mode=None):
         "Ufficiale pre-USA dalle 12/11: 07:46 Chicago (slot logico 14:46; "
         "14:46 Roma normalmente, 13:46 Roma nel disallineamento DST). "
         "13:30 Roma resta solo Replay; storico 13:30 ufficiale soltanto "
-        "l'11/11. Gli orari effettivi Roma sono registrati nei fotogrammi."
+        "l'11/11. Dal 16/11 gli ufficiali 16:16 e 17:46 sono ancorati "
+        "alle 09:16 e 10:46 Chicago; il Replay 16:16 resta distinto. "
+        "Gli orari effettivi Roma sono registrati nei fotogrammi."
     )
     from datetime import timedelta
     iso_year, iso_week = map(int, week.split("-W"))
@@ -214,13 +216,24 @@ def render(store, week, logs, view_mode=None):
         st.rerun()
     with st.spinner("Caricamento profili compatti e snapshot ufficiali..."):
         frames = _study_frames(store, week, day)
-        for slot, item in _official_frames(store, week, day, logs).items():
+        official = _official_frames(store, week, day, logs)
+        # At 09:16 Chicago the official (logical 16:16) can coexist with
+        # the original nonofficial 16:16 Replay. Never overwrite the latter:
+        # both original acquisitions are separate frames, ordered by real
+        # download timestamp, and the Replay GEX sidecar keeps its own ID.
+        if "16:16" in frames and "16:16" in official:
+            frames["16:16 · Replay"] = frames["16:16"]
+        for slot, item in official.items():
             # Conserva la precedenza del compact storico 13:30 solo PRIMA
             # della promozione dello slot a ufficiale.
             if not (slot == "13:30" and raw_study_1330_for_day(day)
                     and slot in frames):
                 frames[slot] = item
     expected_slots = expected_replay_slots(day)
+    if "16:16 · Replay" in frames:
+        items = list(expected_slots)
+        items.insert(items.index("16:16") + 1, "16:16 · Replay")
+        expected_slots = tuple(items)
     all_available = [(slot, frames[slot]) for slot in expected_slots if slot in frames
                      and frames[slot].get("profiles", {}).get(kind, {}).get("rows")]
     # Ordinare secondo il download EFFETTIVO e non secondo la stringa dello
