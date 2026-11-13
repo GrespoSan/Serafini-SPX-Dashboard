@@ -1337,6 +1337,14 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
                 on_click="ignore",
             )
             st.caption(description)
+            if script is not None:
+                gex = (sources.get(slot) or {}).get('gex_levels') or {}
+                gex_count = sum(gex.get(key) is not None for key in
+                                ('call_wall_spx', 'put_wall_spx',
+                                 'gamma_flip_spx'))
+                st.caption(f"GEX Edge 0DTE: {gex_count}/3 livelli verificati"
+                           if gex_count else
+                           "GEX Edge 0DTE: N/D per questa fotografia")
             if slot == '14:46' and day < CUTOFF_1446 and script is None:
                 st.caption(
                     'Non ancora attivo nella giornata selezionata. '
