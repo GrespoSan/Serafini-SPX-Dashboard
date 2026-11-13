@@ -28,6 +28,7 @@ def load_export_profiles(store, week, day: date, logs):
             frames[slot] = frame
 
     expected = {"0DTE": day.isoformat(), "Weekly": weekly_expiry(day).isoformat()}
+    from pine_gex_sources import levels_for_export
     result = {}
     for slot in active_slots:
         frame = frames.get(slot)
@@ -85,5 +86,9 @@ def load_export_profiles(store, week, day: date, logs):
                 "download_rome": frame.get("download_rome"),
                 "reference_spx": frame.get("reference_spx"),
                 "profiles": clean,
+                # Optional, independently verified Edge 0DTE Wall/Flip for
+                # THIS snapshot only. Failure cannot change Serafini data.
+                "gex_levels": levels_for_export(
+                    store, week, day, slot, frame, logs),
             }
     return result

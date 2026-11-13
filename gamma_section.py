@@ -1273,13 +1273,15 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
                             preceding_frame['profiles']['0DTE'],
                             current_p['0DTE'], current_p['Weekly'], offset,
                             day.isoformat(), preceding_slot, slot,
-                            current.get('cboe_timestamp') or '')
+                            current.get('cboe_timestamp') or '',
+                            gex=current.get('gex_levels'))
                     else:
                         # Due profili CORRENTI senza confronti: 07:30 e 20:30.
                         scripts[slot] = make_pine(
                             current_p['0DTE'], current_p['Weekly'], offset,
                             day.isoformat(), current.get('cboe_timestamp') or '',
-                            'Mattina 07:30' if slot == '07:30' else 'Sera 20:30')
+                            'Mattina 07:30' if slot == '07:30' else 'Sera 20:30',
+                            gex=current.get('gex_levels'))
                 except (ValueError, TypeError, KeyError, RuntimeError) as exc:
                     export_issues[slot] = str(exc)[:130]
         except Exception as exc:
@@ -1335,6 +1337,14 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
                 on_click="ignore",
             )
             st.caption(description)
+            if script is not None:
+                gex = (sources.get(slot) or {}).get('gex_levels') or {}
+                gex_count = sum(gex.get(key) is not None for key in
+                                ('call_wall_spx', 'put_wall_spx',
+                                 'gamma_flip_spx'))
+                st.caption(f"GEX Edge 0DTE: {gex_count}/3 livelli verificati"
+                           if gex_count else
+                           "GEX Edge 0DTE: N/D per questa fotografia")
             if slot == '14:46' and day < CUTOFF_1446 and script is None:
                 st.caption(
                     'Non ancora attivo nella giornata selezionata. '

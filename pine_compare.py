@@ -5,11 +5,12 @@ Non alterare automaticamente scala ne' posizioni scelte dall'utente.
 """
 from math import isfinite
 from pine_export import _pine_array, make_pine, _initial_manual_scale
+from pine_gex_overlay import append_gex_overlays
 
 
 def make_pine_comparison(previous_odte, current_odte, current_weekly,
                          offset, date_text, previous_slot, current_slot,
-                         cboe_stamp=""):
+                         cboe_stamp="", *, gex=None):
     if (previous_slot, current_slot) not in (
             ("07:30", "13:30"), ("07:30", "14:46"), ("07:30", "15:50"),
             ("15:50", "17:00"), ("17:00", "20:30"),
@@ -159,4 +160,4 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
     if showTop3Odte
         drawOdteTopProjections(showExtension ? topCallFull : topCallCore, showExtension ? topPutFull : topPutCore)
 """
-    return code
+    return append_gex_overlays(code, gex, offset)

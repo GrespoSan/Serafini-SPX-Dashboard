@@ -5,6 +5,7 @@ from math import isfinite, ceil
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 import re
+from pine_gex_overlay import append_gex_overlays
 
 
 def _pine_array(rows, field: str, offset: float = 0.0):
@@ -55,7 +56,7 @@ def _initial_manual_scale(profiles):
     return ceil(minimum * 10.0 - 1e-8) / 10.0
 
 
-def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stamp: str, acquisition_label: str = '', *, current_only: bool = False) -> str:
+def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stamp: str, acquisition_label: str = '', *, current_only: bool = False, gex: dict | None = None) -> str:
     if not isfinite(offset):
         raise ValueError('Il differenziale non è finito')
     if not odte.get('rows') or not weekly.get('rows'):
@@ -124,7 +125,7 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
         indicator_title = f'Serafini SPX NET GAMMA | {date_text}{tag}'
         clock_note = ''
     warning = ('// NOTA: 0DTE e Weekly hanno LA STESSA SCADENZA in questa data: i due profili sono identici per definizione.\n' if same_exp else '')
-    return f'''//@version=6
+    code = f'''//@version=6
 indicator("{indicator_title}", overlay=true, max_lines_count=500, max_labels_count=20)
 // EXPORT REVISION: V53-TV-MANUAL-SCALE
 // Rilevamento selezionato: {clean_label or "Non identificato"}
@@ -257,3 +258,4 @@ if barstate.islast and validTicker
     if showTop3Odte
         drawOdteTopProjections(showExtension ? topCallFull : topCallCore, showExtension ? topPutFull : topPutCore)
 '''
+    return append_gex_overlays(code, gex, offset)
