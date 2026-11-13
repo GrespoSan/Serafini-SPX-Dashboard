@@ -9,7 +9,7 @@ import hashlib
 import json
 import math
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -26,7 +26,7 @@ SLOTS = (("07:30", None), ("13:30", "07:30"),
 
 def slots_for_day(day):
     """Prospective frozen slots, never reinterpret prior Market Map exports."""
-    if day >= __import__("datetime").date(2026, 11, 16):
+    if day >= date(2026, 11, 16):
         return (("07:30", None), ("14:46", "07:30"),
                 ("16:16", "07:30"), ("17:46", "16:16"),
                 ("20:30", "17:46"))
