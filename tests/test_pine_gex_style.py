@@ -69,6 +69,23 @@ class PineGexStyleTests(unittest.TestCase):
                 self.assertIn("if validTicker and showGexLevels", code)
                 self.assertIn("Proietta Top 3 Call / Put 0DTE", code)
 
+    def test_shared_call_put_strike_renders_one_label_without_shifting(self):
+        # Real 13 Nov 2026 SPX official: both walls at SPX 7500; ES basis +22.
+        script = make_pine(
+            profile(str(DAY)), profile("2026-11-20"), 22.0,
+            str(DAY), "2026-11-13 15:59:26",
+            gex={"call_wall_spx": 7500.0,
+                 "put_wall_spx": 7500.0,
+                 "gamma_flip_spx": 7580.0})
+        self.assertIn("float gexCallES = 7522.00000000", script)
+        self.assertIn("float gexPutES = 7522.00000000", script)
+        self.assertIn("bool gexWallsCoincident =", script)
+        self.assertIn('"GEX CW = PW "', script)
+        self.assertIn("style=(gexWallsCoincident ? line.style_dotted : line.style_solid)", script)
+        self.assertIn("if not gexWallsCoincident", script)
+        self.assertNotIn("gexCallES + syminfo.mintick", script)
+        self.assertNotIn("gexPutES + syminfo.mintick", script)
+
     def test_nd_flip_no_invented_level_no_previous_source(self):
         script = make_pine(profile(str(DAY)), profile("2026-11-20"), 20,
                            str(DAY), "", gex={"call_wall_spx": 7520,
