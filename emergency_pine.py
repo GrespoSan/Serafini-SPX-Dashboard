@@ -7,6 +7,7 @@ from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
 import gzip
 import math
+import hashlib
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
@@ -87,16 +88,28 @@ def calculate_current_profiles(snapshot, day: date):
     return profiles, reference, spot
 
 
-def generate_current_pine(snapshot, day: date, basis, cboe_stamp, label):
+def generate_current_pine(snapshot, day: date, basis, cboe_stamp, label, *, raw_cboe=None):
     """Un Pine soltanto: senza precedenti, stesso make_pine della dashboard."""
     value = float(basis)
     if not math.isfinite(value):
         raise ValueError("Differenziale ES-SPX non finito.")
     profiles, reference, spot = calculate_current_profiles(snapshot, day)
+    gex = None
+    if raw_cboe is not None:
+        try:
+            from edge_auto import result_from_snapshot
+            from pine_gex_sources import _clean_levels
+            edge = result_from_snapshot(raw_cboe, 0.0)
+            gex = _clean_levels(edge, day, spot=spot,
+                                sha256=hashlib.sha256(raw_cboe).hexdigest())
+        except (ValueError, KeyError, TypeError, RuntimeError, OSError,
+                ImportError, OverflowError):
+            # Emergency NET GAMMA stays available even when Edge is offline.
+            gex = None
     script = make_pine(
         profiles["0DTE"], profiles["Weekly"], value,
         day.isoformat(), cboe_stamp,
-        acquisition_label=label, current_only=True,
+        acquisition_label=label, current_only=True, gex=gex,
     )
     return script, profiles, reference, spot
 
@@ -250,7 +263,8 @@ def render():
              if active["download_rome"] else "Importazione locale - ora download ignota")
     try:
         pine, profiles, reference, spot = generate_current_pine(
-            snapshot, day, basis, local.timestamp, label)
+            snapshot, day, basis, local.timestamp, label,
+            raw_cboe=local.download(local.object_path))
     except (ValueError, TypeError, KeyError, OverflowError) as exc:
         st.error(f"NET GAMMA o Pine non generabile: {exc}")
         return
