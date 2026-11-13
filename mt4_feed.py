@@ -24,6 +24,73 @@ from es_spx_basis import download_and_calculate
 ROME = ZoneInfo('Europe/Rome')
 
 
+def edge_levels_metadata(result):
+    """Use existing Edge's SPX Wall/Flip. NEVER derive them from Serafini bars.
+
+    Gamma Flip may legitimately be unavailable if the modeled curve does not
+    cross zero. Independent missing levels remain N/D, never zero-price lines.
+    """
+    mapping = (
+        ("call_wall", "gex_call_wall_spx"),
+        ("put_wall", "gex_put_wall_spx"),
+        ("flip", "gex_gamma_flip_spx"),
+    )
+    levels = {}
+    for source, destination in mapping:
+        value = result.get(source)
+        try:
+            price = float(value)
+            if math.isfinite(price) and price > 0:
+                levels[destination] = price
+        except (ValueError, TypeError, OverflowError):
+            pass
+    return levels
+
+
+def verified_edge_from_saved_replay(store, week, day, slot, frame):
+    """Reuse the verified archived Edge sidecar for the SAME Replay download.
+
+    The Replay raw gzip is normally not retained in Supabase. The archived
+    Edge report was calculated at acquisition by the pinned independent
+    engine. Use the dashboard's strict pair validator, never a nearby slot.
+    """
+    if frame.get("origin") != "STUDIO NON UFFICIALE":
+        return None
+    try:
+        # Available on the publisher PYTHONPATH=dashboard-edge:edge-pinned.
+        from edge_replay_data import read_pair
+        compact, sidecar, report, clock = read_pair(store, week, day, slot)
+        if (clock.strftime("%H:%M:%S") != frame.get("clock")
+                or compact.get("cboe_timestamp_original")
+                   != frame.get("cboe_timestamp_original")
+                or sidecar.get("cboe_sha256") != report.get("sha256")
+                or not math.isclose(float(report["spot_spx"]),
+                                    float(frame["spot"]), abs_tol=0.01)
+                or report.get("quality_sufficient") is not True):
+            return None
+        sign = report.get("modeled_gamma_sign")
+        net = float(report.get("net_gex"))
+        if (not math.isfinite(net)
+                or ("Positive" if net > 0 else "Negative" if net < 0 else "Zero")
+                   != sign):
+            return None
+        return {
+            "gex_model": "EDGE_0DTE",
+            "gex_modeled_sign": sign,
+            "gex_cboe_timestamp": frame["cboe_timestamp_original"],
+            "gex_expiry": day.isoformat(),
+            "gex_source_sha256": report["sha256"],
+            **edge_levels_metadata({
+                "call_wall": report.get("call_wall_spx"),
+                "put_wall": report.get("put_wall_spx"),
+                "flip": report.get("gamma_flip_spx"),
+            }),
+        }
+    except (RuntimeError, OSError, KeyError, TypeError, ValueError,
+            OverflowError, ImportError, AttributeError):
+        return None
+
+
 def verified_edge_from_artifact(frame, day, artifact_dir=None, analyzer=None):
     """Optional exact-snapshot Edge 0DTE sign for MT4 v3.44 (never inferred).
 
@@ -85,7 +152,9 @@ def verified_edge_from_artifact(frame, day, artifact_dir=None, analyzer=None):
             return {'gex_model': 'EDGE_0DTE',
                     'gex_modeled_sign': sign,
                     'gex_cboe_timestamp': expected_ts,
-                    'gex_expiry': day.isoformat()}
+                    'gex_expiry': day.isoformat(),
+                    'gex_source_sha256': hashlib.sha256(raw).hexdigest(),
+                    **edge_levels_metadata(result)}
         except (OSError, EOFError, ValueError, TypeError, KeyError,
                 RuntimeError, ImportError, MemoryError):
             # GEX is optional; do not interrupt the Serafini feed.
@@ -180,13 +249,31 @@ def build_feed(store, day, basis_result, mode="Replay", strike_count=50, edge_ar
         # authenticated snapshot, never modify the legacy v3/50 feed.
         verified = verified_edge_from_artifact(
             frame, day, artifact_dir=edge_artifacts, analyzer=edge_analyzer)
+        if verified is None:
+            verified = verified_edge_from_saved_replay(store, week, day, slot, frame)
         if verified:
+            # The existing Serafini basis is used for ALL three ES overlays.
+            # No second basis download and no independent price estimation.
+            for spx_key in (
+                'gex_call_wall_spx', 'gex_put_wall_spx', 'gex_gamma_flip_spx'
+            ):
+                spx = verified.get(spx_key)
+                if spx is not None and math.isfinite(float(spx)) and float(spx) > 0:
+                    verified[spx_key.replace('_spx', '_es')] = float(spx) + basis
             meta.extend((key, verified[key]) for key in (
                 'gex_model', 'gex_modeled_sign',
-                'gex_cboe_timestamp', 'gex_expiry'))
+                'gex_cboe_timestamp', 'gex_expiry',
+                'gex_source_sha256',
+                'gex_call_wall_spx', 'gex_call_wall_es',
+                'gex_put_wall_spx', 'gex_put_wall_es',
+                'gex_gamma_flip_spx', 'gex_gamma_flip_es',
+            ) if key in verified)
         print('MT4 100 Edge GEX ' + mode + ' ' + str(day) + ' ' + slot
-              + ': ' + (verified['gex_modeled_sign'] if verified else 'N/D'
-                        + ' (raw/expiry/quality not verified)'))
+              + ': ' + (verified['gex_modeled_sign'] if verified else 'N/D')
+              + (' | Call/Put/Flip ' + str(sum(
+                  key in verified for key in (
+                      'gex_call_wall_es','gex_put_wall_es','gex_gamma_flip_es')))
+                 + '/3' if verified else ' | raw/sidecar/quality not verified'))
     for item in meta:
         out.writerow(item)
     out.writerow(['profile', 'expiry', 'strike_spx', 'price_es', 'net_gamma'])
