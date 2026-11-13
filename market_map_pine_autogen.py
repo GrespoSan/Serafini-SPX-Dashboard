@@ -104,7 +104,8 @@ def get_sources(day, store):
     if not profiles:
         # Diagnostic only: never log option contents, credentials, raw JSON or
         # Supabase object bodies. The reader may silently reject invalid Gamma.
-        from gamma_replay import OFFICIAL, LEGACY_STUDY, weekly_expiry
+        from gamma_replay import LEGACY_STUDY, weekly_expiry
+        from acquisition_schedule import official_slots_for_day
         from net_gamma import read_snapshot, profile
         import json
         info = {"week": week, "logs_listed": len(logs),
@@ -116,7 +117,10 @@ def get_sources(day, store):
                 if item.get("rome_date") != day.isoformat():
                     continue
                 info["candidate_logs"] += 1
-                slot = next((k for k,v in (OFFICIAL | LEGACY_STUDY).items()
+                recognized = official_slots_for_day(day)
+                if day < date(2026, 11, 11):
+                    recognized.update(LEGACY_STUDY)
+                slot = next((k for k, v in recognized.items()
                              if v == item.get("scheduled_slot")), None)
                 reason = None
                 if not slot:
