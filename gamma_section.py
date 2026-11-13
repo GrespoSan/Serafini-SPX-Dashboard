@@ -287,6 +287,18 @@ def _morning_asia_candidates(week, target, log_names, _store):
     return None
 
 
+def _afternoon_default_rome(day):
+    """Exact Chicago-anchored official slot, including DST mismatch weeks.
+
+    Used for choosing the suggested comparison pair ONLY; never rewrites
+    historical data or a user's manually selected snapshots.
+    """
+    local = ZoneInfo("Europe/Rome")
+    chicago = ZoneInfo("America/Chicago")
+    hour, minute = (9, 16) if day >= CUTOFF_1616_1746 else (8, 50)
+    return datetime.combine(day, time(hour, minute), tzinfo=chicago).astimezone(local)
+
+
 def render_comparison(store, week, snaps, logs):
     """Confronto autonomo; usa il contesto del profilo singolo selezionato."""
     ctx = st.session_state.get(f'gamma_compare_context_{week}')
@@ -338,9 +350,10 @@ def render_comparison(store, week, snaps, logs):
             return min(matches)[1] if matches else None
 
         now_rome = datetime.now(ZoneInfo('Europe/Rome'))
+        target_afternoon = _afternoon_default_rome(day)
         allow_afternoon = (day < now_rome.date()
-                           or (day == now_rome.date() and
-                               (now_rome.hour, now_rome.minute) >= (15, 50)))
+                           or (day == now_rome.date()
+                               and now_rome >= target_afternoon))
         default_first = closest_slot(same_day[:-1], 7, 30) or same_day[0]
         first_key = f'v19_first_{day}'
         if st.session_state.get(first_key) not in same_day[:-1]:
@@ -358,7 +371,9 @@ def render_comparison(store, week, snaps, logs):
             st.info('Non ci sono snapshot successivi per il confronto.')
             return
         second_key = f'v19_second_{day}_{first_name}'
-        default_second = (closest_slot(later, 15, 50) if allow_afternoon else None)
+        default_second = (closest_slot(
+            later, target_afternoon.hour, target_afternoon.minute)
+            if allow_afternoon else None)
         if default_second is None:
             default_second = closest_slot(later, 13, 30)
         if default_second is None:
