@@ -143,12 +143,14 @@ class PineGexStyleTests(unittest.TestCase):
         fake_net.profile = lambda *args: {"rows": rows}
         fake_edge = types.ModuleType("edge_auto")
         fake_edge.result_from_snapshot = lambda raw, offset: edge
+        fake_gamma = types.ModuleType("gamma_replay")
+        fake_gamma.official_slots_for_day = lambda day: {
+            "07:30": "30 7 * * 1-5"}
+        fake_gamma._download_clock = lambda row: datetime(
+            2026, 11, 13, 7, 30, 12, tzinfo=ROME)
         with patch.dict(sys.modules, {"net_gamma": fake_net,
-                                      "edge_auto": fake_edge}), patch(
-            "gamma_replay.official_slots_for_day",
-            return_value={"07:30": "30 7 * * 1-5"}), patch(
-            "gamma_replay._download_clock",
-            return_value=datetime(2026,11,13,7,30,12,tzinfo=ROME)):
+                                      "edge_auto": fake_edge,
+                                      "gamma_replay": fake_gamma}):
             self.assertEqual(levels_for_export(
                 store, WEEK, DAY, "07:30", frame, [{"name": "a.json"}]),
                 {"call_wall_spx": 7520., "put_wall_spx": 7480.,
