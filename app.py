@@ -197,6 +197,15 @@ if st.session_state.role not in ('admin', 'friend'):
 role = st.session_state.role
 with st.sidebar:
     st.write('**Accesso:** ' + ('Amministratore' if role == 'admin' else 'Lettore'))
+    # Available to BOTH authorized roles. A Streamlit button already triggers
+    # a full script rerun, keeping role, selected data and form state intact.
+    # Only short-lived/read-only caches are invalidated (no new Cboe download).
+    if st.button('🔄 Aggiorna dati', key='spx_sidebar_refresh',
+                 use_container_width=True,
+                 help='Rilegge le fonti aggiornate senza uscire, cambiare ruolo o richiedere la password.'):
+        from spx_refresh import refresh_current_data
+        refresh_current_data()
+        st.toast('Lettura dati aggiornata dalle fonti disponibili.', icon='🔄')
     if st.button('Esci'):
         for key in ('role',):
             st.session_state.pop(key, None)
