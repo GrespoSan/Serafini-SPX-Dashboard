@@ -370,13 +370,22 @@ if not offline and not storage_unavailable:
         mode = st.radio(
             'Modalità di analisi',
             ('Replay con candele',
-             'Confronto diretto tra due rilevamenti'),
+             'Confronto diretto tra due rilevamenti',
+             'Replay Curva teorica GEX Edge + ES'),
             index=0,
             key='gamma_analysis_mode_v2',
         )
         if mode == 'Confronto diretto tra due rilevamenti':
             from gamma_section import render_comparison
             render_comparison(store, week, snaps, logs)
+        elif mode == 'Replay Curva teorica GEX Edge + ES':
+            try:
+                from edge_curve_replay import render as render_edge_curve_replay
+                render_edge_curve_replay(store, week, logs)
+            except (ValueError, TypeError, KeyError, RuntimeError, OSError,
+                    ImportError) as exc:
+                st.warning('Replay Curva GEX temporaneamente non disponibile: '
+                           + type(exc).__name__)
         else:
             from gamma_replay import render as render_gamma_replay
             render_gamma_replay(store, week, logs, view_mode='Candele ES + NET GAMMA')
