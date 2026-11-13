@@ -210,6 +210,18 @@ def show(week, store, logs=None, *, on_valid_gex=None):
             "in base all'orario effettivo verificato. Il metodo NET GAMMA "
             "Serafini resta indipendente."
         )
+        # Laboratorio indipendente, DISATTIVATO di default: non cambia KPIs,
+        # curve, acquisizioni o selettori delle sezioni Edge gia' operative.
+        with st.container(border=True):
+            st.markdown("**🧪 LABORATORIO DI RICERCA — NET GAMMA vs GEX**")
+            if st.toggle("Apri confronto Serafini · Solo OI · GEX modellato",
+                         value=False, key=f"gamma_three_models_enable_{week}"):
+                try:
+                    from research_gamma_three_models_ui import render as render_three
+                    render_three(week, store, logs or [])
+                except Exception as exc:
+                    st.warning("Laboratorio comparativo non disponibile: "
+                               + type(exc).__name__)
         if latest["kind"] == "Replay":
             _publish_official_header_unchanged(
                 week, store, logs or [], on_valid_gex)
