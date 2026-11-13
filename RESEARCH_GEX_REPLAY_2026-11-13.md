@@ -70,3 +70,24 @@ modalità radio e un pannello opzionale dentro il confronto Edge.
 - Eventuali audit del 9-10 novembre non vanno reinterpretati ex post con
   nuovi filtri non congelati. Gli snapshot ufficiali possono essere rimossi
   dall'archivio notturno; non inventare backfill.
+
+## Correzioni di leggibilità 13/11
+
+- Anche senza differenziale ES−SPX verificato, il Replay Curve GEX può
+  mostrare la curva nello spazio prezzo **SPX** e separatamente le
+  candele ES chiuse. Non trasla la curva su ES e non colloca
+  un falso punto ES sul grafico SPX. Se il differenziale diventa disponibile
+  mantiene il comportamento convertito originario.
+- Il confronto a tre modelli non ha più bisogno del differenziale:
+  i tre calcoli si basano sulla stessa catena SPX e su strike SPX.
+- Sul confronto della singola fotografia ora prevale una nuova vista su
+  **identica scala Serafini vs solo OI** e il diagramma del contributo
+  netto Volume per strike; i tre grafici precedenti restano consultabili.
+- Identità controllata: `Serafini = Solo OI + Volume NET`; rapporto in
+  percentuale sul NET GAMMA Serafini con denominatore zero = N/D.
+  La percentuale non rappresenta la quota di posizioni dealer.
+- Nella vista temporale aggiunta anche la curva assoluta del contributo
+  netto Volume, separata dalle variazioni percentuali e dal GEX monetario.
+- L'utente deve premere `Calcola tutte le fotografie ufficiali del giorno`
+  per l'analisi temporale; un solo download mattutino non mostra evoluzione.
+- Test sintetici estesi alla riconciliazione volume e all'asse SPX senza base.
