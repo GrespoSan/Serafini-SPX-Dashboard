@@ -33,6 +33,11 @@ class OIOnlyResearchTests(unittest.TestCase):
         self.assertEqual(len(rows), 50)
         self.assertAlmostEqual(item["NET GAMMA Serafini"], 2.4)
         self.assertAlmostEqual(item["NET GAMMA solo OI"], 1.6)
+        self.assertAlmostEqual(item["Contributo Volume · NET"], .8)
+        self.assertAlmostEqual(
+            item["NET GAMMA solo OI"] + item["Contributo Volume · NET"],
+            item["NET GAMMA Serafini"],
+        )
 
     def test_mismatched_original_is_rejected(self):
         core = [{"strike_spx": float(7400 + i), "net_gamma": 0.}
@@ -52,6 +57,9 @@ class GEXCurveReplayTests(unittest.TestCase):
                           {"spot_spx": 7520, "net_gex": 3e9}]}
         self.assertEqual(_curve_points(edge, 15),
                          [(7495., -2.), (7535., 3.)])
+        # Without a verified ES-SPX basis the axis remains in SPX, not ES.
+        self.assertEqual(_curve_points(edge, None),
+                         [(7480., -2.), (7520., 3.)])
 
     def test_duplicate_curve_prices_rejected(self):
         edge = {"curve": [{"spot_spx": 7480, "net_gex": -2e9},
