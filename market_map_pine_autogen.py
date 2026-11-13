@@ -159,13 +159,23 @@ def get_sources(day, store):
 
 
 def get_news(day):
-    from macro_calendar import _fetch, _prepare
-    key = os.environ.get("FINANCE_CALENDAR_API_KEY", "").strip()
-    if not key:
-        return [], "NOT_CONFIGURED"
+    """Use CURRENT free-source calendar API; never call removed FC functions.
+
+    Partial/outage calendars are explicitly reported as unavailable for
+    unattended point-in-time Pine exports. Never turn unknown news into
+    a false 'complete' snapshot and never require an obsolete API key.
+    """
     try:
-        return [x for x in _prepare(_fetch(day.isoformat(), day.isoformat(), key), day)
-                if x["day"] == day], "VERIFIED_AT_GENERATION"
+        from macro_calendar import load_calendar
+        events, health = load_calendar(day, day)
+        if not isinstance(events, list) or not isinstance(health, dict):
+            return [], "UNAVAILABLE_INVALID_CALENDAR"
+        selected = [e for e in events if isinstance(e, dict) and e.get("day") == day]
+        if not health.get("healthy"):
+            return selected, "UNAVAILABLE_NO_VERIFIED_SOURCE"
+        if not health.get("complete"):
+            return selected, "PARTIAL_CALENDAR_UNVERIFIED"
+        return selected, "VERIFIED_AT_GENERATION"
     except Exception as exc:
         return [], "UNAVAILABLE_" + type(exc).__name__
 
