@@ -15,7 +15,7 @@ from net_gamma import profile, read_snapshot
 
 ROME = ZoneInfo("Europe/Rome")
 SLOTS = ("07:30", "11:00", "13:30", "14:31", "14:46", "15:50",
-         "16:01", "16:16", "16:31", "16:46", "17:00", "17:30",
+         "16:01", "16:16", "16:31", "16:46", "17:00", "17:30", "17:46",
          "18:00", "18:30", "20:00", "20:30", "21:30")
 
 # Allinea i rilevamenti MT4 agli official slots REALI del Cloud.
@@ -27,10 +27,16 @@ ALWAYS_OFFICIAL = {"07:30": "30 7 * * 1-5",
                    "17:00": "0 17 * * 1-5",
                    "20:30": "30 20 * * 1-5"}
 CUTOFF_1446 = date(2026, 11, 12)
+CUTOFF_1616_1746 = date(2026, 11, 16)
 HISTORICAL_1330_OFFICIAL = date(2026, 11, 11)
 
 def official_slots_for_day(day):
     result = dict(ALWAYS_OFFICIAL)
+    if day >= CUTOFF_1616_1746:
+        result.pop("15:50")
+        result.pop("17:00")
+        result["16:16"] = "16 16 * * 1-5"
+        result["17:46"] = "46 17 * * 1-5"
     if day >= CUTOFF_1446:
         result["14:46"] = "46 14 * * 1-5"
     elif day == HISTORICAL_1330_OFFICIAL:
@@ -140,7 +146,9 @@ def _study_frames(store, week, day):
                     or item.get("kind") != "STUDIO_INTRADAY_NON_UFFICIALE"):
                 continue
             slot = item.get("slot_rome")
-            if slot not in SLOTS or slot in official_slots_for_day(day):
+            # Same-minute 16:16 study and official are independently saved.
+            if slot not in SLOTS or (slot in official_slots_for_day(day)
+                                     and slot != "16:16"):
                 continue
             dt = _download_clock(item)
             if dt is None:
