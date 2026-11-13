@@ -172,6 +172,18 @@ def _study_frames(_store, week, day):
     return data
 
 
+def merge_replay_sources(study, official, day):
+    """Keep official and intraday Replay distinct at the coincident 16:16 ID."""
+    frames = dict(study)
+    if "16:16" in study and "16:16" in official:
+        frames["16:16 · Replay"] = study["16:16"]
+    for slot, item in official.items():
+        if not (slot == "13:30" and raw_study_1330_for_day(day)
+                and slot in frames):
+            frames[slot] = item
+    return frames
+
+
 def render(store, week, logs, view_mode=None):
     st.subheader("Replay / History — evoluzione NET GAMMA")
     st.caption(
@@ -215,20 +227,12 @@ def render(store, week, logs, view_mode=None):
         _official_frames.clear()
         st.rerun()
     with st.spinner("Caricamento profili compatti e snapshot ufficiali..."):
-        frames = _study_frames(store, week, day)
-        official = _official_frames(store, week, day, logs)
         # At 09:16 Chicago the official (logical 16:16) can coexist with
-        # the original nonofficial 16:16 Replay. Never overwrite the latter:
-        # both original acquisitions are separate frames, ordered by real
-        # download timestamp, and the Replay GEX sidecar keeps its own ID.
-        if "16:16" in frames and "16:16" in official:
-            frames["16:16 · Replay"] = frames["16:16"]
-        for slot, item in official.items():
-            # Conserva la precedenza del compact storico 13:30 solo PRIMA
-            # della promozione dello slot a ufficiale.
-            if not (slot == "13:30" and raw_study_1330_for_day(day)
-                    and slot in frames):
-                frames[slot] = item
+        # the original nonofficial 16:16 Replay. Preserve BOTH originals
+        # and order by their real capture clocks, never by logical names.
+        frames = merge_replay_sources(
+            _study_frames(store, week, day),
+            _official_frames(store, week, day, logs), day)
     expected_slots = expected_replay_slots(day)
     if "16:16 · Replay" in frames:
         items = list(expected_slots)
