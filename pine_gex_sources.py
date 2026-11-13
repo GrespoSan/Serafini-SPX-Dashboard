@@ -61,7 +61,8 @@ def levels_for_export(store, week, day: date, slot, frame, logs):
         # to timestamp formatting / cron alias differences and quietly
         # generate 'na' for every GEX level despite a valid Edge report.
         path = frame.get("snapshot_path")
-        if (not isinstance(path, str)
+        if (frame.get("snapshot_download_clock") != source_clock
+                or not isinstance(path, str)
                 or not path.startswith(f"{week}/snapshots/SPX_CBOE_")
                 or not path.endswith(".json.gz")):
             return None
