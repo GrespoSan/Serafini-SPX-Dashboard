@@ -10,7 +10,8 @@ from gamma_replay import _official_frames, _study_frames, weekly_expiry
 from acquisition_schedule import official_export_slots, raw_study_1330_for_day
 
 
-EXPORT_SLOTS = ("07:30", "13:30", "14:46", "15:50", "17:00", "20:30")
+EXPORT_SLOTS = ("07:30", "13:30", "14:46", "15:50", "16:16",
+                "17:00", "17:46", "20:30")
 
 
 def load_export_profiles(store, week, day: date, logs):
