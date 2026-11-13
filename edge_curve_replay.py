@@ -90,7 +90,9 @@ def _load_frames(week, day, basis, official, _store):
 
 
 def _curve_points(edge, basis):
-    pairs = sorted((float(r["spot_spx"]) + basis, float(r["net_gex"]) / 1e9)
+    # Senza differenziale, mantiene strike/prezzi teorici in SPX: non finge ES.
+    offset = float(basis) if basis is not None else 0.0
+    pairs = sorted((float(r["spot_spx"]) + offset, float(r["net_gex"]) / 1e9)
                    for r in edge.get("curve") or [])
     if (len(pairs) < 2
             or not all(math.isfinite(x) and math.isfinite(y) for x, y in pairs)
@@ -120,22 +122,25 @@ def _traces(frame, candles, basis):
     exposure = [y for _, y in points]
     maximum = max(points, key=lambda p: p[1])
     minimum = min(points, key=lambda p: p[1])
-    cash_es = float(edge["spot_spx"]) + basis
+    offset = float(basis) if basis is not None else 0.0
+    cash_coord = float(edge["spot_spx"]) + offset
     cash_gex = scenario_gex(edge["curve"], float(edge["spot_spx"]))
     clock = frame["clock"]
     history = (candles.loc[candles["bar_close"] <= clock]
                if candles is not None else None)
     observed = _last_price(candles, clock)
-    actual_gamma = (scenario_gex(edge["curve"], observed - basis)
-                    if observed is not None else None)
+    actual_gamma = (scenario_gex(edge["curve"], observed - offset)
+                    if observed is not None and basis is not None else None)
     flip = edge.get("gamma_flip_spx")
-    flip_es = float(flip) + basis if flip is not None else None
+    flip_coord = float(flip) + offset if flip is not None else None
     base = [
         go.Scatter(x=prices, y=exposure, mode="lines", name="Curva GEX Edge",
                    line=dict(color="#ae78eb", width=3)),
-        go.Scatter(x=[cash_es] if cash_gex is not None else [],
+        go.Scatter(x=[cash_coord] if cash_gex is not None else [],
                    y=[cash_gex / 1e9] if cash_gex is not None else [],
-                   mode="markers", name="SPX Cboe + base (non ES live)",
+                   mode="markers",
+                   name=("SPX Cboe + base · teorico" if basis is not None
+                         else "SPX Cboe · nessuna conversione ES"),
                    marker=dict(color="#999999", size=11)),
         go.Scatter(x=[observed] if actual_gamma is not None else [],
                    y=[actual_gamma / 1e9] if actual_gamma is not None else [],
@@ -146,8 +151,8 @@ def _traces(frame, candles, basis):
                    name="Massimo / minimo curva", text=["MAX", "MIN"],
                    textposition="top center",
                    marker=dict(color=["#29ad7d", "#ec6868"], size=10)),
-        go.Scatter(x=[flip_es] if flip_es is not None else [],
-                   y=[0] if flip_es is not None else [],
+        go.Scatter(x=[flip_coord] if flip_coord is not None else [],
+                   y=[0] if flip_coord is not None else [],
                    mode="markers", name="Gamma Flip modellato",
                    marker=dict(symbol="diamond", color="#e6b84e", size=11)),
         go.Scatter(x=history["bar_close"].tolist() if history is not None else [],
@@ -187,11 +192,15 @@ def render(store, week, logs):
                        key=f"edge_curve_replay_day_{week}")
     basis = _basis(week, day)
     if basis is None:
-        st.warning("Differenziale ES−SPX della giornata non disponibile. "
-                   "Verificalo in ANALISI NET GAMMA: non invento coordinate ES.")
-        return
-    st.caption(f"Differenziale ES−SPX già verificato: {basis:+.2f} pt, "
-               "fisso per l'intera visualizzazione.")
+        st.info("Differenziale ES−SPX non disponibile per questa giornata. "
+                "La curva GEX viene mostrata in coordinate **SPX**, mentre "
+                "il prezzo ES reale resta nel grafico temporale separato. "
+                "Sospendo soltanto la proiezione dell'ES sulla curva e le "
+                "coordinate ES di Wall, Flip, massimo e minimo. "
+                "Non viene utilizzato alcun differenziale inventato.")
+    else:
+        st.caption(f"Differenziale ES−SPX verificato: {basis:+.2f} pt, "
+                   "fisso per l'intera visualizzazione.")
     if st.button("Aggiorna archivio del Replay GEX",
                  key=f"edge_curve_reload_{week}_{day}"):
         _load_frames.clear()
@@ -205,7 +214,9 @@ def render(store, week, logs):
     try:
         official = _official_entries(week, day, store, logs)
         with st.spinner("Verifica curve Edge archiviate e catene ufficiali..."):
-            frames, excluded = _load_frames(week, day, basis, official, store)
+            frames, excluded = _load_frames(
+                week, day, basis if basis is not None else 0.0, official, store
+            )
     except (ValueError, RuntimeError, TypeError, KeyError, OSError) as exc:
         st.warning(f"Archivio Replay GEX non accessibile: {type(exc).__name__}.")
         return
@@ -236,8 +247,11 @@ def render(store, week, logs):
         st.warning(f"ES 5 minuti non disponibile ({type(exc).__name__}); curve GEX visibili.")
     figure = make_subplots(rows=2, cols=1, shared_xaxes=False,
                            row_heights=[.64, .36], vertical_spacing=.13,
-                           subplot_titles=("Curva GEX per prezzo ES teorico",
-                                           "ES effettivo · sole barre chiuse"))
+                           subplot_titles=(
+                               ("Curva GEX per prezzo ES teorico"
+                                if basis is not None else
+                                "Curva GEX per prezzo SPX · non convertita"),
+                               "ES effettivo · sole barre chiuse"))
     first, _, first_range = _traces(good[0], es, basis)
     for i, trace in enumerate(first):
         figure.add_trace(trace, row=1 if i < 5 else 2, col=1)
@@ -270,7 +284,9 @@ def render(store, week, logs):
     figure.update_layout(
         title=f"GEX 0DTE · {day:%d/%m/%Y} · {labels[0]}",
         height=780, hovermode="closest",
-        xaxis=dict(title="Prezzo ES teorico (SPX + base fissa)",
+        xaxis=dict(title=("Prezzo ES teorico (SPX + base fissa)"
+                          if basis is not None else
+                          "Prezzo SPX · non convertito in ES"),
                    range=[min(x_values)-x_margin, max(x_values)+x_margin]),
         yaxis=dict(title="NET GEX · mld USD / 1%",
                    range=[min(y_values)-y_margin, max(y_values)+y_margin]),
@@ -310,11 +326,15 @@ def render(store, week, logs):
             "Qualità Edge": ("VALIDA" if f["edge"].get("quality_sufficient") is True
                              else "SOLO DIAGNOSTICA"),
             "NET GEX originale (mld)": round(float(f["edge"]["net_gex"])/1e9, 3),
-            "ES al massimo curva": round(maximum[0], 2),
+            "Prezzo al massimo curva": round(maximum[0], 2),
             "GEX massimo (mld)": round(maximum[1], 3),
-            "ES al minimo curva": round(minimum[0], 2),
+            "Prezzo al minimo curva": round(minimum[0], 2),
             "GEX minimo (mld)": round(minimum[1], 3),
-            "Gamma Flip ES": round(float(flip)+basis, 2) if flip is not None else None,
+            "Gamma Flip (stessa scala)": (
+                round(float(flip) + (basis or 0.), 2)
+                if flip is not None else None
+            ),
+            "Scala curve": ("ES teorico" if basis is not None else "SPX"),
             "ES 5m verificato": _last_price(es, f["clock"]),
             "Versione modello": f["edge"].get("model_version"),
             "SHA Cboe": f["sha"][:12],
@@ -323,8 +343,9 @@ def render(store, week, logs):
     st.dataframe(table, hide_index=True, width="stretch")
     st.caption(f"{len(good)} curve disponibili · fonte prezzo ES: {es_source}. "
                "La linea ES mostra soltanto chiusure 5m precedenti al download; "
-               "il punto azzurro sulla curva è una INTERPOLAZIONE, non un nuovo "
-               "calcolo GEX. Massimi/minimi sono estremi campionati della curva. "
+               "il punto azzurro sulla curva, se presente e se la base "
+               "ES−SPX è verificata, è una INTERPOLAZIONE, non un nuovo "
+               "calcolo GEX. Massimi/minimi sono estremi campionati. "
                "La qualità insufficiente indica un risultato diagnostico.")
     repeated = len(good) - len({f["sha"] for f in good})
     if repeated:
