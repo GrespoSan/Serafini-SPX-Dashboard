@@ -127,6 +127,7 @@ def _official_frames(_store, week, day, logs):
                     # Export GEX must use this SAME file, never reselect by
                     # timestamp from a different log or slot.
                     "snapshot_path": item["file"],
+                    "snapshot_download_clock": clock.strftime("%H:%M:%S"),
                 }
                 break
             except (KeyError, TypeError, ValueError, OSError, RuntimeError, OverflowError):
