@@ -206,12 +206,13 @@ def generate(today, now, basis, sources, news, news_status, output_dir):
                 pine = make_pine_comparison(
                     older["profiles"]["0DTE"], current["0DTE"],
                     current["Weekly"], basis, today.isoformat(), prior,
-                    slot, src.get("cboe_timestamp") or "")
+                    slot, src.get("cboe_timestamp") or "",
+                    gex=src.get("gex_levels"))
             else:
                 pine = make_pine(
                     current["0DTE"], current["Weekly"], basis,
                     today.isoformat(), src.get("cboe_timestamp") or "",
-                    "Mattina 07:30")
+                    "Mattina 07:30", gex=src.get("gex_levels"))
             pine = append_news(pine, news, captured_at=src["download_rome"])
             data = pine.encode("utf-8")
             sha = hashlib.sha256(data).hexdigest()
