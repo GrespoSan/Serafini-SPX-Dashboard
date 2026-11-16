@@ -624,7 +624,7 @@ def render(store, week, logs, view_mode=None):
 
 
 
-def render_research_lab(store, week, logs):
+def render_research_lab(store, week, logs, *, inside_section=False):
     """Laboratorio autonomo: riusa gli snapshot del Replay senza il suo grafico.
 
     Selezione giorno/scadenza indipendente da REPLAY E CONFRONTO; gli archivi
@@ -633,8 +633,11 @@ def render_research_lab(store, week, logs):
     from datetime import timedelta
     from research_gamma_replay_ui import render as render_gamma_research
 
-    with st.expander("🧪 LABORATORIO · Evoluzione NET GAMMA (sperimentale)",
-                     expanded=False):
+    from contextlib import nullcontext
+    panel = (nullcontext() if inside_section else
+             st.expander("🧪 LABORATORIO · Evoluzione NET GAMMA (sperimentale)",
+                         expanded=False))
+    with panel:
         iso_year, iso_week = map(int, week.split("-W"))
         monday = date.fromisocalendar(iso_year, iso_week, 1)
         weekdays = [monday + timedelta(days=i) for i in range(5)]
