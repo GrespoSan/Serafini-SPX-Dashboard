@@ -121,7 +121,7 @@ class EdgeDailyKPITests(unittest.TestCase):
         self.assertIn("Max 7.690,00", html)
         self.assertIn("vs close Daily 13/11/2026 · 7.560,75 ES", html)
         self.assertIn("+1,35%", html)
-        self.assertIn("−1,68%", html.replace("-1,68%", "−1,68%"))
+        self.assertIn("-1,68%", html)
         self.assertIn("minmax(200px,1.12fr)", html)
         self.assertEqual(html.count('class="spx-trend-weekly-row"'), 2)
 
