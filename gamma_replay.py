@@ -622,6 +622,50 @@ def render(store, week, logs, view_mode=None):
     with st.expander("Dettaglio rilevamenti Replay · tabella", expanded=False):
         st.dataframe(table, hide_index=True, width="stretch")
 
-    # Laboratorio sperimentale dopo la tabella dettagli, sempre nel Replay.
+
+
+def render_research_lab(store, week, logs):
+    """Laboratorio autonomo: riusa gli snapshot del Replay senza il suo grafico.
+
+    Selezione giorno/scadenza indipendente da REPLAY E CONFRONTO; gli archivi
+    restano read-only e vengono filtrati con le medesime regole 0DTE/Weekly.
+    """
+    from datetime import timedelta
     from research_gamma_replay_ui import render as render_gamma_research
-    render_gamma_research(available, kind, day)
+
+    with st.expander("🧪 LABORATORIO · Evoluzione NET GAMMA (sperimentale)",
+                     expanded=False):
+        iso_year, iso_week = map(int, week.split("-W"))
+        monday = date.fromisocalendar(iso_year, iso_week, 1)
+        weekdays = [monday + timedelta(days=i) for i in range(5)]
+        selected_replay = st.session_state.get(f"replay_day_{week}")
+        today = datetime.now(ROME).date()
+        preferred = selected_replay if selected_replay in weekdays else (
+            today if today in weekdays else weekdays[0])
+        day = st.selectbox(
+            "Giornata di ricerca NET GAMMA", weekdays,
+            index=weekdays.index(preferred),
+            format_func=lambda d: d.strftime("%d/%m/%Y"),
+            key=f"lab_gamma_day_{week}",
+        )
+        kind = st.radio(
+            "Scadenza di ricerca", ("0DTE", "Weekly"),
+            horizontal=True, key=f"lab_gamma_expiry_{week}",
+        )
+        try:
+            frames = merge_replay_sources(
+                _study_frames(store, week, day),
+                _official_frames(store, week, day, logs), day)
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError) as exc:
+            st.warning(f"Archivio Replay per la ricerca non disponibile: {type(exc).__name__}.")
+            return
+        # Ordine effettivo dei download, non ordinamento alfabetico degli slot.
+        available = sorted(
+            ((slot, frame) for slot, frame in frames.items()
+             if frame.get("profiles", {}).get(kind, {}).get("rows")
+             and (kind == "Weekly" or not classify_0dte_download(
+                 day, frame.get("download_rome"))["post_expiry"])),
+            key=lambda pair: _download_clock(pair[1]) or
+            datetime.max.replace(tzinfo=ROME),
+        )
+        render_gamma_research(available, kind, day, inside_expander=True)
