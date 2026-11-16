@@ -319,10 +319,6 @@ def show_replay(week, store, plotter, logs=None, *, selected=None):
                         reading_clock=clock.strftime("%H:%M:%S"))
         st.plotly_chart(chart, width="stretch",
                         key=f"edge_replay_chart_{week}_{day}_{current}_{compare}")
-        st.caption(
-            "Confronto informativo su dati 0DTE: Edge usa posizioni dei dealer "
-            "MODELLATE, non osservate. NET GAMMA Serafini ed Edge sono distinti."
-        )
     with curve_lab_panel:
         current_es = None
         if day == datetime.now(ROME).date():
