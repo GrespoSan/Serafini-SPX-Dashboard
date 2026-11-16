@@ -1274,10 +1274,6 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
         from asia_gamma import render_auto as render_asia_gamma
         render_asia_gamma(day, asia_c1, asia_p1, level_context=asia_level_context)
     st.subheader('Esporta i profili su TradingView — 5 situazioni')
-    st.caption('Dal 16/11/2026: 09:16 e 10:46 Chicago, slot logici 16:16 e 17:46 '
-               '(nel disallineamento DST sono 15:16 e 16:46 Roma). '
-               '14:46 rimane 07:46 Chicago dal 12/11. '
-               'I Pine storici 15:50 e 17:00 non sono rinominati.')
     scripts = {}
     export_issues = {}
     if offset is None or not math.isfinite(offset):
@@ -1354,8 +1350,8 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
                     for slot, code in scripts.items()
                 }
         except Exception:
-            st.caption("News Pine non disponibili: calendario non verificabile. "
-                       "Le esportazioni NET GAMMA restano utilizzabili.")
+            # Il calendario e' facoltativo: non blocca i Pine NET GAMMA.
+            pass
 
     columns = st.columns(5, gap='small')
     if day >= CUTOFF_1616_1746:
