@@ -148,3 +148,20 @@ Snapshot SPX del 15 ottobre 2026: 30.470 contratti nel file; per scadenza 2026-1
 - I Pine esportati restano STATICI rispetto al rilevamento: per nuovi strike
   fuori dalla fascia coperta, selezionare una fotografia più recente e
   rigenerare il codice. Tutti i prezzi Cboe restano puntuali al download.
+
+
+## SERAFINI LAB — Greche Superiori (soltanto ADMIN)
+
+La nuova sezione è inserita sotto **GEX EDGE — CONFRONTO** e sopra **REPLAY E CONFRONTO**. È chiusa inizialmente. È generata esclusivamente quando `role == 'admin'`; il modulo `serafini_lab_admin.py` blocca anche eventuali richieste dirette per `friend` prima di accedere all'archivio. Nessuna modifica alla formula del NET GAMMA, ai cron, a GEX Edge, Replay, agli snapshot o ai Pine.
+
+La ricerca LAB risiede nel repository **privato** `GrespoSan/Serafini-SPX-Cloud` e produce rapporti `research/higher_greeks_reports/daily/YYYY/Serafini_LAB_YYYYMMDD.json`. Per visualizzarli nel Dashboard la lettura avviene esclusivamente sul server tramite un **token GitHub a permessi minimi e di sola lettura**, conservato nei Secrets Streamlit:
+
+```toml
+SERAFINI_LAB_GITHUB_TOKEN = "TOKEN_READ_ONLY_DEL_REPO_PRIVATO"
+```
+
+La voce è opzionale per il funzionamento delle altre sezioni: senza la credenziale, il pannello ADMIN compare ma dichiara **Archivio LAB non collegato**, senza inventare numeri. Non usare la password ADMIN come token, né inserire credenziali nel repository pubblico, nell'URL, nel browser, nelle chat, nei log o nel codice. Il token deve essere ristretto al solo repository privato con `Contents: Read`; non servono privilegi write, Actions o accesso ai secrets.
+
+I rapporti sono validati per giorno, schema e modelli H0/H1/H2; la visualizzazione rimane diagnostica, non fornisce segnali LONG/SHORT. I risultati `WAIT` delle esecuzioni automatiche sono conservati come artifacts di GitHub Actions, non come report permanente: l'assenza del report definitivo non significa necessariamente che il cron non sia partito.
+
+Test: `tests/test_serafini_lab_admin.py` (autorizzazione admin, friend senza I/O, token assente, 404, formato e provenienza data). Il Dashboard non contiene né importa i modelli matematici privati.
