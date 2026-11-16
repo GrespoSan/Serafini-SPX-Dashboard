@@ -1074,7 +1074,7 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
             fig.update_layout(
                 height=max(520, min(1250, len(y) * 12)),
                 margin=dict(l=15, r=20, t=40, b=30),
-                title=f'{title} | {day:%d/%m/%Y} | {capture_info}<br><sup>NET GAMMA per strike — positivo a destra / negativo a sinistra</sup>',
+                title='NET GAMMA per strike — positivo a destra / negativo a sinistra',
                 xaxis=dict(title='NET GAMMA (unità della formula Serafini)', zeroline=True,
                            range=(profile_gamma_bounds([visual]) if independent_scale else shared_bounds),
                            fixedrange=not independent_scale,
