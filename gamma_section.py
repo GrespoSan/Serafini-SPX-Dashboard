@@ -1255,15 +1255,6 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
         from asia_gamma import render_auto as render_asia_gamma
         render_asia_gamma(day, asia_c1, asia_p1, level_context=asia_level_context)
     st.subheader('Esporta i profili su TradingView — 5 situazioni')
-    if st.button('Aggiorna rilevamenti Pine dall’archivio',
-                 key=f'pine_export_refresh_{week}_{day}',
-                 help='Rilegge i log ufficiali e ricostruisce solo i profili disponibili. '
-                      'Non genera fotografie e non modifica il NET GAMMA.'):
-        from gamma_replay import _official_frames, _study_frames
-        _pine_export_data.clear()
-        _official_frames.clear()
-        _study_frames.clear()
-        st.rerun()
     st.caption('Dal 16/11/2026: 09:16 e 10:46 Chicago, slot logici 16:16 e 17:46 '
                '(nel disallineamento DST sono 15:16 e 16:46 Roma). '
                '14:46 rimane 07:46 Chicago dal 12/11. '
