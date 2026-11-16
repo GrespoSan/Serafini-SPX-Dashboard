@@ -416,12 +416,19 @@ with st.expander('PINE DI EMERGENZA — NET GAMMA CORRENTE', expanded=False):
         st.error('Pine di emergenza temporaneamente non disponibile: '
                  + type(exc).__name__)
 
-# SERAFINI LAB — GRECHE SUPERIORI: ultimo pannello della pagina,
-# dopo REPORT GIORNALIERO AI e PINE DI EMERGENZA.
-# Modulo isolato: visibile esclusivamente all'amministratore.
-if role == 'admin':
-    from serafini_lab_admin import render as render_serafini_lab_admin
-    render_serafini_lab_admin(role, Store(url, service_key, bucket))
+# SERAFINI LAB: unico spazio di ricerca, separato dal Replay operativo.
+# I due moduli mantengono le rispettive fonti, permessi e calcoli.
+# Laboratorio NET GAMMA disponibile con archivio verificato; Greche
+# Superiori sempre riservate all'amministratore.
+if (not offline and not storage_unavailable) or role == 'admin':
+    with st.container(border=True):
+        st.subheader('🧪 SERAFINI LAB')
+        if not offline and not storage_unavailable:
+            from gamma_replay import render_research_lab
+            render_research_lab(store, week, logs)
+        if role == 'admin':
+            from serafini_lab_admin import render as render_serafini_lab_admin
+            render_serafini_lab_admin(role, Store(url, service_key, bucket))
 
 # Render optional external-data context LAST, inside its earlier placeholder.
 # Users see it in the original upper CONTEXT panel, while Gamma/Replay/Pine
