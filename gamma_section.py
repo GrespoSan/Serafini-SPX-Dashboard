@@ -38,7 +38,7 @@ def _snapshot_cboe_stamp(week, file_name, _store):
     return item.get("timestamp")
 
 
-@st.cache_data(ttl=3600, max_entries=50, show_spinner=False)
+@st.cache_data(ttl=90, max_entries=50, show_spinner=False)
 def _pine_export_data(week, day, logs_count, _store, _logs):
     """Cache breve per non riscaricare i 5 snapshot raw a ogni rerun."""
     return load_export_profiles(_store, week, day, _logs)
