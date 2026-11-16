@@ -243,11 +243,6 @@ def show_replay(week, store, plotter, logs=None, *, selected=None):
                 "Gli strike Wall e il Gamma Flip sono modellati su questo "
                 "riferimento, NON ricalcolati sul prezzo corrente del future ES."
             )
-        else:
-            st.markdown(
-                f"**Valutazione modello GEX · REPLAY {current}: "
-                f"{model_clock['label']} Roma**"
-            )
 
         cols = st.columns(5)
         with cols[0]:
@@ -273,13 +268,6 @@ def show_replay(week, store, plotter, logs=None, *, selected=None):
                 str(edge.get("regime", "N/D")) if good else "N/D",
                 edge.get("regime") if good else None,
             )
-        st.caption(
-            f"Base della struttura GEX: SPX Cboe {cash_spot:,.2f} "
-            f"· conversione teorica ES {equivalent:,.2f} "
-            f"(differenziale ES−SPX {shift:+.2f}). "
-            "NON è una quotazione ES corrente. Put Wall, Gamma Flip e Call Wall "
-            "sono strike SPX convertiti con lo stesso differenziale fisso."
-        )
         metrics = st.columns(4)
         for col, title, key in zip(metrics[:3],
                                    ("NET GEX", "Call GEX", "Put GEX"),
