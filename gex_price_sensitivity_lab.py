@@ -175,22 +175,29 @@ def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario",
                      expanded=True):
         snapshot_time, valuation_time = _gex_reference_times(
             download_clock, edge.get("valuation"))
-        slot_text = f" · {source_kind} {slot}" if slot else f" · {source_kind}"
         st.markdown(
-            f"**Fotografia Cboe del calcolo GEX · {source_kind.upper()}** "
-            f"{slot or ''}: {snapshot_time}"
-        )
-        st.markdown(
-            f"**Valutazione modello GEX · {source_kind.upper()} "
-            f"{slot or ''}: {valuation_time}**"
+            "<div style='margin:0.2rem 0 0.6rem 0'>"
+            "<div style='font-size:0.83rem;color:#b7c4cb'>"
+            "DATI DELLA CURVA GEX · FOTOGRAFIA SELEZIONATA</div>"
+            f"<div style='font-size:1.45rem;font-weight:750;color:#55d5f6'>"
+            f"{snapshot_time}</div>"
+            f"<div style='font-size:0.85rem;color:#9fb0b8'>"
+            f"Fonte: {source_kind.upper()}{' · ' + str(slot) if slot else ''}</div>"
+            "</div>",
+            unsafe_allow_html=True,
         )
         st.caption(
-            "Unica curva GEX 0DTE della fotografia più recente, Replay oppure "
-            "download Cboe: nessuna fusione di fotografie. La valutazione del "
-            "modello non coincide necessariamente con l'ora del download. "
-            "Lo scenario è WHAT-IF: OI, IV e scadenza congelati; non aggiorna "
-            "Wall, Flip o posizioni dei dealer e non genera segnali."
+            "Scenario teorico WHAT-IF sulla fotografia indicata: "
+            "OI, IV e scadenza restano congelati. "
+            "Non aggiorna Wall, Flip o posizioni dei dealer e non genera segnali."
         )
+        with st.expander("Dettagli tecnici degli orari", expanded=False):
+            st.caption(f"Timestamp della fotografia: {snapshot_time}")
+            st.caption(f"Timestamp di valutazione del modello Edge: {valuation_time}")
+            st.caption(
+                "La valutazione del modello può riferirsi a un istante diverso "
+                "dal download; non è l'orario di acquisizione della catena Cboe."
+            )
         if edge.get("quality_sufficient") is not True:
             st.warning(
                 "Copertura del modello Edge insufficiente o non verificabile: "
