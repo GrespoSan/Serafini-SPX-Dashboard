@@ -19,6 +19,9 @@ on:
       - ".github/workflows/massive-daily-context-tests.yml"
   pull_request:
     paths:
+      - "trend_daily_section.py"
+      - "tests/test_spx_massive_trend_daily.py"
+      - "tests/test_spx_trend_edge_gex.py"
       - "vix_regime.py"
       - "vix_spot_history.py"
       - "tests/test_spx_vix_spot_kpi.py"
