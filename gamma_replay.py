@@ -272,10 +272,6 @@ def render(store, week, logs, view_mode=None):
         st.info("Nessun frame replay disponibile per questa data. I frame futuri "
                 "non possono essere ricostruiti retroattivamente.")
         return
-    # Laboratorio subito dopo selezione data e scadenza.
-    from research_gamma_replay_ui import render as render_gamma_research
-    render_gamma_research(available, kind, day)
-
     if len(available) == 1:
         st.warning("Replay non animabile: e' disponibile soltanto il frame "
                    f"{available[0][0]}. Play richiede almeno due acquisizioni "
@@ -625,3 +621,7 @@ def render(store, week, logs, view_mode=None):
                       "Top 3 negativo": fmt(lower)})
     with st.expander("Dettaglio rilevamenti Replay · tabella", expanded=False):
         st.dataframe(table, hide_index=True, width="stretch")
+
+    # Laboratorio sperimentale dopo la tabella dettagli, sempre nel Replay.
+    from research_gamma_replay_ui import render as render_gamma_research
+    render_gamma_research(available, kind, day)
