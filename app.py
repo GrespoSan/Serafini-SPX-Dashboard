@@ -372,6 +372,13 @@ if not offline and not storage_unavailable:
         # News / Volatility / Trend Daily if Cboe or Edge downloads fail.
         trend_edge_gex.clear()
 
+# SERAFINI LAB is deliberately isolated from all NET GAMMA / GEX paths.
+# Do not even import/render the module for friends: admin-only server guard.
+# Place after GEX EDGE and before REPLAY E CONFRONTO.
+if role == 'admin':
+    from serafini_lab_admin import render as render_serafini_lab_admin
+    render_serafini_lab_admin(role)
+
 # Confronto e Replay condividono la stessa sezione, con calcoli invariati.
 if not offline and not storage_unavailable:
     with st.expander('REPLAY E CONFRONTO', expanded=False):
