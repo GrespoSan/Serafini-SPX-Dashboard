@@ -416,19 +416,25 @@ with st.expander('PINE DI EMERGENZA — NET GAMMA CORRENTE', expanded=False):
         st.error('Pine di emergenza temporaneamente non disponibile: '
                  + type(exc).__name__)
 
-# SERAFINI LAB: unico spazio di ricerca, separato dal Replay operativo.
-# I due moduli mantengono le rispettive fonti, permessi e calcoli.
-# Laboratorio NET GAMMA disponibile con archivio verificato; Greche
-# Superiori sempre riservate all'amministratore.
-if (not offline and not storage_unavailable) or role == 'admin':
-    with st.container(border=True):
-        st.subheader('🧪 SERAFINI LAB')
-        if not offline and not storage_unavailable:
-            from gamma_replay import render_research_lab
-            render_research_lab(store, week, logs)
-        if role == 'admin':
+# SERAFINI LAB: entire section is server-side ADMIN-only, including
+# NET GAMMA evolution. One closed outer expander; avoid nesting expanders.
+if role == 'admin':
+    with st.expander('🧪 SERAFINI LAB', expanded=False):
+        lab_choice = st.radio(
+            'Laboratorio',
+            ('Evoluzione NET GAMMA (sperimentale)', 'GRECHE SUPERIORI'),
+            horizontal=True, key='spx_serafini_lab_selection',
+        )
+        if lab_choice == 'Evoluzione NET GAMMA (sperimentale)':
+            if not offline and not storage_unavailable:
+                from gamma_replay import render_research_lab
+                render_research_lab(store, week, logs, inside_section=True)
+            else:
+                st.info('Archivio Replay non disponibile per la ricerca.')
+        else:
             from serafini_lab_admin import render as render_serafini_lab_admin
-            render_serafini_lab_admin(role, Store(url, service_key, bucket))
+            render_serafini_lab_admin(
+                role, Store(url, service_key, bucket), inside_section=True)
 
 # Render optional external-data context LAST, inside its earlier placeholder.
 # Users see it in the original upper CONTEXT panel, while Gamma/Replay/Pine
