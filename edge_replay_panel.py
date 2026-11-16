@@ -157,12 +157,6 @@ def show_replay(week, store, plotter, logs=None, *, selected=None):
         st.warning("Nessun Replay verificato da mostrare.")
         return
     day = selected["day"]
-    if st.button("Aggiorna rilevamenti Edge",
-                 key=f"edge_replay_refresh_{week}_{day}",
-                 help="Aggiorna solo l'elenco e i report Edge della giornata."):
-        _cached_slots.clear()
-        _cached_pair.clear()
-        st.rerun()
     try:
         slots = _cached_slots(week, day, store)
     except (RuntimeError, ValueError, TypeError) as exc:
@@ -231,27 +225,14 @@ def show_replay(week, store, plotter, logs=None, *, selected=None):
         equivalent = cash_spot + shift
 
         good = edge.get("quality_sufficient") is True
-        st.caption(
-            f"Replay {current} · download {clock:%H:%M:%S} Roma · "
-            f"Cboe {compact['cboe_timestamp_original']} (fuso non dichiarato) · "
-            f"SHA-256 {sidecar['cboe_sha256'][:12]} · motore Edge indipendente "
-            f"{str(edge.get('model_version', 'N/D'))}"
-        )
         if not good:
             st.warning(
                 f"QUALITÀ EDGE INSUFFICIENTE ({float(edge['quality_pct']):.2f}%). "
                 "I valori sono soltanto diagnostici; regime Gamma N/D. "
                 "Nessun dato viene pubblicato in Trend Daily."
             )
-        else:
-            st.caption(
-                f"Qualità Edge: {float(edge['quality_pct']):.2f}% · "
-                "Copertura del modello, NON freschezza del prezzo cash SPX. "
-                "Segno, Call/Put e NET GEX modellati sulla catena Cboe completa."
-            )
         cash_trade_note, cash_trade_status = describe_spx_trade(
             edge.get("spx_cash_last_trade_time"), clock)
-        st.caption(cash_trade_note)
         if cash_trade_status == "anomalia":
             st.warning("Timestamp cash SPX successivo al download: "
                        "verificare i dati Cboe prima di interpretare il modello.")
