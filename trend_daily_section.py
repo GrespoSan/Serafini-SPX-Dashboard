@@ -1,8 +1,11 @@
 """Trend Daily SPX/ES: stessa serie Massive per Range Daily e struttura.
+Aggiunge il range della settimana ES precedente dalle stesse barre 1session.
 Duplica soltanto la visualizzazione dei valori Edge GEX già verificati;
 nessun nuovo download, ricalcolo GEX, accesso a Supabase o modifica Serafini.
 """
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+from html import escape
+import math
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -88,6 +91,40 @@ def evaluate(frame):
     }
 
 
+def previous_week_range(frame, reference_day):
+    """Previous COMPLETED Mon-Fri week, same Massive ES contract/1session.
+
+    Anchor to the context date (not the last bar's calendar week); exclude
+    the current week and future candles. Use only the existing validated
+    massive_frame, not SPX cash, Yahoo, GEX or a new data request.
+    Return N/D (None) for a potentially incomplete prior week (<3 sessions).
+    Signed percentage = 100 * (last CLOSED Daily trade Close / level - 1).
+    """
+    if frame is None or frame.empty or not isinstance(reference_day, date):
+        return None
+    this_monday = reference_day - timedelta(days=reference_day.weekday())
+    previous_monday = this_monday - timedelta(days=7)
+    previous_friday = previous_monday + timedelta(days=4)
+    mask = ((frame.index.date >= previous_monday)
+            & (frame.index.date <= previous_friday)
+            & (frame.index.dayofweek < 5))
+    previous = frame.loc[mask]
+    if len(previous) < 3:
+        return None
+    high = float(previous["High"].max())
+    low = float(previous["Low"].min())
+    close = float(frame.iloc[-1]["Close"])
+    if not all(math.isfinite(x) and x > 0 for x in (high, low, close)) or high < low:
+        return None
+    return {
+        "week_start": previous_monday, "week_end": previous_friday,
+        "high": high, "low": low, "sessions": len(previous),
+        "close": close, "close_day": frame.index[-1].date(),
+        "from_low_pct": 100.0 * (close / low - 1.0),
+        "from_high_pct": 100.0 * (close / high - 1.0),
+    }
+
+
 def impulse_reference(frame, threshold_pct=1.3, body_fraction=0.60, lookback=20):
     """Criterio sperimentale dichiarato, distinto dalle regole validate.
     Cerca l'ultima candela di impulso PRECEDENTE all'ultima Daily chiusa.
@@ -151,6 +188,7 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
         bars = massive_frame(daily_bars, today_rome, contract=contract)
         result = evaluate(bars)
         impulse = impulse_reference(bars)
+        prior_week = previous_week_range(bars, today_rome)
     except (ValueError, TypeError, KeyError):
         # If OHLC is missing, a successfully verified Cboe GEX remains
         # available in its own small dark card; no stale or invented data.
@@ -172,7 +210,6 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
         return
 
 
-    from html import escape
     count_color = ("#22c55e" if result["bar_color"] == "VERDE"
                    else "#ef4444" if result["bar_color"] == "ROSSA" else "#a1a1aa")
     # These metrics explain the candle's structural state, not a duplicate
@@ -259,9 +296,44 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
                        "ma l'ultima Daily ha chiuso sopra. Il livello è stato "
                        "recuperato; non significa che sia stato rispettato "
                        "in tutte le sedute successive.")
-    # Solo visualizzazione: la logica evaluate e i valori restano invariati.
-    columns_css = ("repeat(4,minmax(0,1fr)) minmax(190px,1.08fr)"
-                   if gex_card else "repeat(4,minmax(0,1fr))")
+    # Sesto KPI descrittivo: Weekly COMPLETATA precedente (non settimana
+    # corrente in corso), calcolata sulla stessa serie ES Massive 1session.
+    def _it_price(value):
+        return f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+    if prior_week is None:
+        week_html = (
+            '<div class="spx-trend-weekly-row">Min / Max <b>N/D</b></div>'
+            '<div class="spx-trend-sub">Dati Massive della settimana precedente '
+            'insufficienti; nessuna stima</div>')
+    else:
+        low_text = _it_price(prior_week["low"])
+        high_text = _it_price(prior_week["high"])
+        low_pct = f'{prior_week["from_low_pct"]:+.2f}%'.replace(".", ",")
+        high_pct = f'{prior_week["from_high_pct"]:+.2f}%'.replace(".", ",")
+        reference_text = (f'vs close Daily '
+                          f'{prior_week["close_day"]:%d/%m/%Y} · '
+                          f'{_it_price(prior_week["close"])} ES')
+        week_html = (
+            '<div class="spx-trend-weekly-row"><span>Min '
+            + escape(low_text) + '</span><b>' + escape(low_pct) + '</b></div>'
+            '<div class="spx-trend-weekly-row"><span>Max '
+            + escape(high_text) + '</span><b>' + escape(high_pct) + '</b></div>'
+            '<div class="spx-trend-sub">' + escape(reference_text) + '</div>'
+        )
+    previous_monday = today_rome - timedelta(days=today_rome.weekday() + 7)
+    previous_friday = previous_monday + timedelta(days=4)
+    weekly_label = (f"Weekly precedente · {previous_monday:%d}–"
+                    f"{previous_friday:%d/%m/%Y}")
+    weekly_card = (
+        '<div class="spx-trend-kpi spx-trend-weekly">'
+        '<div class="spx-trend-label">' + escape(weekly_label) + '</div>'
+        + week_html + '</div>')
+    # Il riferimento è la CHIUSURA Daily, non una quotazione intraday live.
+    # I dati GEX sono indipendenti e il numero di KPI resta dinamico.
+    columns_css = ("repeat(4,minmax(0,1fr)) minmax(190px,1.08fr) minmax(200px,1.12fr)"
+                   if gex_card
+                   else "repeat(4,minmax(0,1fr)) minmax(200px,1.12fr)")
     gex_source = (f'<div class="spx-trend-gex-source">{escape(gex_caption)}</div>'
                   if gex_card else "")
     st.markdown(f"""
@@ -280,6 +352,14 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
 .spx-trend-gex-value {{font-size:1.08rem;font-weight:700;line-height:1.35;overflow-wrap:anywhere;}}
 .spx-trend-gex .spx-trend-label {{font-weight:600;}}
 .spx-trend-gex-source {{padding:7px 0 9px;color:#9ca3af;font-size:.72rem;line-height:1.4;}}
+.spx-trend-weekly .spx-trend-label {{font-weight:600;}}
+.spx-trend-weekly-row {{display:flex;align-items:center;justify-content:space-between;
+  gap:8px;margin:8px 0 0;font-size:.82rem;line-height:1.35;color:#cbd5e1;}}
+.spx-trend-weekly-row b {{font-size:1.06rem;color:#f4f5f6;white-space:nowrap;}}
+@media(max-width:1300px) {{
+  .spx-trend-grid {{grid-template-columns:repeat(3,minmax(0,1fr));row-gap:10px;}}
+  .spx-trend-kpi:nth-child(3n+1) {{border-left:0;padding-left:0;}}
+}}
 
 .spx-trend-note {{border-top:1px solid #292b30;margin-top:9px;padding-top:9px;color:#9ca3af;font-size:.78rem;line-height:1.45;}}
 .spx-trend-foot {{
@@ -304,6 +384,7 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
     <div class="spx-trend-kpi"><div class="spx-trend-label">{escape(impulse_label)}</div><div class="spx-trend-value" style="color:{impulse_color}">{escape(impulse_value)}</div><div class="spx-trend-sub">{escape(impulse_sub)}</div></div>
     <div class="spx-trend-kpi"><div class="spx-trend-label">Barre stesso colore</div><div class="spx-trend-value" style="color:{count_color}">{result["same_color"]}</div></div>
     {gex_card}
+    {weekly_card}
   </div>
   {gex_source}
   <div class="spx-trend-impulse">{escape(impulse_text)}</div>

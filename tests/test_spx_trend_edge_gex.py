@@ -96,6 +96,35 @@ class EdgeDailyKPITests(unittest.TestCase):
         self.assertIn("download 07:30 Roma", html)
         self.assertIn("GEX EDGE 0DTE", html)
 
+    def test_weekly_previous_dark_kpi_is_after_gex_and_shows_price_source(self):
+        # Synthetic ES sessions: prior full 9-13 Nov, with Friday close.
+        days = [date(2026,11,9) + timedelta(days=i) for i in range(5)]
+        ohlc = [(7560,7620,7480,7580), (7580,7660,7530,7600),
+                (7600,7690,7500,7640), (7640,7670,7470,7510),
+                (7510,7630,7460,7560.75)]
+        rows = [{"day":d,"ticker":"ESZ6","open":v[0],"hi":v[1],
+                 "lo":v[2],"close":v[3]} for d,v in zip(days,ohlc)]
+        context = prepare_daily_gex(
+            {**report(), "expiries":["2026-11-16"]},
+            date(2026,11,16), "07:30")
+        ui = FakeUI()
+        with patch.object(trend_daily_section, "st", ui):
+            trend_daily_section.render(
+                reference_day=date(2026,11,16),daily_bars=rows,
+                contract="ESZ6",modeled_gex=context)
+        self.assertEqual(len(ui.markdowns), 1)
+        html = ui.markdowns[0][0]
+        self.assertLess(html.index('class="spx-trend-label">GEX'),
+                        html.index('class="spx-trend-weekly-row"'))
+        self.assertIn("Weekly precedente · 09–13/11/2026", html)
+        self.assertIn("Min 7.460,00", html)
+        self.assertIn("Max 7.690,00", html)
+        self.assertIn("vs close Daily 13/11/2026 · 7.560,75 ES", html)
+        self.assertIn("+1,35%", html)
+        self.assertIn("-1,68%", html)
+        self.assertIn("minmax(200px,1.12fr)", html)
+        self.assertEqual(html.count('class="spx-trend-weekly-row"'), 2)
+
     def test_impulse_midpoint_replaces_daily_midpoint_kpi_and_sentence_moves_up(self):
         # L'ultima Daily è del 10/11; l'impulso valido è del 09/11.
         # Questo è solo un campione artificiale, non una quotazione.
@@ -135,10 +164,12 @@ class EdgeDailyKPITests(unittest.TestCase):
                 contract="ESZ6", modeled_gex=None)
         self.assertEqual(len(fake.markdowns), 1)
         html = fake.markdowns[0][0]
-        self.assertIn("grid-template-columns:repeat(4,minmax(0,1fr))", html)
+        self.assertIn("grid-template-columns:repeat(4,minmax(0,1fr)) minmax(200px,1.12fr)", html)
         self.assertNotIn('class="spx-trend-label">GEX', html)
         self.assertNotIn("Segno Gamma modellato", html)
         self.assertNotIn("GEX EDGE 0DTE", html)
+        self.assertIn("Weekly precedente", html)
+        self.assertIn("Dati Massive della settimana precedente insufficienti", html)
 
     def test_gex_remains_nonblocking_if_daily_data_missing(self):
         context = prepare_daily_gex(report(), date(2026,11,5), "15:50")
