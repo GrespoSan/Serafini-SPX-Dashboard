@@ -7,8 +7,8 @@ as SERAFINI_LAB_GITHUB_TOKEN in Streamlit server secrets.
 """
 from __future__ import annotations
 
+import base64
 import json
-import re
 from datetime import date, datetime, timedelta
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -68,7 +68,7 @@ def fetch_private_report(day, token, role, opener=None):
     url = f"https://api.github.com/repos/{REPO}/contents/{report_path(day)}?ref=main"
     request = Request(url, headers={
         "Authorization": "Bearer " + token,
-        "Accept": "application/vnd.github.raw+json",
+        "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": "Serafini-LAB-admin-viewer",
     }, method="GET")
@@ -87,8 +87,14 @@ def fetch_private_report(day, token, role, opener=None):
     if len(blob) > MAX_BYTES:
         raise ValueError("Report LAB troppo grande")
     try:
-        parsed = json.loads(blob.decode("utf-8"))
-    except (UnicodeError, json.JSONDecodeError) as exc:
+        envelope = json.loads(blob.decode("utf-8"))
+        if not isinstance(envelope, dict) or envelope.get("type") != "file" or envelope.get("encoding") != "base64":
+            raise ValueError("Risposta archivio LAB inattesa")
+        raw = base64.b64decode(envelope["content"], validate=False)
+        if len(raw) > MAX_BYTES:
+            raise ValueError("Report LAB troppo grande")
+        parsed = json.loads(raw.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError, KeyError, TypeError, base64.binascii.Error) as exc:
         raise ValueError("Report LAB non valido") from exc
     return _validate_report(parsed, day), "DISPONIBILE"
 
