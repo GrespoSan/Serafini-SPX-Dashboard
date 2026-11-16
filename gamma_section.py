@@ -1358,6 +1358,31 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
     for index, (slot, description) in enumerate(descriptions, 1):
         with columns[index - 1]:
             script = scripts.get(slot)
+            # Gli ID 16:16/17:46 sono ancorati al fuso Chicago.
+            # Non confondere uno slot futuro con un errore del Pine.
+            status_message = None
+            if script is None and day >= CUTOFF_1616_1746 and slot in ('16:16', '17:46'):
+                from datetime import datetime as _dt
+                chicago_hour, chicago_minute = ((9, 16) if slot == '16:16'
+                                                else (10, 46))
+                due_rome = _dt.combine(
+                    day, time(chicago_hour, chicago_minute),
+                    tzinfo=ZoneInfo('America/Chicago')
+                ).astimezone(ZoneInfo('Europe/Rome'))
+                now_rome = _dt.now(ZoneInfo('Europe/Rome'))
+                if day > now_rome.date() or (day == now_rome.date()
+                                             and now_rome < due_rome):
+                    status_message = (
+                        f"Programmato per le {due_rome:%H:%M} Roma "
+                        f"({chicago_hour:02d}:{chicago_minute:02d} Chicago): "
+                        "fotografia non ancora prevista."
+                    )
+                else:
+                    status_message = (
+                        "Rilevamento già previsto, ma fotografia ufficiale "
+                        "completa non disponibile nell'archivio. "
+                        "Verificare download e log; nessun Pine ricostruito."
+                    )
             st.download_button(
                 f'{index} · Pine {slot}',
                 data=script.encode('utf-8') if script else b'',
@@ -1371,6 +1396,8 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
                 on_click="ignore",
             )
             st.caption(description)
+            if status_message:
+                st.caption(status_message)
             if script is not None:
                 gex = (sources.get(slot) or {}).get('gex_levels') or {}
                 gex_count = sum(gex.get(key) is not None for key in
