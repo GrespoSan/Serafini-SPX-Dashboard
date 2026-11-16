@@ -68,6 +68,13 @@ class PineGexStyleTests(unittest.TestCase):
                 self.assertIn("float gexFlipES = 7521.25000000", code)
                 self.assertIn("if validTicker and showGexLevels", code)
                 self.assertIn("Proietta Top 3 Call / Put 0DTE", code)
+                # Only CW/PW/GF text is enlarged, never NET GAMMA labels.
+                for label in ("gexCallLabel", "gexPutLabel", "gexFlipLabel"):
+                    label_line = next(
+                        line for line in code.splitlines()
+                        if f"{label} := label.new" in line)
+                    self.assertIn("size=size.normal)", label_line)
+                    self.assertNotIn("size=size.small)", label_line)
 
     def test_shared_call_put_strike_renders_one_label_without_shifting(self):
         # Real 13 Nov 2026 SPX official: both walls at SPX 7500; ES basis +22.
