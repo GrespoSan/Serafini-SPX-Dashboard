@@ -173,14 +173,18 @@ def combined_graph(gamma_graph, available, day, kind, offset, gamma_bounds, gamm
         title_text="NET GAMMA", range=gamma_bounds, zeroline=True,
         fixedrange=True, row=1, col=2,
     )
+    # Zoom verticale unico: yaxis2 condivide fisicamente il range di yaxis.
+    # Pan, zoom e autoscale Plotly spostano insieme candele, gamma e Top 3.
+    # Non vincolare l'asse NET GAMMA xaxis2: la sua scala resta dinamica
+    # e indipendente per ogni fotografia durante Play e spostamento slider.
     fig.update_yaxes(
         title_text="Prezzo ES" if offset is not None else "ES / strike SPX (non allineati)",
         range=[min_y, max_y], tickformat=",.0f",
-        fixedrange=True, row=1, col=1,
+        fixedrange=False, row=1, col=1,
     )
     fig.update_yaxes(
-        range=[min_y, max_y], tickformat=",.0f",
-        fixedrange=True, row=1, col=2,
+        matches="y", tickformat=",.0f",
+        fixedrange=False, row=1, col=2,
     )
     # Fornisci visibilità della provenienza senza alterare tracciati/gamma.
     fig.update_layout(meta={
