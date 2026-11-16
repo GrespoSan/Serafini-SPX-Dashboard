@@ -186,11 +186,6 @@ def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario",
             "</div>",
             unsafe_allow_html=True,
         )
-        st.caption(
-            "Scenario teorico WHAT-IF sulla fotografia indicata: "
-            "OI, IV e scadenza restano congelati. "
-            "Non aggiorna Wall, Flip o posizioni dei dealer e non genera segnali."
-        )
         with st.expander("Dettagli tecnici degli orari", expanded=False):
             st.caption(f"Timestamp della fotografia: {snapshot_time}")
             st.caption(f"Timestamp di valutazione del modello Edge: {valuation_time}")
@@ -394,13 +389,3 @@ def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario",
             yaxis_title="NET GEX teorico · mld USD / 1%",
             height=390)
         st.plotly_chart(chart, width="stretch")
-        st.caption(
-            f"Input scenario SPX = ES {float(value):,.2f} − base {basis:+.2f} "
-            f"= {hypothetical_spx:,.2f}. "
-            "NET GEX dello scenario ottenuto per interpolazione lineare "
-            "tra punti della curva Edge archiviata. Il delta usa la stessa "
-            "curva interpolata allo SPX cash, evitando differenze puramente "
-            "numeriche rispetto al valore Edge originale; NON un nuovo download, "
-            "NON una rivalutazione completa di ogni contratto, NON nuove Wall "
-            "o Flip e NON una misura di posizioni dealer osservate."
-        )
