@@ -53,8 +53,11 @@ class TextSizeRegression(unittest.TestCase):
         events = [{"day": date(2026,11,6), "clock":"15:30","kind":"NFP","priority":"ALTA"}]
         result = append_news(script, events, captured_at=datetime(2026,11,6,7,30,tzinfo=ZoneInfo("Europe/Rome")))
         self.assertIn("showMacroNews", result)
+        # News and NET GAMMA labels preserve their configurable size.
+        # The three independent GEX CW/PW/GF labels intentionally default
+        # to size.normal for better readability.
         self.assertIn('size=labelTextSize', result)
-        self.assertNotIn("size=size.normal)", result)
+        self.assertEqual(result.count("size=size.normal)"), 3)
 
 if __name__ == "__main__":
     unittest.main()
