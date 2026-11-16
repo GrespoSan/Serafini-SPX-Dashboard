@@ -479,10 +479,18 @@ def render(store, week, logs, view_mode=None):
                 f"<br><sup>{spot_text}{es_text} | Timestamp Cboe: {cboe_time} "
                 f"(fuso non dichiarato)</sup>")
 
+    def frame_animation_data(slot, item):
+        traces = frame_data(slot, item)
+        # Il toggle resta attivo durante Play e spostamento dello slider:
+        # la visibilità appartiene al grafico, non al singolo frame.
+        for guide in traces[2:]:
+            guide.visible = None
+        return traces
+
     first_slot, first = available[0]
     graph = go.Figure(data=frame_data(first_slot, first))
     graph.frames = [
-        go.Frame(name=slot, data=frame_data(slot, item), traces=list(range(8)),
+        go.Frame(name=slot, data=frame_animation_data(slot, item), traces=list(range(8)),
                  layout=go.Layout(title={"text": frame_title(slot, item)},
                                   xaxis=dict(range=frame_bounds(item))))
         for slot, item in available
