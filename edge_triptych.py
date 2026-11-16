@@ -202,13 +202,19 @@ def show(week, store, logs=None, *, on_valid_gex=None):
             st.info("Nessun rilevamento GEX verificato disponibile nella settimana.")
             return
         st.markdown(
-            f"**Ultimo rilevamento GEX · {latest['kind'].upper()} · "
-            f"{latest['clock']:%d/%m/%Y %H:%M:%S} Roma**"
+            "<div style='margin:0.2rem 0 0.6rem 0'>"
+            "<div style='font-size:0.83rem;color:#b7c4cb'>"
+            "DATI DEI GRAFICI · ULTIMO RILEVAMENTO VERIFICATO</div>"
+            f"<div style='font-size:1.45rem;font-weight:750;color:#55d5f6'>"
+            f"{latest['clock']:%d/%m/%Y · %H:%M:%S} Roma</div>"
+            f"<div style='font-size:0.85rem;color:#9fb0b8'>"
+            f"Fonte: {latest['kind'].upper()} · Selezione automatica</div>"
+            "</div>",
+            unsafe_allow_html=True,
         )
         st.caption(
-            "Selezione automatica tra Replay intraday e download Cboe ufficiali, "
-            "in base all'orario effettivo verificato. Il metodo NET GAMMA "
-            "Serafini resta indipendente."
+            "NET GAMMA Serafini e GEX Edge sono modelli distinti. "
+            "L'orario indica la fotografia selezionata, non l'ultimo trade SPX."
         )
         # Laboratorio indipendente, DISATTIVATO di default: non cambia KPIs,
         # curve, acquisizioni o selettori delle sezioni Edge gia' operative.
@@ -265,12 +271,10 @@ def show(week, store, logs=None, *, on_valid_gex=None):
                 OverflowError, OSError) as exc:
             st.warning(f"Download Cboe più recente non verificabile: {exc}")
             return
-        st.markdown(f"**Fotografia Cboe ore {reading_clock} Roma**" if reading_clock else
-                    "**Fotografia Cboe — orario del download non disponibile**")
-        # SPX last-trade timestamp is distinct from download and model times.
+        # Entrambi i profili ufficiali usano gli stessi byte Cboe.
+        # I timestamp del trade cash e della valutazione non sono rilevamenti.
         cash_trade_time = extract_spx_trade_time(raw)
         cash_note, _ = describe_spx_trade(cash_trade_time)
-        st.caption(cash_note)
         price=float(e["spot_spx"])+shift
         p=st.columns(5)
         p[0].metric("SPX Cboe + base · riferimento", f"{price:,.2f}")
@@ -282,7 +286,15 @@ def show(week, store, logs=None, *, on_valid_gex=None):
         )
         from gex_price_sensitivity_lab import _gex_reference_times
         _, valuation_text = _gex_reference_times(full_clock, e.get("valuation"))
-        st.markdown(f"**Valutazione modello GEX: {valuation_text}**")
+        with st.expander("Dettagli tecnici degli orari", expanded=False):
+            st.caption(f"Fotografia Cboe utilizzata: {full_clock:%d/%m/%Y %H:%M:%S} Roma")
+            st.caption(cash_note)
+            st.caption(f"Timestamp di valutazione dichiarato dal modello Edge: {valuation_text}")
+            st.caption(
+                "Questi tre orari hanno significati diversi. "
+                "Il timestamp della valutazione non sostituisce quello della fotografia "
+                "e non certifica da solo l'aggiornamento dei prezzi SPX."
+            )
         for c,key,lab in zip(p[1:4],("put_wall_spx","gamma_flip_spx","call_wall_spx"),("Put Wall","Gamma Flip","Call Wall")):
             v=e.get(key);c.metric(lab,f"{float(v)+shift:,.2f}" if v is not None else "N/D")
         _colored_edge_metric(p[4], "Regime Edge", str(e.get("regime", "N/D")), e.get("regime"))
@@ -346,7 +358,8 @@ def show(week, store, logs=None, *, on_valid_gex=None):
         all_bounds=(min(y_values)-10,max(y_values)+10)
         view=st.radio("Scala verticale condivisa",("Zoom ±100 punti","Vista completa"),horizontal=True,key="edge_compare_yzoom")
         bounds=(price-100,price+100) if view.startswith("Zoom") else all_bounds
-        fig=_plot(e,sr,candles,shift,bounds,reading_clock=reading_clock)
+        fig=_plot(e,sr,candles,shift,bounds,
+                  reading_clock=full_clock.strftime("%d/%m %H:%M:%S"))
         st.plotly_chart(fig,width="stretch",key="edge_compare_three_charts")
         st.markdown(
             "**Legenda GEX:** 🟢 **Call GEX** (barre verdi) · 🔴 **Put GEX** (barre rosse) · "
