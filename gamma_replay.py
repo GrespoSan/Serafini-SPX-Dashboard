@@ -572,4 +572,5 @@ def render(store, week, logs, view_mode=None):
                       "ES stimato": round(spot + offset, 2) if spot is not None and offset is not None else None,
                       "Tipo": item["origin"], "Top 3 positivo": fmt(upper),
                       "Top 3 negativo": fmt(lower)})
-    st.dataframe(table, hide_index=True, width="stretch")
+    with st.expander("Dettaglio rilevamenti Replay · tabella", expanded=False):
+        st.dataframe(table, hide_index=True, width="stretch")
