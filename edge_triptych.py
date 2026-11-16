@@ -216,6 +216,11 @@ def show(week, store, logs=None, *, on_valid_gex=None):
             "NET GAMMA Serafini e GEX Edge sono modelli distinti. "
             "L'orario indica la fotografia selezionata, non l'ultimo trade SPX."
         )
+        if latest["kind"] == "Replay":
+            _publish_official_header_unchanged(
+                week, store, logs or [], on_valid_gex)
+            from edge_replay_panel import show_replay
+            show_replay(week, store, _plot, logs=logs or [], selected=latest)
         # Laboratorio indipendente, DISATTIVATO di default: non cambia KPIs,
         # curve, acquisizioni o selettori delle sezioni Edge gia' operative.
         with st.container(border=True):
@@ -228,11 +233,6 @@ def show(week, store, logs=None, *, on_valid_gex=None):
                 except Exception as exc:
                     st.warning("Laboratorio comparativo non disponibile: "
                                + type(exc).__name__)
-        if latest["kind"] == "Replay":
-            _publish_official_header_unchanged(
-                week, store, logs or [], on_valid_gex)
-            from edge_replay_panel import show_replay
-            show_replay(week, store, _plot, logs=logs or [], selected=latest)
             return
 
         # Latest official chain: calculate both profiles on exactly the same
@@ -383,3 +383,16 @@ def show(week, store, logs=None, *, on_valid_gex=None):
             download_clock=full_clock, slot=reading_clock,
             source_kind="Ufficiale", current_es=current_es,
         )
+        # Laboratorio indipendente, DISATTIVATO di default: non cambia KPIs,
+        # curve, acquisizioni o selettori delle sezioni Edge gia' operative.
+        with st.container(border=True):
+            st.markdown("**🧪 LABORATORIO DI RICERCA — NET GAMMA vs GEX**")
+            if st.toggle("Apri confronto Serafini · Solo OI · GEX modellato",
+                         value=False, key=f"gamma_three_models_enable_{week}"):
+                try:
+                    from research_gamma_three_models_ui import render as render_three
+                    render_three(week, store, logs or [])
+                except Exception as exc:
+                    st.warning("Laboratorio comparativo non disponibile: "
+                               + type(exc).__name__)
+
