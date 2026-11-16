@@ -530,7 +530,11 @@ def render(store, week, logs, view_mode=None):
     # Gli indici delle guide per il profilo singolo sono 2..7.
     guide_indices = list(range(2, 8))
     guide_menu = dict(
-        type="buttons", showactive=True, active=-1,
+        # Evita il fondo bianco di Plotly sul pulsante attivo, che rende
+        # il testo chiaro illeggibile. Il toggle args/args2 resta operativo.
+        type="buttons", showactive=False, active=-1,
+        bgcolor="#334155", bordercolor="#64748b",
+        font=dict(color="#ffffff", size=12),
         direction="left", x=0.135, y=-0.12,
         buttons=[dict(
             label="Top 3 + / −", method="restyle",
