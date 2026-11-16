@@ -403,6 +403,33 @@ def render(store, week, logs, view_mode=None):
         prices, [], [], yvalues, reference_price, complete=show_full_band,
     )
 
+    def top3_guides(item):
+        """Tre NET positivi e tre NET negativi, senza stimare strike assenti."""
+        ranked = [(float(r["strike_spx"]), float(r["net_gamma"]))
+                  for r in display_rows(item)]
+        positives = sorted((p for p in ranked if p[1] > 0),
+                           key=lambda p: (-p[1], p[0]))[:3]
+        negatives = sorted((p for p in ranked if p[1] < 0),
+                           key=lambda p: (p[1], p[0]))[:3]
+        return ([p[0] + (offset or 0) for p in positives]
+                + [None] * (3 - len(positives))
+                + [p[0] + (offset or 0) for p in negatives]
+                + [None] * (3 - len(negatives)))
+
+    def guide_traces(item):
+        left, right = frame_bounds(item)
+        result = []
+        for index, price in enumerate(top3_guides(item)):
+            positive = index < 3
+            result.append(go.Scatter(
+                x=[left, right] if price is not None else [None, None],
+                y=[price, price] if price is not None else [None, None],
+                mode="lines", line=dict(color="#22c55e" if positive else "#ef4444",
+                                        width=1, dash="dash"),
+                visible=False, hoverinfo="skip", showlegend=False,
+            ))
+        return result
+
     def frame_data(slot, item):
         vals = {float(r["strike_spx"]): float(r["net_gamma"])
                 for r in display_rows(item)}
@@ -436,9 +463,8 @@ def render(store, week, logs, view_mode=None):
             mode="text", textfont=dict(color="#e2e8f0", size=10),
             hoverinfo="skip", showlegend=False, cliponaxis=False,
         )
-        # Esattamente due tracce per frame: barre + etichette dei prezzi.
-        # Compatibile con l'animazione e con le candele ES.
-        return [bars, labels]
+        # Sei guide opzionali: aggiornate al frame senza alterare le barre.
+        return [bars, labels, *guide_traces(item)]
 
     def frame_title(slot, item):
         spot = numeric_spot(item)
@@ -456,7 +482,7 @@ def render(store, week, logs, view_mode=None):
     first_slot, first = available[0]
     graph = go.Figure(data=frame_data(first_slot, first))
     graph.frames = [
-        go.Frame(name=slot, data=frame_data(slot, item), traces=[0, 1],
+        go.Frame(name=slot, data=frame_data(slot, item), traces=list(range(8)),
                  layout=go.Layout(title={"text": frame_title(slot, item)},
                                   xaxis=dict(range=frame_bounds(item))))
         for slot, item in available
@@ -492,6 +518,19 @@ def render(store, week, logs, view_mode=None):
                  currentvalue={"prefix": "Orario: "}, steps=steps)]
                  if len(available) > 1 else []),
     )
+    # Comando separato accanto a Play/Pausa, ON/OFF senza rerun Streamlit.
+    # Gli indici delle guide per il profilo singolo sono 2..7.
+    guide_indices = list(range(2, 8))
+    guide_menu = dict(
+        type="buttons", showactive=True, active=-1,
+        direction="left", x=0.135, y=-0.12,
+        buttons=[dict(
+            label="Top 3 + / −", method="restyle",
+            args=[{"visible": True}, guide_indices],
+            args2=[{"visible": False}, guide_indices],
+        )],
+    )
+    graph.update_layout(updatemenus=list(graph.layout.updatemenus or []) + [guide_menu])
     if view_mode == "Candele ES + NET GAMMA":
         if offset is None:
             st.warning("Per affiancare le candele ES occorre il differenziale ES − SPX. "
