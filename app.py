@@ -377,7 +377,7 @@ if not offline and not storage_unavailable:
 # Place after GEX EDGE and before REPLAY E CONFRONTO.
 if role == 'admin':
     from serafini_lab_admin import render as render_serafini_lab_admin
-    render_serafini_lab_admin(role)
+    render_serafini_lab_admin(role, Store(url, service_key, bucket))
 
 # Confronto e Replay condividono la stessa sezione, con calcoli invariati.
 if not offline and not storage_unavailable:

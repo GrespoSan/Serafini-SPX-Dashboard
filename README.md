@@ -152,16 +152,14 @@ Snapshot SPX del 15 ottobre 2026: 30.470 contratti nel file; per scadenza 2026-1
 
 ## SERAFINI LAB — Greche Superiori (soltanto ADMIN)
 
-La nuova sezione è inserita sotto **GEX EDGE — CONFRONTO** e sopra **REPLAY E CONFRONTO**. È chiusa inizialmente. È generata esclusivamente quando `role == 'admin'`; il modulo `serafini_lab_admin.py` blocca anche eventuali richieste dirette per `friend` prima di accedere all'archivio. Nessuna modifica alla formula del NET GAMMA, ai cron, a GEX Edge, Replay, agli snapshot o ai Pine.
+La sezione **SERAFINI LAB — GRECHE SUPERIORI** compare solo per `admin`, sotto GEX EDGE e sopra REPLAY. È chiusa inizialmente; nessuna modifica a NET GAMMA, GEX Edge o Pine.
 
-La ricerca LAB risiede nel repository **privato** `GrespoSan/Serafini-SPX-Cloud` e produce rapporti `research/higher_greeks_reports/daily/YYYY/Serafini_LAB_YYYYMMDD.json`. Per visualizzarli nel Dashboard la lettura avviene esclusivamente sul server tramite un **token GitHub a permessi minimi e di sola lettura**, conservato nei Secrets Streamlit:
+**Collegamento automatico senza nuova credenziale:** il workflow privato `GrespoSan/Serafini-SPX-Cloud` copia soltanto i **rapporti diagnostici definitivi derivati** (NON le catene Cboe originali) nel bucket già esistente e **privato** `spx-snapshots` al percorso `serafini-lab/reports/YYYY/Serafini_LAB_YYYYMMDD.json`. Il caricamento è create-only, con confronto identico/readback; il workflow usa i secrets `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` già utilizzati dal downloader ufficiale. La loro conservazione è **solo in GitHub Actions**, mai in repository pubblico o client.
 
-```toml
-SERAFINI_LAB_GITHUB_TOKEN = "TOKEN_READ_ONLY_DEL_REPO_PRIVATO"
-```
+Il Dashboard legge il rapporto con lo stesso `Store(url, service_key, bucket)` server-side già esistente, **solo dopo** il controllo `role == 'admin'` sia in `app.py` che nel modulo `serafini_lab_admin.py`. La lettura bypassa la cache condivisa. `friend` non accede neppure alla funzione di download.
 
-La voce è opzionale per il funzionamento delle altre sezioni: senza la credenziale, il pannello ADMIN compare ma dichiara **Archivio LAB non collegato**, senza inventare numeri. Non usare la password ADMIN come token, né inserire credenziali nel repository pubblico, nell'URL, nel browser, nelle chat, nei log o nel codice. Il token deve essere ristretto al solo repository privato con `Contents: Read`; non servono privilegi write, Actions o accesso ai secrets.
+Se non esiste ancora un report valido per il giorno selezionato, la UI mostra **Nessun rapporto definitivo**: non inventa risultati e non considera `WAIT` come `DIAGNOSTIC_ONLY`. I report `WAIT` del job restano negli artifact GitHub per 14 giorni e non vengono promossi in Supabase.
 
-I rapporti sono validati per giorno, schema e modelli H0/H1/H2; la visualizzazione rimane diagnostica, non fornisce segnali LONG/SHORT. I risultati `WAIT` delle esecuzioni automatiche sono conservati come artifacts di GitHub Actions, non come report permanente: l'assenza del report definitivo non significa necessariamente che il cron non sia partito.
+**Nessuna configurazione di un nuovo `SERAFINI_LAB_GITHUB_TOKEN` necessaria.** Lo storico funzionamento di Serafini non cambia. I dati LAB possono essere letti soltanto con la chiave privilegiata sul server e sotto ruolo amministratore; non usare link Storage pubblici o URL firmati verso il browser.
 
-Test: `tests/test_serafini_lab_admin.py` (autorizzazione admin, friend senza I/O, token assente, 404, formato e provenienza data). Il Dashboard non contiene né importa i modelli matematici privati.
+Test di autorizzazione, parsing e report mancanti: `tests/test_serafini_lab_admin.py`. La visualizzazione dei dati reali richiede che il workflow Cloud abbia prodotto e replicato almeno un report definitivo; l'assenza non indica necessariamente un guasto, può essere un `WAIT` legittimo.
