@@ -416,22 +416,24 @@ with st.expander('PINE DI EMERGENZA — NET GAMMA CORRENTE', expanded=False):
         st.error('Pine di emergenza temporaneamente non disponibile: '
                  + type(exc).__name__)
 
-# SERAFINI LAB: entire section is server-side ADMIN-only, including
-# NET GAMMA evolution. One closed outer expander; avoid nesting expanders.
+# SERAFINI LAB: one closed outer section, visible exclusively to ADMIN.
+# Two clearly separated tabs (not nested Streamlit expanders, which are
+# unsupported); calculations and the privileged report reader are unchanged.
 if role == 'admin':
     with st.expander('🧪 SERAFINI LAB', expanded=False):
-        lab_choice = st.radio(
-            'Laboratorio',
-            ('Evoluzione NET GAMMA (sperimentale)', 'GRECHE SUPERIORI'),
-            horizontal=True, key='spx_serafini_lab_selection',
-        )
-        if lab_choice == 'Evoluzione NET GAMMA (sperimentale)':
+        evolution_tab, greeks_tab = st.tabs([
+            '📊 Evoluzione NET GAMMA (sperimentale)',
+            '🧪 GRECHE SUPERIORI',
+        ])
+        with evolution_tab:
+            st.markdown('#### Evoluzione NET GAMMA · Ricerca intraday')
             if not offline and not storage_unavailable:
                 from gamma_replay import render_research_lab
                 render_research_lab(store, week, logs, inside_section=True)
             else:
                 st.info('Archivio Replay non disponibile per la ricerca.')
-        else:
+        with greeks_tab:
+            st.markdown('#### GRECHE SUPERIORI · Ricerca diagnostica')
             from serafini_lab_admin import render as render_serafini_lab_admin
             render_serafini_lab_admin(
                 role, Store(url, service_key, bucket), inside_section=True)
