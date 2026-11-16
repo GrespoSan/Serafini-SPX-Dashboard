@@ -117,8 +117,11 @@ class EdgeDailyKPITests(unittest.TestCase):
         self.assertLess(html.index('class="spx-trend-label">GEX'),
                         html.index('class="spx-trend-weekly-row"'))
         self.assertIn("Weekly precedente · 09–13/11/2026", html)
-        self.assertIn("Min 7.460,00", html)
         self.assertIn("Max 7.690,00", html)
+        self.assertIn("Min 7.460,00", html)
+        self.assertLess(html.index("Max 7.690,00"), html.index("Min 7.460,00"))
+        self.assertIn('style="color:#ef4444">-1,68%</b>', html)
+        self.assertIn('style="color:#22c55e">+1,35%</b>', html)
         self.assertIn("vs close Daily 13/11/2026 · 7.560,75 ES", html)
         self.assertIn("+1,35%", html)
         self.assertIn("-1,68%", html)
