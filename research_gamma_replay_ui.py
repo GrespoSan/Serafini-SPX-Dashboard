@@ -8,8 +8,12 @@ import streamlit as st
 from research_gamma_distribution import compare_profiles
 
 
-def render(available, kind, day):
-    with st.expander("🧪 LABORATORIO · Evoluzione NET GAMMA (sperimentale)", expanded=False):
+def render(available, kind, day, *, inside_expander=False):
+    from contextlib import nullcontext
+    panel = (nullcontext() if inside_expander else
+             st.expander("🧪 LABORATORIO · Evoluzione NET GAMMA (sperimentale)",
+                         expanded=False))
+    with panel:
         st.caption("Solo ricerca: nessun segnale trading, nessuna modifica a Serafini. "
                    "Confronti consecutivi ordinati per download Roma, stessa scadenza.")
         if len(available) < 2:
