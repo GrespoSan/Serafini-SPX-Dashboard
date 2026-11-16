@@ -99,7 +99,41 @@ def fetch_private_report(day, token, role, opener=None):
     return _validate_report(parsed, day), "DISPONIBILE"
 
 
-def render(role):
+SUPABASE_LAB_ROOT = "serafini-lab/reports"
+
+
+def supabase_report_path(day):
+    if not isinstance(day, date):
+        raise ValueError("Data LAB non valida")
+    return f"{SUPABASE_LAB_ROOT}/{day.year}/Serafini_LAB_{day:%Y%m%d}.json"
+
+
+def fetch_supabase_report(day, store, role):
+    """ADMIN guard precedes every server-side authenticated Storage read.
+
+    Uses the existing private spx-snapshots bucket and Streamlit server keys.
+    No additional tokens, public fallback, signed URLs, or client access.
+    """
+    require_admin(role)
+    if store is None:
+        return None, "NON_COLLEGATO"
+    path = supabase_report_path(day)
+    try:
+        # Bypass global Streamlit cache for privileged LAB-specific reads.
+        blob = store._download_uncached(path)
+    except RuntimeError as exc:
+        if str(exc) == "Supabase HTTP 404":
+            return None, "NESSUN_REPORT"
+        return None, "ARCHIVIO_NON_DISPONIBILE"
+    if not isinstance(blob, bytes) or len(blob) > MAX_BYTES:
+        raise ValueError("Report LAB troppo grande o non valido")
+    try:
+        parsed = json.loads(blob.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError("JSON LAB non valido") from exc
+    return _validate_report(parsed, day), "DISPONIBILE"
+
+def render(role, store=None):
     require_admin(role)
     import streamlit as st
 
@@ -111,15 +145,11 @@ def render(role):
                             max_value=today, key="serafini_lab_day")
         st.caption("Il laboratorio confronta H0 Gamma invariato, H1 Color "
                    "e H2 ricalcolo temporale. Non sono segnali LONG/SHORT.")
-        token = st.secrets.get("SERAFINI_LAB_GITHUB_TOKEN", "")
-        if not token:
-            st.info("Archivio LAB non collegato al Dashboard. "
-                    "Il calcolo automatico risiede nel repository Cloud privato. "
-                    "Per consultare qui i rapporti serve una credenziale server-side "
-                    "di sola lettura; nessun dato viene mostrato ai lettori.")
+        if store is None:
+            st.info("Archivio LAB non collegato al Dashboard.")
             return
         try:
-            report, state = fetch_private_report(day, token, role)
+            report, state = fetch_supabase_report(day, store, role)
         except ValueError:
             st.warning("Rapporto LAB non leggibile: formato o contenuto non valido.")
             return
