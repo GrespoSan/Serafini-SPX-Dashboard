@@ -212,10 +212,6 @@ def show(week, store, logs=None, *, on_valid_gex=None):
             "</div>",
             unsafe_allow_html=True,
         )
-        st.caption(
-            "NET GAMMA Serafini e GEX Edge sono modelli distinti. "
-            "L'orario indica la fotografia selezionata, non l'ultimo trade SPX."
-        )
         if latest["kind"] == "Replay":
             _publish_official_header_unchanged(
                 week, store, logs or [], on_valid_gex)
