@@ -314,11 +314,19 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
         reference_text = (f'vs close Daily '
                           f'{prior_week["close_day"]:%d/%m/%Y} · '
                           f'{_it_price(prior_week["close"])} ES')
+        # Order high before low, as on a conventional weekly range.
+        # Price levels remain neutral; only the signed distance is colored.
+        high_color = ("#22c55e" if prior_week["from_high_pct"] > 0 else
+                      "#ef4444" if prior_week["from_high_pct"] < 0 else "#cbd5e1")
+        low_color = ("#22c55e" if prior_week["from_low_pct"] > 0 else
+                     "#ef4444" if prior_week["from_low_pct"] < 0 else "#cbd5e1")
         week_html = (
-            '<div class="spx-trend-weekly-row"><span>Min '
-            + escape(low_text) + '</span><b>' + escape(low_pct) + '</b></div>'
             '<div class="spx-trend-weekly-row"><span>Max '
-            + escape(high_text) + '</span><b>' + escape(high_pct) + '</b></div>'
+            + escape(high_text) + '</span><b style="color:' + high_color + '">'
+            + escape(high_pct) + '</b></div>'
+            '<div class="spx-trend-weekly-row"><span>Min '
+            + escape(low_text) + '</span><b style="color:' + low_color + '">'
+            + escape(low_pct) + '</b></div>'
             '<div class="spx-trend-sub">' + escape(reference_text) + '</div>'
         )
     previous_monday = today_rome - timedelta(days=today_rome.weekday() + 7)
