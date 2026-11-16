@@ -6,7 +6,7 @@ from datetime import date
 from urllib.error import HTTPError
 
 from serafini_lab_admin import (
-    fetch_private_report, report_path, require_admin, _validate_report,
+    fetch_private_report, fetch_supabase_report, supabase_report_path, report_path, require_admin, _validate_report,
 )
 
 
@@ -68,6 +68,45 @@ class SerafiniLabAdminTests(unittest.TestCase):
         result, status = fetch_private_report(self.day, "secret", "admin", opener)
         self.assertIsNone(result)
         self.assertEqual(status, "NESSUN_REPORT")
+
+
+    def test_existing_supabase_private_store_admin_only(self):
+        calls=[]
+        class PrivateStore:
+            def _download_uncached(self, path):
+                calls.append(path)
+                return json.dumps(self_report).encode("utf-8")
+        self_report=self.report
+        result, status=fetch_supabase_report(self.day, PrivateStore(), "admin")
+        self.assertEqual(status, "DISPONIBILE")
+        self.assertEqual(result["score"]["scored"], 40)
+        self.assertEqual(calls,[supabase_report_path(self.day)])
+        self.assertTrue(calls[0].startswith("serafini-lab/reports/"))
+
+    def test_existing_supabase_friend_cannot_read(self):
+        class ForbiddenStore:
+            def _download_uncached(self, path):
+                raise AssertionError("FRIEND accessed privileged report")
+        with self.assertRaises(PermissionError):
+            fetch_supabase_report(self.day, ForbiddenStore(), "friend")
+        with self.assertRaises(PermissionError):
+            fetch_supabase_report(self.day, ForbiddenStore(), None)
+
+    def test_existing_supabase_missing_report(self):
+        class NotFound:
+            def _download_uncached(self, path):
+                raise RuntimeError("Supabase HTTP 404")
+        result, status=fetch_supabase_report(self.day, NotFound(), "admin")
+        self.assertIsNone(result)
+        self.assertEqual(status, "NESSUN_REPORT")
+
+    def test_existing_supabase_wrong_day_rejected(self):
+        class OldReport:
+            def _download_uncached(self, path):
+                return json.dumps(dict(self_report, date="2026-11-15")).encode()
+        self_report=self.report
+        with self.assertRaises(ValueError):
+            fetch_supabase_report(self.day, OldReport(), "admin")
 
     def test_fixed_report_path(self):
         self.assertEqual(report_path(self.day),
