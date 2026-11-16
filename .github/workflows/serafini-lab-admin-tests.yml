@@ -1,0 +1,24 @@
+name: SERAFINI LAB admin-only panel tests
+on:
+  pull_request:
+    paths:
+      - 'serafini_lab_admin.py'
+      - 'tests/test_serafini_lab_admin.py'
+      - 'app.py'
+      - '.github/workflows/serafini-lab-admin-tests.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  admin-panel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Syntax checks
+        run: python -m py_compile app.py serafini_lab_admin.py tests/test_serafini_lab_admin.py
+      - name: ADMIN access and report parsing tests
+        run: python -m unittest discover -s tests -p 'test_serafini_lab_admin.py' -v
