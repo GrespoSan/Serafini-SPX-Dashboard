@@ -993,8 +993,16 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
             return formatted.replace(',', '_').replace('.', ',').replace('_', '.')
 
         net_col, call_col, put_col = st.columns(3)
-        net_col.metric('NET GAMMA · Call − Put',
-                       _gamma_it(net_summary, signed=True))
+        with net_col:
+            net_color = '#f05252' if net_summary < 0 else '#f1f5f9'
+            st.markdown(
+                '<div style="font-size:0.88rem;color:#d1d5db;'
+                'margin-bottom:0.35rem">NET GAMMA · Call − Put</div>'
+                f'<div style="font-size:1.85rem;line-height:1.25;'
+                f'font-weight:400;color:{net_color};font-variant-numeric:tabular-nums">'
+                f'{_gamma_it(net_summary, signed=True)}</div>',
+                unsafe_allow_html=True,
+            )
         call_col.metric('GAMMA CALL (+)',
                         _gamma_it(call_summary, signed=True))
         put_col.metric('GAMMA PUT (−)', '−' + _gamma_it(put_summary))
@@ -1018,7 +1026,18 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                 candidate_0dte = find_candidates(result['rows'], ref)
             capture_info = (f'{acquisition_label} · download ore {download_clock} Roma'
                             if download_clock else f'{acquisition_label} · ora download non disponibile')
-            st.subheader(f'{title} — RILEVAMENTO {day:%d/%m/%Y} · {capture_info}')
+            # Data e ora della fotografia evidenziate: nessuna conversione
+            # del timestamp Cboe privo di fuso, né modifica ai Gamma.
+            from html import escape as _html_escape
+            st.markdown(
+                f'<div style="font-size:1.3rem;line-height:1.32;'
+                f'font-weight:700;margin:0 0 0.4rem">'
+                f'{_html_escape(title)} — RILEVAMENTO '
+                f'<span style="color:#55d5f6">'
+                f'{day:%d/%m/%Y} · {_html_escape(capture_info)}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
             st.caption(f'Scadenza opzioni: {expiry:%d/%m/%Y} · Timestamp originale Cboe: {timestamp} (fuso non dichiarato)')
             if not result['rows']:
                 st.warning('Nessun contratto trovato per questa scadenza nello snapshot: nessun risultato inventato.')
