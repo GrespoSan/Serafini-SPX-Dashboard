@@ -89,18 +89,28 @@ def _official_frames(_store, week, day, logs):
                     calculated = profile(snap, expiry, ref)
                     if not calculated.get("rows"):
                         raise ValueError("Profilo vuoto")
-                    expanded = visual_profile(
-                        snap, calculated, expiry, ref,
-                        snap["data"].get("current_price"))
+                    # L'estensione e' facoltativa: un errore fuori dai 50
+                    # strike originali non puo' scartare il rilevamento
+                    # ufficiale ne' impedire l'esportazione Pine.
+                    try:
+                        expanded = visual_profile(
+                            snap, calculated, expiry, ref,
+                            snap["data"].get("current_price"))
+                        visual_rows = expanded["rows"]
+                        visual_complete = expanded["coverage_complete"]
+                    except (ValueError, TypeError, KeyError, OverflowError):
+                        visual_rows = calculated["rows"]
+                        visual_complete = False
                     profiles[kind] = {
                         "rows": [
                             {"strike_spx": r["strike_spx"], "net_gamma": r["net_gamma"]}
                             for r in calculated["rows"]],
-                        # 140 strike legacy conservati per trasparenza.
+                        # Fallback senza inventare strike o gamma:
+                        # esattamente i 50 originali della stessa catena.
                         "visual_rows": [
                             {"strike_spx": r["strike_spx"], "net_gamma": r["net_gamma"]}
-                            for r in expanded["rows"]],
-                        "visual_coverage_complete": expanded["coverage_complete"],
+                            for r in visual_rows],
+                        "visual_coverage_complete": visual_complete,
                     }
                     # Catena ufficiale completa già caricata: il Replay può
                     # estendere lo zoom ±10% senza un secondo download.
