@@ -104,13 +104,32 @@ def combined_graph(gamma_graph, available, day, kind, offset, gamma_bounds, gamm
     fig.add_trace(gamma_graph.data[0], row=1, col=2)
     fig.add_trace(gamma_graph.data[1], row=1, col=2)
 
+    # Linee opzionali: stessi sei livelli sul grafico ES (sinistra) e sul
+    # profilo NET GAMMA (destra). Le guide seguono il frame corrente.
+    def candle_guides(gamma_guides, initial=False):
+        return [
+            go.Scatter(
+                x=chart_time_window if any(y is not None for y in guide.y) else [None, None],
+                y=list(guide.y), mode="lines",
+                line=guide.line, hoverinfo="skip", showlegend=False,
+                visible=False if initial else None,
+            )
+            for guide in gamma_guides
+        ]
+
+    for guide in candle_guides(gamma_graph.data[2:], initial=True):
+        fig.add_trace(guide, row=1, col=1)
+    for guide in gamma_graph.data[2:]:
+        fig.add_trace(guide, row=1, col=2)
+
     slot_to_item = dict(available)
     fig.frames = [
         go.Frame(
             name=frame.name,
             data=[candle_trace(slot_to_item[frame.name]),
-                  frame.data[0], frame.data[1]],
-            traces=[0, 1, 2],
+                  frame.data[0], frame.data[1],
+                  *candle_guides(frame.data[2:]), *frame.data[2:]],
+            traces=list(range(15)),
             # Fissa anche xaxis (candele) ad ogni step: Plotly non deve
             # ripristinare un autorange incoerente dopo slider/play.
             # xaxis2 resta la scala NET GAMMA dinamica della fotografia.
@@ -123,13 +142,21 @@ def combined_graph(gamma_graph, available, day, kind, offset, gamma_bounds, gamm
         for frame in gamma_graph.frames
     ]
 
+    # Riporta il toggle sul mapping delle due colonne (sei guide per lato).
+    menus = list(gamma_graph.layout.updatemenus or [])
+    if len(menus) > 1:
+        menus[-1].buttons[0].args = [
+            {"visible": True}, list(range(3, 15))]
+        menus[-1].buttons[0].args2 = [
+            {"visible": False}, list(range(3, 15))]
+
     # Comandi animazione originali: stessi slot, play, pausa e slider.
     fig.update_layout(
         title=gamma_graph.layout.title,
         template="plotly_dark",
         height=gamma_graph.layout.height,
         margin=dict(l=16, r=16, t=94, b=90),
-        updatemenus=gamma_graph.layout.updatemenus,
+        updatemenus=menus,
         sliders=gamma_graph.layout.sliders,
         showlegend=False,
     )
