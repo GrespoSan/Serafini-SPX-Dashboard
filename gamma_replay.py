@@ -220,22 +220,11 @@ def render(store, week, logs, view_mode=None):
         "Scadenza Replay", ("0DTE", "Weekly"), horizontal=True,
         key=f"replay_expiry_{week}_{day}", index=0,
     )
-    st.caption(f"Orario USA per {day:%d/%m/%Y}: apertura 09:30 NY = "
-               f"{cash_open_rome(day):%H:%M} Roma; "
-               f"stop SPXW 0DTE 16:00 NY = "
-               f"{spxw_expiry_close_rome(day):%H:%M} Roma. "
-               "Cambio ora legale gestito automaticamente.")
     if view_mode is None:
         view_mode = st.radio("Visualizzazione", ("Solo NET GAMMA", "Candele ES + NET GAMMA"),
                              horizontal=True, key=f"replay_visual_{week}")
     elif view_mode not in ("Solo NET GAMMA", "Candele ES + NET GAMMA"):
         raise ValueError("Modalità Replay non valida")
-    if st.button("Aggiorna replay", key=f"replay_reload_{week}"):
-        # I pool grafici Cboe sono piu' ampi: cache corta per evitare
-        # egress Supabase a ogni selezione dello zoom, con refresh esplicito.
-        _study_frames.clear()
-        _official_frames.clear()
-        st.rerun()
     with st.spinner("Caricamento profili compatti e snapshot ufficiali..."):
         # At 09:16 Chicago the official (logical 16:16) can coexist with
         # the original nonofficial 16:16 Replay. Preserve BOTH originals
@@ -264,9 +253,6 @@ def render(store, week, logs, view_mode=None):
                  if kind == "Weekly" or not classify_0dte_download(
                      day, frame.get("download_rome"))["post_expiry"]]
     missing = [slot for slot in expected_slots if slot not in frames]
-    st.caption(f"Frame {kind} {'pre-scadenza' if kind == '0DTE' else 'disponibili'}: "
-               f"{len(available)}/{len(expected_slots)} · "
-               f"Assenti: {', '.join(missing) if missing else 'nessuno'}")
     if kind == "0DTE" and post_expiry:
         ignored = ', '.join(slot for slot, _ in post_expiry)
         limit = classify_0dte_download(
@@ -282,16 +268,6 @@ def render(store, week, logs, view_mode=None):
         st.caption(f"Weekly osservata: scadenza {expiry_selected:%d/%m/%Y}. "
                    "Il venerdi si passa alla settimana successiva; non confrontare "
                    "direttamente giornate con scadenze Weekly differenti.")
-    # Indicazione sobria: ripetizione del timestamp NON implica che l'intera
-    # chain sia identica e timestamp diverso NON certifica la freschezza.
-    feed_stats = summarize_timeline(available)
-    st.caption(
-        f"Timestamp Cboe rispetto al frame precedente: "
-        f"{feed_stats['DIVERSO']} diversi · "
-        f"{feed_stats['RIPETUTO']} ripetuti · "
-        f"{feed_stats['NON VERIFICABILE']} non verificabili. "
-        "Il primo rilevamento non ha un confronto; nessun fuso Cboe presunto."
-    )
     if not available:
         st.info("Nessun frame replay disponibile per questa data. I frame futuri "
                 "non possono essere ricostruiti retroattivamente.")
@@ -375,9 +351,6 @@ def render(store, week, logs, view_mode=None):
         st.info("Differenziale ES − SPX non disponibile per questa giornata. "
                 "Apri ANALISI NET GAMMA per calcolarlo o verificarlo; "
                 "nel frattempo il Replay mostra gli strike SPX.")
-    else:
-        st.caption(f"Differenziale ES − SPX: {offset:g} punti · "
-                   "valore condiviso con ANALISI NET GAMMA.")
 
     def numeric_spot(item):
         """Never substitute live prices for a historical Cboe observation."""
@@ -390,12 +363,6 @@ def render(store, week, logs, view_mode=None):
     all_rows = [r for _, f in available for r in display_rows(f)]
     strikes = sorted({float(r["strike_spx"]) for r in all_rows})
     counts = [len(display_rows(frame)) for _, frame in available]
-    st.caption(f"Livelli reali NET GAMMA {kind}: {len(strikes)} strike distinti "
-               f"nella sequenza; {min(counts)}–{max(counts)} per rilevamento. "
-               + ("Etichette sui 32 livelli più intensi; tutti disponibili "
-                  "nel tooltip. " if show_extended else
-                  "Etichette su tutti gli strike reali. ")
-               + "Il calcolo Serafini non cambia.")
     if show_extended:
         notes = [
             (slot, coverage_note(frame["profiles"][kind],
@@ -479,8 +446,10 @@ def render(store, week, logs, view_mode=None):
         es_text = (f" | ES stimato {spot + offset:,.2f}"
                    if spot is not None and offset is not None else "")
         cboe_time = str(item.get("cboe_timestamp_original") or "n.d.")
-        return (f"NET GAMMA {kind} | {day:%d/%m/%Y} | "
-                f"Slot {slot}, download {item['clock']} Roma"
+        return (f"<span style='font-size:20px;color:#55D5F6'><b>"
+                f"NET GAMMA {kind} · {day:%d/%m/%Y} · "
+                f"Rilevamento {slot} · download {item['clock']} Roma"
+                f"</b></span>"
                 f"<br><sup>{spot_text}{es_text} | Timestamp Cboe: {cboe_time} "
                 f"(fuso non dichiarato)</sup>")
 
@@ -535,12 +504,6 @@ def render(store, week, logs, view_mode=None):
                     zoom_complete=show_full_band,
                 )
                 candle_meta = graph.layout.meta or {}
-                st.caption(
-                    f"Sinistra: {candle_meta.get('candle_source', 'ES · fonte N/D')}; "
-                    "solo candele già chiuse allo snapshot. "
-                    "Destra: NET GAMMA Cboe invariato. I prezzi ES e SPX "
-                    "possono differire per feed e differenziale applicato."
-                )
             except Exception as exc:
                 st.warning(f"Candele ES non disponibili ({exc}). Resta visibile il Replay NET GAMMA originale.")
     # Un reset esplicito ripristina la finestra Roma, lo zoom e lo slider
@@ -593,22 +556,7 @@ def render(store, week, logs, view_mode=None):
             file_name=f"NET_GAMMA_{kind}_{day:%Y-%m-%d}.gif",
             mime="image/gif", key=f"gif_download_{week}_{day}_{kind}",
         )
-    st.caption("GIF manuale 0DTE: scala NET GAMMA dinamica e zero centrale fisso, "
-               "nessuna interpolazione dei profili. Le candele ES includono "
-               "solo barre chiuse al momento del download.")
-    st.caption("Il prezzo SPX Cboe e l'eventuale ES stimato rimangono nel titolo "
-               "e nella tabella dei rilevamenti; non sono tracciati come linea "
-               "sull'istogramma. Il timestamp Cboe non dichiara il fuso orario.")
 
-    st.caption("Asse verticale NET GAMMA zero sempre al centro; scala simmetrica "
-               "e dinamica per rilevamento: le barre fra frame NON sono "
-               "direttamente confrontabili; usare i valori "
-               "numerici e l'asse corrente. Barre verdi: NET positivo; "
-               "rosse: NET negativo. Le etichette accanto all'asse zero mostrano "
-               "il PREZZO ES se il differenziale ES−SPX è disponibile; "
-               "altrimenti indicano lo strike SPX. Etichette delle barre verdi "
-               "a sinistra e delle rosse a destra. Il NET GAMMA è disponibile "
-               "al passaggio del mouse.")
     table = []
     for slot, item in available:
         rows = item["profiles"][kind]["rows"]
@@ -625,6 +573,3 @@ def render(store, week, logs, view_mode=None):
                       "Tipo": item["origin"], "Top 3 positivo": fmt(upper),
                       "Top 3 negativo": fmt(lower)})
     st.dataframe(table, hide_index=True, width="stretch")
-    st.caption("I frame ufficiali disponibili provengono dall'archivio invariato. "
-               "I frame intermedi NON entrano nei report ufficiali. "
-               "L'orario di download non garantisce la freschezza della chain Cboe.")
