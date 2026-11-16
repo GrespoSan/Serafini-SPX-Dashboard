@@ -133,11 +133,14 @@ def fetch_supabase_report(day, store, role):
         raise ValueError("JSON LAB non valido") from exc
     return _validate_report(parsed, day), "DISPONIBILE"
 
-def render(role, store=None):
+def render(role, store=None, *, inside_section=False):
     require_admin(role)
     import streamlit as st
 
-    with st.expander("SERAFINI LAB — GRECHE SUPERIORI", expanded=False):
+    from contextlib import nullcontext
+    panel = (nullcontext() if inside_section else
+             st.expander("SERAFINI LAB — GRECHE SUPERIORI", expanded=False))
+    with panel:
         st.caption("Solo ADMIN · Ricerca diagnostica in sola lettura · "
                    "NET GAMMA Serafini invariato")
         today = datetime.now().date()
@@ -184,8 +187,15 @@ def render(role, store=None):
         st.caption("Valutazione retrospettiva con input T1; non è validazione "
                    "indipendente né previsione del prezzo. Nessuna posizione "
                    "dealer osservata.")
-        with st.expander("Qualità, provenienza e limitazioni", expanded=False):
-            st.json({
+        show_quality = (st.toggle("Qualità, provenienza e limitazioni",
+                                  value=False, key="lab_greeks_quality_details")
+                        if inside_section else True)
+        quality_panel = (nullcontext() if inside_section else
+                         st.expander("Qualità, provenienza e limitazioni",
+                                     expanded=False))
+        if show_quality:
+            with quality_panel:
+                st.json({
                 "data": report.get("date"),
                 "chiusura_precedente": report.get("reference_previous_close"),
                 "intervallo_ore": report.get("planned_horizon_hours"),
