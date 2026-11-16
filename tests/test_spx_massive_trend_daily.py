@@ -6,7 +6,7 @@ import unittest
 from datetime import date
 from pathlib import Path
 from massive_futures_daily import parse_session, previous_daily_context
-from trend_daily_section import massive_frame, evaluate, impulse_reference
+from trend_daily_section import massive_frame, evaluate, impulse_reference, previous_week_range
 ROOT=Path(__file__).resolve().parent.parent
 
 
@@ -60,6 +60,63 @@ class SPXDailyTrendTests(unittest.TestCase):
             massive_frame([{**r,"ticker":"NQZ6"} if i==4 else r
                            for i,r in enumerate(rows)],
                           date(2026,10,30),contract="ESZ6")
+
+    def test_weekly_levels_are_previous_finished_week_from_massive_es(self):
+        # Anchor Mon 16 Nov: previous week is Mon 09 to Fri 13.
+        previous = [
+            session("2026-11-09", 7530., 7620., 7480., 7560.),
+            session("2026-11-10", 7560., 7660., 7540., 7650.),
+            session("2026-11-11", 7650., 7690., 7580., 7590.),
+            session("2026-11-12", 7590., 7630., 7470., 7490.),
+            session("2026-11-13", 7490., 7620., 7460., 7560.75),
+        ]
+        frame = massive_frame(previous, date(2026,11,16), contract="ESZ6")
+        weekly = previous_week_range(frame, date(2026,11,16))
+        self.assertEqual(weekly["week_start"], date(2026,11,9))
+        self.assertEqual(weekly["week_end"], date(2026,11,13))
+        self.assertEqual(weekly["sessions"], 5)
+        self.assertEqual(weekly["low"], 7460.)
+        self.assertEqual(weekly["high"], 7690.)
+        self.assertEqual(weekly["close"], 7560.75)
+        self.assertEqual(weekly["close_day"], date(2026,11,13))
+        self.assertAlmostEqual(weekly["from_low_pct"],
+                               100 * (7560.75 / 7460. - 1))
+        self.assertAlmostEqual(weekly["from_high_pct"],
+                               100 * (7560.75 / 7690. - 1))
+
+    def test_previous_week_does_not_include_current_week_or_future_candles(self):
+        previous = [
+            session("2026-11-09", 7530., 7620., 7480., 7560.),
+            session("2026-11-10", 7560., 7660., 7540., 7650.),
+            session("2026-11-11", 7650., 7690., 7580., 7590.),
+            session("2026-11-12", 7590., 7630., 7470., 7490.),
+            session("2026-11-13", 7490., 7620., 7460., 7560.75),
+        ]
+        rows = previous + [
+            session("2026-11-16", 7560., 7800., 7400., 7750.),
+            session("2026-11-17", 7750., 7900., 7390., 7880.),
+        ]
+        monday = massive_frame(rows, date(2026,11,16), contract="ESZ6")
+        self.assertEqual(previous_week_range(
+            monday,date(2026,11,16))["close"], 7560.75)
+        tuesday = massive_frame(rows, date(2026,11,17), contract="ESZ6")
+        reference = previous_week_range(tuesday, date(2026,11,17))
+        self.assertEqual(reference["low"], 7460.)
+        self.assertEqual(reference["high"], 7690.)
+        self.assertEqual(reference["close"], 7750.)
+        self.assertAlmostEqual(reference["from_high_pct"],
+                               100 * (7750./7690. - 1))
+
+    def test_incomplete_previous_week_is_nd_not_an_estimate(self):
+        sample = [
+            session("2026-11-04", 7500., 7600., 7480., 7550.),
+            session("2026-11-05", 7550., 7620., 7500., 7600.),
+            session("2026-11-06", 7600., 7650., 7550., 7610.),
+            session("2026-11-12", 7610., 7670., 7540., 7650.),
+            session("2026-11-13", 7650., 7690., 7480., 7560.),
+        ]
+        frame = massive_frame(sample, date(2026,11,16), contract="ESZ6")
+        self.assertIsNone(previous_week_range(frame, date(2026,11,16)))
 
     def test_spx_preserves_vx_buffer_and_reuses_trend_bars(self):
         app=(ROOT/"app.py").read_text()
