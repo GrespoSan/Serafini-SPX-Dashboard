@@ -344,7 +344,7 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
                    else "repeat(4,minmax(0,1fr)) minmax(200px,1.12fr)")
     gex_source = (f'<div class="spx-trend-gex-source">{escape(gex_caption)}</div>'
                   if gex_card else "")
-    st.markdown(f"""
+    st.html(f"""
 <style>
 .spx-trend-card {{
   border:1px solid #34363c; border-radius:13px; padding:14px 18px;
@@ -398,7 +398,7 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
   <div class="spx-trend-impulse">{escape(impulse_text)}</div>
   <div class="spx-trend-foot">{escape(baricentro_text)}</div>\n  <div class="spx-trend-foot">{escape(meaning)}</div>\n  <div class="spx-trend-note">Candela di impulso: criterio sperimentale (range ≥1,3% della chiusura precedente, corpo ≥60% del range, ricerca nelle ultime 20 sedute). Tenuta = tutte le barre successive rispettano il baricentro; recuperato/perso = posizione dell’ultima chiusura dopo una violazione. Non è un segnale operativo validato.</div>
 </div>
-""", unsafe_allow_html=True)
+""")
     st.caption(
         f"Fonte: Massive Futures {contract or 'N/D'} · 1session · "
         f"seduta chiusa {result['last_day']}. "
