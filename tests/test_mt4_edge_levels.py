@@ -135,6 +135,46 @@ class EdgeLevelsTests(unittest.TestCase):
             self.assertIsNone(mt4_feed.verified_edge_from_saved_replay(
                 Store(), "2026-W45", DAY, "18:30", frame))
 
+    def test_raw_original_hash_mismatch_hides_only_gex(self):
+        # Same timestamp and SPX spot do not imply same Cboe chain.
+        raw = gzip.compress(json.dumps({
+            "timestamp": "2026-11-04 16:45:11",
+            "data": {"current_price": REFERENCE},
+        }).encode())
+        frame = sample_frame("17:00:01", official=True)
+        frame["_mt4_original_cboe_bytes"] = raw
+        frame["cboe_sha256"] = "0" * 64  # conflicts with the real raw hash
+        with patch.object(mt4_feed, "datetime", Clock), patch.object(
+                mt4_feed, "_official_frames", return_value={"17:00": frame}):
+            result = mt4_feed.build_feed(
+                Store(), DAY, BASIS, mode="Ufficiale", strike_count=100,
+                edge_analyzer=fake_engine)
+        metadata = csv_meta(result)
+        self.assertEqual(metadata["slot_rome"], "17:00")
+        self.assertNotIn("gex_model", metadata)
+        self.assertNotIn("gex_source_sha256", metadata)
+        self.assertIn(b"0DTE,", result)
+        self.assertIn(b"Weekly,", result)
+
+    def test_replay_sidecar_hash_must_match_selected_frame(self):
+        frame = sample_frame("18:30:02")
+        frame["cboe_sha256"] = "b" * 64
+        sample = {
+            "sha256": "a" * 64, "spot_spx": REFERENCE,
+            "quality_sufficient": True,
+            "modeled_gamma_sign": "Positive", "net_gex": 4,
+            "call_wall_spx": 7540, "put_wall_spx": 7480,
+            "gamma_flip_spx": 7500,
+        }
+        mod = types.ModuleType("edge_replay_data")
+        mod.read_pair = lambda *args: (
+            {"cboe_timestamp_original": frame["cboe_timestamp_original"]},
+            {"cboe_sha256": "a" * 64}, sample,
+            datetime.fromisoformat("2026-11-04T18:30:02+01:00"))
+        with patch.dict(sys.modules, {"edge_replay_data": mod}):
+            self.assertIsNone(mt4_feed.verified_edge_from_saved_replay(
+                Store(), "2026-W45", DAY, "18:30", frame))
+
     def test_absent_gamma_flip_is_nd_not_fabricated(self):
         values = mt4_feed.edge_levels_metadata({
             "call_wall": 7520, "put_wall": 7475, "flip": None})
