@@ -80,6 +80,8 @@ def verified_edge_from_saved_replay(store, week, day, slot, frame):
         return {
             "gex_model": "EDGE_0DTE",
             "gex_modeled_sign": sign,
+            # Full-chain Edge 0DTE NET: USD delta exposure per 1% SPX move.
+            "gex_net_usd_billion_per_1pct": f"{net / 1_000_000_000:.12f}",
             "gex_cboe_timestamp": frame["cboe_timestamp_original"],
             "gex_expiry": day.isoformat(),
             "gex_source_sha256": report["sha256"],
@@ -163,6 +165,8 @@ def verified_edge_from_artifact(frame, day, artifact_dir=None, analyzer=None):
                 continue
             return {'gex_model': 'EDGE_0DTE',
                     'gex_modeled_sign': sign,
+                    # Same exact verified original Cboe snapshot, not Serafini bars.
+                    'gex_net_usd_billion_per_1pct': f"{net / 1_000_000_000:.12f}",
                     'gex_cboe_timestamp': expected_ts,
                     'gex_expiry': day.isoformat(),
                     'gex_source_sha256': raw_sha,
@@ -289,6 +293,7 @@ def build_feed(store, day, basis_result, mode="Replay", strike_count=50, edge_ar
                     verified[spx_key.replace('_spx', '_es')] = float(spx) + basis
             meta.extend((key, verified[key]) for key in (
                 'gex_model', 'gex_modeled_sign',
+                'gex_net_usd_billion_per_1pct',
                 'gex_cboe_timestamp', 'gex_expiry',
                 'gex_source_sha256',
                 'gex_call_wall_spx', 'gex_call_wall_es',
