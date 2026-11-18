@@ -77,6 +77,7 @@ class EdgeLevelsTests(unittest.TestCase):
         metadata = csv_meta(result)
         self.assertEqual(metadata["slot_rome"], "17:00")
         self.assertEqual(metadata["gex_model"], "EDGE_0DTE")
+        self.assertEqual(metadata["gex_net_usd_billion_per_1pct"], "8.000000000000")
         self.assertEqual(metadata["gex_call_wall_spx"], "7510.0")
         self.assertEqual(metadata["gex_call_wall_es"], "7539.0")
         self.assertEqual(metadata["gex_put_wall_spx"], "7480.0")
@@ -110,6 +111,7 @@ class EdgeLevelsTests(unittest.TestCase):
         self.assertEqual(metadata["gex_put_wall_es"], "7499.0")
         self.assertEqual(metadata["gex_gamma_flip_es"], "7530.0")
         self.assertEqual(metadata["gex_modeled_sign"], "Negative")
+        self.assertEqual(metadata["gex_net_usd_billion_per_1pct"], "-2.000000000000")
 
     def test_sidecar_rejected_for_wrong_slot_or_invalid_quality(self):
         frame = sample_frame("18:30:02")
@@ -153,6 +155,7 @@ class EdgeLevelsTests(unittest.TestCase):
         self.assertEqual(metadata["slot_rome"], "17:00")
         self.assertNotIn("gex_model", metadata)
         self.assertNotIn("gex_source_sha256", metadata)
+        self.assertNotIn("gex_net_usd_billion_per_1pct", metadata)
         self.assertIn(b"0DTE,", result)
         self.assertIn(b"Weekly,", result)
 
