@@ -6,7 +6,9 @@ import unittest
 from datetime import date
 from pathlib import Path
 from massive_futures_daily import parse_session, previous_daily_context
-from trend_daily_section import massive_frame, evaluate, impulse_reference, previous_week_range
+from trend_daily_section import (massive_frame, evaluate, impulse_reference,
+                                 previous_week_range, weekly_exploration,
+                                 weekly_exploration_html)
 ROOT=Path(__file__).resolve().parent.parent
 
 
@@ -117,6 +119,42 @@ class SPXDailyTrendTests(unittest.TestCase):
         ]
         frame = massive_frame(sample, date(2026,11,16), contract="ESZ6")
         self.assertIsNone(previous_week_range(frame, date(2026,11,16)))
+
+    def test_weekly_exploration_partial_and_both_extremes(self):
+        previous = [
+            session("2026-11-09", 7530., 7620., 7480., 7560.),
+            session("2026-11-10", 7560., 7660., 7540., 7650.),
+            session("2026-11-11", 7650., 7690., 7580., 7590.),
+            session("2026-11-12", 7590., 7630., 7470., 7490.),
+            session("2026-11-13", 7490., 7620., 7460., 7560.75),
+        ]
+        now = date(2026, 11, 18)
+        only_previous = massive_frame(previous, now, contract="ESZ6")
+        week = previous_week_range(only_previous, now)
+        self.assertIsNone(weekly_exploration(only_previous, now, week))
+        current = previous + [
+            session("2026-11-16", 7560., 7600., 7500., 7530.),
+            session("2026-11-17", 7530., 7610., 7460., 7580.),
+            session("2026-11-18", 7580., 7800., 7300., 7650.),
+        ]
+        frame = massive_frame(current, now, contract="ESZ6")
+        progress = weekly_exploration(frame, now, previous_week_range(frame, now))
+        self.assertEqual(progress["open"], 7560.)
+        self.assertEqual(progress["high"], 7610.)
+        self.assertEqual(progress["low"], 7460.)
+        self.assertFalse(progress["upper_touched"])
+        self.assertTrue(progress["lower_touched"])
+        self.assertEqual(progress["last_day"], date(2026, 11, 17))
+        html = weekly_exploration_html(progress)
+        self.assertIn("spx-weekly-fill", html)
+        self.assertIn("17/11/2026", html)
+        self.assertIn("Toccato", html)
+        self.assertNotIn("7800", html)
+        after = massive_frame(current, date(2026, 11, 19), contract="ESZ6")
+        progress2 = weekly_exploration(after, date(2026, 11, 19),
+                                       previous_week_range(after, date(2026, 11, 19)))
+        self.assertTrue(progress2["upper_touched"])
+        self.assertTrue(progress2["lower_touched"])
 
     def test_spx_preserves_vx_buffer_and_reuses_trend_bars(self):
         app=(ROOT/"app.py").read_text()
