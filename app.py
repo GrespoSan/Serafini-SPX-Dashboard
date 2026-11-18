@@ -367,10 +367,14 @@ if not offline and not storage_unavailable:
         from edge_triptych import show as show_edge_triptych
         show_edge_triptych(
             week, store, logs, on_valid_gex=trend_edge_gex.update)
-    except Exception:
-        # The optional GEX Edge path must never interrupt Serafini or
-        # News / Volatility / Trend Daily if Cboe or Edge downloads fail.
+    except Exception as exc:
+        # Un errore Edge non blocca Serafini/Trend Daily, ma non deve
+        # neppure far sparire silenziosamente l'intera sezione GEX.
         trend_edge_gex.clear()
+        with st.expander('GEX EDGE — CONFRONTO · non disponibile', expanded=False):
+            st.warning('Caricamento GEX Edge non riuscito: '
+                       + type(exc).__name__ + '. '
+                       'Nessun livello sostitutivo o simulato.')
 
 # Confronto e Replay condividono la stessa sezione, con calcoli invariati.
 if not offline and not storage_unavailable:
