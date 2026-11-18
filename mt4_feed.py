@@ -10,6 +10,7 @@ import io
 import json
 import math
 import os
+import re
 from pathlib import Path
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, timezone
@@ -64,6 +65,8 @@ def verified_edge_from_saved_replay(store, week, day, slot, frame):
                 or compact.get("cboe_timestamp_original")
                    != frame.get("cboe_timestamp_original")
                 or sidecar.get("cboe_sha256") != report.get("sha256")
+                or (frame.get("cboe_sha256") is not None and
+                    frame["cboe_sha256"] != report.get("sha256"))
                 or not math.isclose(float(report["spot_spx"]),
                                     float(frame["spot"]), abs_tol=0.01)
                 or report.get("quality_sufficient") is not True):
@@ -109,6 +112,12 @@ def verified_edge_from_artifact(frame, day, artifact_dir=None, analyzer=None):
     if not candidates:
         return None
     expected_ts = str(frame.get('cboe_timestamp_original') or '')
+    expected_sha = frame.get('cboe_sha256')
+    if expected_sha is not None and (
+        not isinstance(expected_sha, str) or
+        re.fullmatch(r'[0-9a-f]{64}', expected_sha) is None
+    ):
+        return None
     expected_spot = frame.get('spot')
     if not expected_ts or expected_spot is None:
         return None
@@ -123,6 +132,9 @@ def verified_edge_from_artifact(frame, day, artifact_dir=None, analyzer=None):
         try:
             raw = (original if isinstance(original, bytes)
                    else original.read_bytes())
+            raw_sha = hashlib.sha256(raw).hexdigest()
+            if expected_sha is not None and raw_sha != expected_sha:
+                continue  # Non usare una catena con stesso spot/ora ma byte diversi.
             envelope = json.loads(decompress(raw))
             if envelope.get('timestamp') != expected_ts:
                 continue
@@ -153,7 +165,7 @@ def verified_edge_from_artifact(frame, day, artifact_dir=None, analyzer=None):
                     'gex_modeled_sign': sign,
                     'gex_cboe_timestamp': expected_ts,
                     'gex_expiry': day.isoformat(),
-                    'gex_source_sha256': hashlib.sha256(raw).hexdigest(),
+                    'gex_source_sha256': raw_sha,
                     **edge_levels_metadata(result)}
         except (OSError, EOFError, ValueError, TypeError, KeyError,
                 RuntimeError, ImportError, MemoryError):
@@ -257,6 +269,15 @@ def build_feed(store, day, basis_result, mode="Replay", strike_count=50, edge_ar
             verified = verified_edge_from_saved_replay(
                 store, week, day,
                 "16:16" if slot == "16:16 · Replay" else slot, frame)
+        # GEX is published only when the original Cboe hash has the correct
+        # shape and, when supplied by the same frame, matches exactly.
+        if verified is not None:
+            digest = verified.get('gex_source_sha256')
+            frame_digest = frame.get('cboe_sha256')
+            if (not isinstance(digest, str) or
+                re.fullmatch(r'[0-9a-f]{64}', digest) is None or
+                (frame_digest is not None and digest != frame_digest)):
+                verified = None
         if verified:
             # The existing Serafini basis is used for ALL three ES overlays.
             # No second basis download and no independent price estimation.
