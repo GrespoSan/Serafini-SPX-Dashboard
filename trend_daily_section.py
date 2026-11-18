@@ -3,13 +3,16 @@ Aggiunge il range della settimana ES precedente dalle stesse barre 1session.
 Duplica soltanto la visualizzazione dei valori Edge GEX già verificati;
 nessun nuovo download, ricalcolo GEX, accesso a Supabase o modifica Serafini.
 """
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from html import escape
 import math
 from zoneinfo import ZoneInfo
 
 import pandas as pd
+import requests
 import streamlit as st
+
+from massive_futures_daily import PATTERN as MASSIVE_FUTURES_TICKER
 
 
 def massive_frame(rows, reference_day, contract=None):
@@ -176,6 +179,11 @@ def weekly_exploration_html(progress):
     start = pct(progress["high"])
     end = pct(progress["low"])
     opening = pct(progress["open"])
+    current_price = progress.get("current_price")
+    current_position = pct(current_price) if current_price is not None else None
+    outside = ("Sopra massimo precedente" if current_price is not None and current_price > upper
+               else "Sotto minimo precedente" if current_price is not None and current_price < lower
+               else "")
     fill_height = max(0.0, end - start)
     edge_top = "#22c55e" if progress["upper_touched"] else "#777d87"
     edge_bottom = "#ef4444" if progress["lower_touched"] else "#777d87"
@@ -199,23 +207,134 @@ def weekly_exploration_html(progress):
         + '%;height:' + f'{fill_height:.4f}' + '%"></div>'
         '<div class="spx-weekly-open" style="top:' + f'{opening:.4f}'
         + '%"></div>'
-        '<div class="spx-weekly-edge top" style="background:'
+        + ('<div class="spx-weekly-current" style="top:'
+           + f'{current_position:.4f}' + '%"></div>' if current_position is not None else '')
+        + '<div class="spx-weekly-edge top"' style="background:'
         + ('#22c55e' if progress["upper_touched"] else 'transparent')
         + '"></div><div class="spx-weekly-edge bottom" style="background:'
         + ('#ef4444' if progress["lower_touched"] else 'transparent')
         + '"></div></div>'
         '<div class="spx-weekly-legend">'
         '<span>Apertura <b>' + escape(price(progress["open"])) + '</b></span>'
-        '<span>Max corrente <b>' + escape(price(progress["high"])) + '</b></span>'
+        + ('<span>Prezzo 5m <b>' + escape(price(current_price)) + '</b></span>'
+           if progress.get("asof") is not None else
+           '<span>Ultima Daily <b>' + escape(price(current_price)) + '</b></span>')
+        + ('<span class="spx-weekly-outside">' + outside + '</span>' if outside else '')
+        + '<span>Max corrente <b>' + escape(price(progress["high"])) + '</b></span>'
         '<span>Min corrente <b>' + escape(price(progress["low"])) + '</b></span>'
         '</div></div>'
         '<div class="spx-weekly-bottom"><span>MIN '
         + escape(price(lower)) + '</span><b style="color:'
         + edge_bottom + '">' + bottom_label + '</b></div>'
-        '<div class="spx-trend-sub">Esplorazione fino alla Daily chiusa '
-        + progress["last_day"].strftime("%d/%m/%Y")
-        + ' · non intraday/live</div></div>'
+        '<div class="spx-trend-sub">'
+        + escape(progress.get("source", "Daily ES chiusa")) + ' · '
+        + (progress["asof"].astimezone(ZoneInfo("Europe/Rome")).strftime("%d/%m/%Y %H:%M Roma")
+           if progress.get("asof") is not None
+           else progress["last_day"].strftime("%d/%m/%Y") + " · non live")
+        + '</div></div>'
     )
+
+
+def parse_weekly_intraday(payload, contract, reference_day, now_utc):
+    """Current week's observed ES 5m CLOSED bars. No interpolation or fake live.
+
+    CME ES weekly reopen: Sunday 17:00 America/Chicago. The original contract
+    MUST match the Massive Daily contract. Reject truncated/incomplete pages.
+    """
+    if not isinstance(payload, dict) or payload.get("status") not in ("OK", "DELAYED"):
+        raise ValueError("Massive Futures intraday: risposta non verificabile.")
+    if payload.get("next_url") or not isinstance(payload.get("results"), list):
+        raise ValueError("Massive Futures intraday: elenco incompleto.")
+    if not MASSIVE_FUTURES_TICKER.fullmatch(str(contract or "")):
+        raise ValueError("Contratto ES intraday non valido.")
+    if not isinstance(now_utc, datetime) or now_utc.tzinfo is None:
+        raise ValueError("Timestamp intraday privo di fuso.")
+    monday = reference_day - timedelta(days=reference_day.weekday())
+    sunday = monday - timedelta(days=1)
+    chicago = ZoneInfo("America/Chicago")
+    start = datetime.combine(sunday, time(17, 0), tzinfo=chicago).astimezone(timezone.utc)
+    # A bar becomes usable only after its entire 5m window has closed.
+    cutoff = now_utc.astimezone(timezone.utc) - timedelta(minutes=5)
+    rows = []
+    for raw in payload["results"]:
+        if not isinstance(raw, dict):
+            continue
+        if raw.get("ticker") not in (None, contract):
+            raise ValueError("Massive intraday: contratto diverso.")
+        try:
+            ns = raw["window_start"]
+            if isinstance(ns, bool) or not isinstance(ns, int) or ns < 10**17:
+                raise ValueError("Timestamp non in nanosecondi.")
+            when = datetime.fromtimestamp(ns / 1_000_000_000, tz=timezone.utc)
+            op, hi, lo, cl = (float(raw[key]) for key in
+                              ("open", "high", "low", "close"))
+        except (KeyError, ValueError, OverflowError, TypeError):
+            continue
+        if when < start or when > cutoff:
+            continue
+        if not (all(math.isfinite(v) and v > 0 for v in (op, hi, lo, cl))
+                and lo <= op <= hi and lo <= cl <= hi):
+            continue
+        rows.append((when, op, hi, lo, cl))
+    rows.sort(key=lambda row: row[0])
+    if not rows or rows[0][0] - start > timedelta(minutes=90):
+        raise ValueError("Apertura settimanale ES non disponibile nei 5m Massive.")
+    if len(set(row[0] for row in rows)) != len(rows):
+        raise ValueError("Timestamp intraday duplicati.")
+    return {
+        "open": rows[0][1],
+        "high": max(row[2] for row in rows),
+        "low": min(row[3] for row in rows),
+        "current_price": rows[-1][4],
+        "asof": rows[-1][0] + timedelta(minutes=5),
+        "bar_count": len(rows), "source": "Massive ES · 5m chiusi",
+        "provider_status": payload["status"],
+    }
+
+
+@st.cache_data(ttl=180, max_entries=12, show_spinner=False)
+def _fetch_weekly_intraday_payload(contract, reference_day, api_key):
+    """Short-lived intraday response: never the daily SQLite cache."""
+    monday = reference_day - timedelta(days=reference_day.weekday())
+    params = {
+        "resolution": "5min",
+        "window_start.gte": (monday - timedelta(days=1)).isoformat(),
+        "window_start.lte": (reference_day + timedelta(days=1)).isoformat(),
+        "sort": "window_start.asc", "limit": 2500,
+    }
+    response = requests.get(
+        "https://api.massive.com/futures/v1/aggs/" + contract,
+        params=params,
+        headers={"Authorization": "Bearer " + api_key,
+                 "Accept": "application/json"},
+        timeout=(6, 18),
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def observed_intraday_week(contract, reference_day, previous_week):
+    """Optional Massive-only intraday; fail closed and leave Daily context."""
+    if not previous_week or not contract or not MASSIVE_FUTURES_TICKER.fullmatch(contract):
+        return None
+    try:
+        key = str(st.secrets.get("MASSIVE_API_KEY", "")).strip()
+        if not key:
+            return None
+        now = datetime.now(timezone.utc)
+        payload = _fetch_weekly_intraday_payload(contract, reference_day, key)
+        values = parse_weekly_intraday(payload, contract, reference_day, now)
+        values.update({
+            "previous_high": previous_week["high"],
+            "previous_low": previous_week["low"],
+            "upper_touched": values["high"] >= previous_week["high"],
+            "lower_touched": values["low"] <= previous_week["low"],
+            "last_day": values["asof"].astimezone(ZoneInfo("Europe/Rome")).date(),
+        })
+        return values
+    except (requests.RequestException, ValueError, TypeError, KeyError, OSError,
+            OverflowError):
+        return None
 
 
 def impulse_reference(frame, threshold_pct=1.3, body_fraction=0.60, lookback=20):
@@ -282,7 +401,12 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
         result = evaluate(bars)
         impulse = impulse_reference(bars)
         prior_week = previous_week_range(bars, today_rome)
-        weekly_progress = weekly_exploration(bars, today_rome, prior_week)
+        weekly_progress = (observed_intraday_week(contract, today_rome, prior_week)
+                           or weekly_exploration(bars, today_rome, prior_week))
+        if weekly_progress is not None and "current_price" not in weekly_progress:
+            weekly_progress["current_price"] = float(bars.iloc[-1]["Close"])
+            weekly_progress["source"] = "Ultima Daily ES chiusa"
+            weekly_progress["asof"] = None
     except (ValueError, TypeError, KeyError):
         # If OHLC is missing, a successfully verified Cboe GEX remains
         # available in its own small dark card; no stale or invented data.
@@ -438,6 +562,10 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
 .spx-weekly-fill {{position:absolute;left:0;right:0;background:#c6cbd1;opacity:.90;}}
 .spx-weekly-open {{position:absolute;left:0;right:0;height:4px;
   background:#6b7280;transform:translateY(-50%);z-index:2;}}
+.spx-weekly-current {{position:absolute;left:-1px;right:-1px;height:2px;
+  background:#141414;box-shadow:0 0 0 1px #dce1e7;z-index:4;
+  transform:translateY(-50%);}}
+.spx-weekly-outside {{color:#fbbf24;font-weight:600;}}
 .spx-weekly-edge {{position:absolute;left:-1px;right:-1px;height:5px;z-index:3;}}
 .spx-weekly-edge.top {{top:-1px;}}
 .spx-weekly-edge.bottom {{bottom:-1px;}}
