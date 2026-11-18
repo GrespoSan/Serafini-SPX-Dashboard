@@ -209,7 +209,7 @@ def weekly_exploration_html(progress):
         + '%"></div>'
         + ('<div class="spx-weekly-current" style="top:'
            + f'{current_position:.4f}' + '%"></div>' if current_position is not None else '')
-        + '<div class="spx-weekly-edge top"' style="background:'
+        + '<div class="spx-weekly-edge top" style="background:'
         + ('#22c55e' if progress["upper_touched"] else 'transparent')
         + '"></div><div class="spx-weekly-edge bottom" style="background:'
         + ('#ef4444' if progress["lower_touched"] else 'transparent')
