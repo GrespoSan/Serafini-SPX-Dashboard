@@ -3,12 +3,13 @@
 Synthetic fixtures only, no API calls or credentials.
 """
 import unittest
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from massive_futures_daily import parse_session, previous_daily_context
 from trend_daily_section import (massive_frame, evaluate, impulse_reference,
                                  previous_week_range, weekly_exploration,
-                                 weekly_exploration_html)
+                                 weekly_exploration_html, parse_weekly_intraday)
 ROOT=Path(__file__).resolve().parent.parent
 
 
@@ -155,6 +156,52 @@ class SPXDailyTrendTests(unittest.TestCase):
                                        previous_week_range(after, date(2026, 11, 19)))
         self.assertTrue(progress2["upper_touched"])
         self.assertTrue(progress2["lower_touched"])
+
+    def test_intraday_weekly_uses_only_closed_es_five_minute_bars(self):
+        chicago = ZoneInfo("America/Chicago")
+        opening = datetime(2026, 11, 15, 17, tzinfo=chicago)
+        monday = opening + timedelta(hours=3)
+        future = opening + timedelta(days=3)
+        def agg(when, op, hi, lo, close):
+            return {
+                "window_start": int(when.timestamp() * 1_000_000_000),
+                "ticker": "ESZ6", "open": op,
+                "high": hi, "low": lo, "close": close,
+            }
+        payload = {
+            "status": "DELAYED",
+            "results": [
+                agg(opening, 7577.25, 7580., 7570., 7576.),
+                agg(monday, 7576., 7610., 7380., 7500.),
+                agg(future, 7500., 8000., 7200., 7700.),
+            ],
+        }
+        now = datetime(2026, 11, 16, 5, 30, tzinfo=timezone.utc)
+        got = parse_weekly_intraday(payload, "ESZ6", date(2026, 11, 16), now)
+        self.assertEqual(got["open"], 7577.25)
+        self.assertEqual(got["high"], 7610.)
+        self.assertEqual(got["low"], 7380.)
+        self.assertEqual(got["current_price"], 7500.)
+        self.assertEqual(got["provider_status"], "DELAYED")
+        self.assertNotEqual(got["high"], 8000.)
+        payload["next_url"] = "https://api.massive.com/futures/v1/aggs/ESZ6?cursor=abc"
+        with self.assertRaisesRegex(ValueError, "incompleto"):
+            parse_weekly_intraday(payload, "ESZ6", date(2026, 11, 16), now)
+
+    def test_weekly_price_line_and_outside_label(self):
+        progress = {
+            "previous_high": 7600., "previous_low": 7400.,
+            "high": 7700., "low": 7350., "open": 7500.,
+            "current_price": 7700.,
+            "upper_touched": True, "lower_touched": True,
+            "asof": datetime(2026, 11, 18, 15, tzinfo=timezone.utc),
+            "source": "Massive ES · 5m chiusi",
+        }
+        html = weekly_exploration_html(progress)
+        self.assertIn('class="spx-weekly-current"', html)
+        self.assertIn('Sopra massimo precedente', html)
+        self.assertIn("Massive ES · 5m chiusi", html)
+        self.assertIn("18/11/2026", html)
 
     def test_spx_preserves_vx_buffer_and_reuses_trend_bars(self):
         app=(ROOT/"app.py").read_text()
