@@ -125,6 +125,99 @@ def previous_week_range(frame, reference_day):
     }
 
 
+
+def weekly_exploration(frame, reference_day, previous_week):
+    """Observed part of last week's ES range, using CLOSED Massive Daily bars.
+
+    This cannot claim current-session intraday highs/lows. Monday/opening
+    session must exist in the supplied series; never invent intraday data.
+    """
+    if previous_week is None or frame is None or frame.empty:
+        return None
+    monday = reference_day - timedelta(days=reference_day.weekday())
+    mask = ((frame.index.date >= monday)
+            & (frame.index.date < reference_day)
+            & (frame.index.dayofweek < 5))
+    current = frame.loc[mask].sort_index()
+    if current.empty:
+        return None
+    opening = float(current.iloc[0]["Open"])
+    high = float(current["High"].max())
+    low = float(current["Low"].min())
+    upper = previous_week["high"]
+    lower = previous_week["low"]
+    if not (all(math.isfinite(v) and v > 0 for v in
+                (opening, high, low, upper, lower))
+            and lower < upper and low <= opening <= high):
+        return None
+    return {
+        "open": opening, "high": high, "low": low,
+        "previous_high": upper, "previous_low": lower,
+        "upper_touched": high >= upper,
+        "lower_touched": low <= lower,
+        "first_day": current.index[0].date(),
+        "last_day": current.index[-1].date(),
+        "sessions": len(current),
+    }
+
+
+def weekly_exploration_html(progress):
+    """Single vertical weekly-range widget. Geometry is price proportional."""
+    if progress is None:
+        return ('<div class="spx-weekly-unavailable">Esplorazione N/D'
+                '<div class="spx-trend-sub">Servono apertura e massimi/minimi '
+                'delle sedute correnti già chiuse.</div></div>')
+
+    upper, lower = progress["previous_high"], progress["previous_low"]
+    span = upper - lower
+    def pct(price):
+        return max(0.0, min(100.0, 100.0 * (upper - price) / span))
+    # Top of explored zone = current week's observed high, bottom = low.
+    start = pct(progress["high"])
+    end = pct(progress["low"])
+    opening = pct(progress["open"])
+    fill_height = max(0.0, end - start)
+    edge_top = "#22c55e" if progress["upper_touched"] else "#777d87"
+    edge_bottom = "#ef4444" if progress["lower_touched"] else "#777d87"
+    top_label = "Toccato" if progress["upper_touched"] else "Non toccato"
+    bottom_label = "Toccato" if progress["lower_touched"] else "Non toccato"
+    def price(v):
+        return f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return (
+        '<div class="spx-weekly-explore">'
+        '<div class="spx-weekly-top"><span>MAX '
+        + escape(price(upper)) + '</span><b style="color:' + edge_top
+        + '">' + top_label + '</b></div>'
+        '<div class="spx-weekly-body">'
+        '<div class="spx-weekly-track" role="img" aria-label="'
+        + escape('Range precedente ' + price(lower) + '–' + price(upper)
+                 + ', apertura ' + price(progress["open"])
+                 + ', minimo corrente ' + price(progress["low"])
+                 + ', massimo corrente ' + price(progress["high"]), quote=True)
+        + '">'
+        '<div class="spx-weekly-fill" style="top:' + f'{start:.4f}'
+        + '%;height:' + f'{fill_height:.4f}' + '%"></div>'
+        '<div class="spx-weekly-open" style="top:' + f'{opening:.4f}'
+        + '%"></div>'
+        '<div class="spx-weekly-edge top" style="background:'
+        + ('#22c55e' if progress["upper_touched"] else 'transparent')
+        + '"></div><div class="spx-weekly-edge bottom" style="background:'
+        + ('#ef4444' if progress["lower_touched"] else 'transparent')
+        + '"></div></div>'
+        '<div class="spx-weekly-legend">'
+        '<span>Apertura <b>' + escape(price(progress["open"])) + '</b></span>'
+        '<span>Max corrente <b>' + escape(price(progress["high"])) + '</b></span>'
+        '<span>Min corrente <b>' + escape(price(progress["low"])) + '</b></span>'
+        '</div></div>'
+        '<div class="spx-weekly-bottom"><span>MIN '
+        + escape(price(lower)) + '</span><b style="color:'
+        + edge_bottom + '">' + bottom_label + '</b></div>'
+        '<div class="spx-trend-sub">Esplorazione fino alla Daily chiusa '
+        + progress["last_day"].strftime("%d/%m/%Y")
+        + ' · non intraday/live</div></div>'
+    )
+
+
 def impulse_reference(frame, threshold_pct=1.3, body_fraction=0.60, lookback=20):
     """Criterio sperimentale dichiarato, distinto dalle regole validate.
     Cerca l'ultima candela di impulso PRECEDENTE all'ultima Daily chiusa.
@@ -189,6 +282,7 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
         result = evaluate(bars)
         impulse = impulse_reference(bars)
         prior_week = previous_week_range(bars, today_rome)
+        weekly_progress = weekly_exploration(bars, today_rome, prior_week)
     except (ValueError, TypeError, KeyError):
         # If OHLC is missing, a successfully verified Cboe GEX remains
         # available in its own small dark card; no stale or invented data.
@@ -301,37 +395,10 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
     def _it_price(value):
         return f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-    if prior_week is None:
-        week_html = (
-            '<div class="spx-trend-weekly-row">Min / Max <b>N/D</b></div>'
-            '<div class="spx-trend-sub">Dati Massive della settimana precedente '
-            'insufficienti; nessuna stima</div>')
-    else:
-        low_text = _it_price(prior_week["low"])
-        high_text = _it_price(prior_week["high"])
-        low_pct = f'{prior_week["from_low_pct"]:+.2f}%'.replace(".", ",")
-        high_pct = f'{prior_week["from_high_pct"]:+.2f}%'.replace(".", ",")
-        reference_text = (f'vs close Daily '
-                          f'{prior_week["close_day"]:%d/%m/%Y} · '
-                          f'{_it_price(prior_week["close"])} ES')
-        # Order high before low, as on a conventional weekly range.
-        # Price levels remain neutral; only the signed distance is colored.
-        high_color = ("#22c55e" if prior_week["from_high_pct"] > 0 else
-                      "#ef4444" if prior_week["from_high_pct"] < 0 else "#cbd5e1")
-        low_color = ("#22c55e" if prior_week["from_low_pct"] > 0 else
-                     "#ef4444" if prior_week["from_low_pct"] < 0 else "#cbd5e1")
-        week_html = (
-            '<div class="spx-trend-weekly-row"><span>Max '
-            + escape(high_text) + '</span><b style="color:' + high_color + '">'
-            + escape(high_pct) + '</b></div>'
-            '<div class="spx-trend-weekly-row"><span>Min '
-            + escape(low_text) + '</span><b style="color:' + low_color + '">'
-            + escape(low_pct) + '</b></div>'
-            '<div class="spx-trend-sub">' + escape(reference_text) + '</div>'
-        )
+    week_html = weekly_exploration_html(weekly_progress)
     previous_monday = today_rome - timedelta(days=today_rome.weekday() + 7)
     previous_friday = previous_monday + timedelta(days=4)
-    weekly_label = (f"Weekly precedente · {previous_monday:%d}–"
+    weekly_label = (f"Esplorazione Weekly · {previous_monday:%d}–"
                     f"{previous_friday:%d/%m/%Y}")
     weekly_card = (
         '<div class="spx-trend-kpi spx-trend-weekly">'
@@ -361,9 +428,23 @@ def render(reference_day=None, ticker="ES=F", market_name="SPX / ES",
 .spx-trend-gex .spx-trend-label {{font-weight:600;}}
 .spx-trend-gex-source {{padding:7px 0 9px;color:#9ca3af;font-size:.72rem;line-height:1.4;}}
 .spx-trend-weekly .spx-trend-label {{font-weight:600;}}
-.spx-trend-weekly-row {{display:flex;align-items:center;justify-content:space-between;
-  gap:8px;margin:8px 0 0;font-size:.82rem;line-height:1.35;color:#cbd5e1;}}
-.spx-trend-weekly-row b {{font-size:1.06rem;color:#f4f5f6;white-space:nowrap;}}
+.spx-weekly-explore {{max-width:310px;}}
+.spx-weekly-top,.spx-weekly-bottom {{display:flex;justify-content:space-between;
+  gap:8px;font-size:.80rem;color:#cbd5e1;margin:4px 0;}}
+.spx-weekly-top b,.spx-weekly-bottom b {{font-size:.76rem;white-space:nowrap;}}
+.spx-weekly-body {{display:flex;align-items:stretch;gap:12px;margin:7px 0;}}
+.spx-weekly-track {{height:132px;width:50px;min-width:50px;position:relative;
+  border:1px solid #8c939d;background:#090a0c;box-sizing:border-box;}}
+.spx-weekly-fill {{position:absolute;left:0;right:0;background:#c6cbd1;opacity:.90;}}
+.spx-weekly-open {{position:absolute;left:0;right:0;height:4px;
+  background:#6b7280;transform:translateY(-50%);z-index:2;}}
+.spx-weekly-edge {{position:absolute;left:-1px;right:-1px;height:5px;z-index:3;}}
+.spx-weekly-edge.top {{top:-1px;}}
+.spx-weekly-edge.bottom {{bottom:-1px;}}
+.spx-weekly-legend {{display:flex;flex-direction:column;justify-content:center;
+  gap:10px;font-size:.78rem;line-height:1.3;color:#b6bcc5;}}
+.spx-weekly-legend b {{color:#f4f5f6;font-weight:600;}}
+.spx-weekly-unavailable {{padding:12px 0;color:#cbd5e1;}}
 @media(max-width:1300px) {{
   .spx-trend-grid {{grid-template-columns:repeat(3,minmax(0,1fr));row-gap:10px;}}
   .spx-trend-kpi:nth-child(3n+1) {{border-left:0;padding-left:0;}}
