@@ -217,18 +217,18 @@ def show(week, store, logs=None, *, on_valid_gex=None):
                 week, store, logs or [], on_valid_gex)
             from edge_replay_panel import show_replay
             show_replay(week, store, _plot, logs=logs or [], selected=latest)
-        # Laboratorio indipendente, DISATTIVATO di default: non cambia KPIs,
-        # curve, acquisizioni o selettori delle sezioni Edge gia' operative.
-        with st.container(border=True):
-            st.markdown("**🧪 LABORATORIO DI RICERCA — NET GAMMA vs GEX**")
-            if st.toggle("Apri confronto Serafini · Solo OI · GEX modellato",
-                         value=False, key=f"gamma_three_models_enable_{week}"):
-                try:
-                    from research_gamma_three_models_ui import render as render_three
-                    render_three(week, store, logs or [])
-                except Exception as exc:
-                    st.warning("Laboratorio comparativo non disponibile: "
-                               + type(exc).__name__)
+            # Il Replay termina qui. Il laboratorio appartiene a questo
+            # ramo: non interrompere mai la visualizzazione GEX UFFICIALE.
+            with st.container(border=True):
+                st.markdown("**🧪 LABORATORIO DI RICERCA — NET GAMMA vs GEX**")
+                if st.toggle("Apri confronto Serafini · Solo OI · GEX modellato",
+                             value=False, key=f"gamma_three_models_enable_{week}"):
+                    try:
+                        from research_gamma_three_models_ui import render as render_three
+                        render_three(week, store, logs or [])
+                    except Exception as exc:
+                        st.warning("Laboratorio comparativo non disponibile: "
+                                   + type(exc).__name__)
             return
 
         # Latest official chain: calculate both profiles on exactly the same
