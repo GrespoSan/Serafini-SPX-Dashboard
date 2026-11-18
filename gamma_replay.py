@@ -4,6 +4,7 @@ Il grafico espone ORARI DI DOWNLOAD a Roma; il timestamp Cboe non viene
 interpretato come tempo UTC o come ora italiana. Nessuna scrittura in Supabase.
 """
 import json
+import hashlib
 import math
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
@@ -122,6 +123,8 @@ def _official_frames(store, week, day, logs, *, include_mt4_raw=False):
                     "origin": "UFFICIALE", "spot": snap["data"].get("current_price"),
                     "reference_spx": ref, "profiles": profiles,
                     "cboe_timestamp_original": snap.get("timestamp"),
+                    # Impronta dei BYTE Cboe usati per questo stesso frame.
+                    "cboe_sha256": hashlib.sha256(raw_cboe).hexdigest(),
                 }
                 # NEVER attach raw bytes in ordinary Streamlit/Replay calls:
                 # this opt-in is exclusively for the MT4 feed publisher.
@@ -162,6 +165,8 @@ def _study_frames(store, week, day):
                 "spot": item.get("spot_spx"),
                 "reference_spx": item.get("reference_spx"),
                 "cboe_timestamp_original": item.get("cboe_timestamp_original"),
+                # SHA gia' riportato nel compatto Replay originale.
+                "cboe_sha256": item.get("cboe_sha256"),
                 "profiles": profiles,
             }
         except (KeyError, ValueError, TypeError, RuntimeError, OverflowError):
