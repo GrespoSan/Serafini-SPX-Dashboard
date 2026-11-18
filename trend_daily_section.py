@@ -324,6 +324,8 @@ def observed_intraday_week(contract, reference_day, previous_week):
         now = datetime.now(timezone.utc)
         payload = _fetch_weekly_intraday_payload(contract, reference_day, key)
         values = parse_weekly_intraday(payload, contract, reference_day, now)
+        if values["provider_status"] == "DELAYED":
+            values["source"] = "Massive ES · 5m ritardati"
         values.update({
             "previous_high": previous_week["high"],
             "previous_low": previous_week["low"],
