@@ -293,7 +293,7 @@ def show(week, store, logs=None, *, on_valid_gex=None):
             )
         for c,key,lab in zip(p[1:4],("put_wall_spx","gamma_flip_spx","call_wall_spx"),("Put Wall","Gamma Flip","Call Wall")):
             v=e.get(key);c.metric(lab,f"{float(v)+shift:,.2f}" if v is not None else "N/D")
-        _colored_edge_metric(p[4], "Regime Edge", str(e.get("regime", "N/D")), e.get("regime"))
+        p[4].metric("Qualità Edge", _format_edge_quality(e.get("quality_pct")))
 
         # This is the complete 0DTE Edge chain (not just the strike bars
         # shown +/-10% on the chart). Source snapshot SHA-256 and selected
@@ -315,13 +315,11 @@ def show(week, store, logs=None, *, on_valid_gex=None):
                 else:
                     on_valid_gex(duplicate)
             columns = st.columns(4)
-            # Il segno modellato è già mostrato da "Regime Edge".
-            # Qui forniamo invece la qualità effettiva del modello.
-            quality = e.get("quality_pct")
-            columns[0].metric(
-                "Qualità Edge",
-                _format_edge_quality(quality),
-            )
+            # Regime Edge ora nel primo KPI di questa riga.
+            # Mantieni il colore semantico positivo/negativo del modello.
+            _colored_edge_metric(
+                columns[0], "Regime Edge",
+                str(e.get("regime", "N/D")), e.get("regime"))
             _colored_edge_metric(
                 columns[1], "NET GEX",
                 format_gex_billions(e["net_gex"], signed=True), e.get("net_gex"))
