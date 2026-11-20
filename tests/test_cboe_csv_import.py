@@ -91,8 +91,10 @@ class TestCboeCSVImport(unittest.TestCase):
             date_label="November 18, 2026, 3:15 PM ET", all_expiries=False))
         self.assertEqual(data["timestamp"], "2026-11-18 20:15:00")
         self.assertEqual(len(data["data"]["options"]), 220)
-        with self.assertRaisesRegex(ValueError, "Strike insufficienti|insufficienti"):
-            profile(data, weekly_expiry(DATE), data["data"]["prev_day_close"])
+        missing_weekly = profile(
+            data, weekly_expiry(DATE), data["data"]["prev_day_close"])
+        self.assertEqual(missing_weekly["contracts"], 0)
+        self.assertEqual(missing_weekly["rows"], [])
 
     def test_missing_gamma_on_open_interest_is_not_zero_filled(self):
         src = sample_csv().decode("utf-8")
