@@ -98,7 +98,10 @@ def generate_current_pine(snapshot, day: date, basis, cboe_stamp, label, *, raw_
         raise ValueError("Differenziale ES-SPX non finito.")
     profiles, reference, spot = calculate_current_profiles(snapshot, day)
     gex = None
-    if raw_cboe is not None:
+    # CSV -> JSON è una conversione locale, NON una catena JSON originale.
+    # Il modello GEX Edge richiede una fotografia nativa verificata: non
+    # attribuiamo Wall/Flip ufficiali o SHA Cboe al CSV derivato.
+    if raw_cboe is not None and not snapshot.get("_import_provenance"):
         try:
             from edge_auto import result_from_snapshot
             from pine_gex_sources import _clean_levels
@@ -165,7 +168,7 @@ def _chart(rows, title, offset):
 def render():
     st.caption(
         "Rilevamento singolo: download CBOE richiesto manualmente o importazione "
-        "ZIP/JSON. Nessun Supabase, nessun confronto storico, nessun salvataggio remoto."
+        "ZIP/JSON/CSV Cboe. Nessun Supabase, nessun confronto storico, nessun salvataggio remoto."
     )
     left, right = st.columns(2, gap="medium")
     with left:
@@ -238,6 +241,10 @@ def render():
                    " ora di Roma; il timestamp CBOE non identifica quell'ora.")
     else:
         st.caption("File importato: l'ora effettiva del download originario non è verificabile.")
+    if local.import_provenance:
+        st.caption("Da CSV manuale: esportazione Pine del solo NET GAMMA Serafini. "
+                   "Call Wall, Put Wall e Gamma Flip GEX Edge richiedono "
+                   "una fotografia JSON Cboe nativa verificata.")
     if day != datetime.now(ROME).date():
         st.warning("Il file non è datato oggi (ora di Roma): "
                    "per evitare un Pine presentato come corrente, acquisisci "
