@@ -13,6 +13,8 @@ from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 import streamlit as st
+from cboe_acquisition_pause import (CBOE_ACQUISITIONS_PAUSED, PAUSE_MESSAGE,
+                                    require_cboe_acquisition_enabled)
 
 from es_spx_basis import download_and_calculate
 from net_gamma import profile, read_snapshot, visual_profile
@@ -28,6 +30,7 @@ BASIS_PREFIX = "emergency_pine_basis_"
 
 
 def download_current_snapshot():
+    require_cboe_acquisition_enabled()
     """Scarica SOLO dopo click. Memorizza in RAM una copia gzip non modificata."""
     request = Request(CBOE_URL, headers={
         "User-Agent": "Mozilla/5.0",
@@ -172,7 +175,10 @@ def render():
     )
     left, right = st.columns(2, gap="medium")
     with left:
-        if st.button("Scarica CBOE adesso", key="emergency_pine_download",
+        if CBOE_ACQUISITIONS_PAUSED:
+            st.caption(PAUSE_MESSAGE)
+        if st.button("Scarica CBOE adesso · sospeso", key="emergency_pine_download",
+                     disabled=CBOE_ACQUISITIONS_PAUSED,
                      use_container_width=True):
             # Conserva una eventuale fotografia precedente se la fonte Cboe
             # blocca la nuova richiesta. Non presentarla come aggiornata.
