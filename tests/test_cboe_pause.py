@@ -19,6 +19,19 @@ class SuspensionTests(unittest.TestCase):
             cboe.assert_not_called()
             github.assert_not_called()
 
+    def test_legacy_dashboard_acquire_is_noop_without_storage_or_http(self):
+        # Anche avvio diretto di download_spx_cloud.py (copia dashboard).
+        import contextlib
+        import io
+        import download_spx_cloud
+        with patch.object(download_spx_cloud, "urlopen") as network, \
+             patch.object(download_spx_cloud, "Store") as storage, \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(download_spx_cloud.acquire(), 0)
+            self.assertIn("CBOE_PAUSED", output.getvalue())
+            network.assert_not_called()
+            storage.assert_not_called()
+
     def test_local_snapshot_import_remains_supported(self):
         from pathlib import Path
         source = (Path(__file__).resolve().parents[1] / "emergency_pine.py").read_text()
