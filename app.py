@@ -294,6 +294,34 @@ with st.expander('ANALISI NET GAMMA', expanded=True):
             # Collapsed expanders are eager; this avoids delaying NET GAMMA.
             context_details_slot = st.empty()
 
+    # Un HTTP 403 Cboe impedisce l'acquisizione, ma non invalida
+    # le fotografie archiviate. Rendi visibile l'errore senza assegnare
+    # artificialmente al giorno corrente l'ultimo snapshot disponibile.
+    if not offline and not storage_unavailable and logs:
+        from cboe_source_health import blocked_acquisition_today
+
+        @st.cache_data(ttl=120, show_spinner=False, max_entries=12)
+        def _latest_cboe_block(week_name, names, today, _store):
+            return blocked_acquisition_today(week_name, names, _store, today)
+
+        today_rome = datetime.now(ZoneInfo("Europe/Rome")).date()
+        blocked = _latest_cboe_block(
+            week, tuple(x["name"] for x in logs), today_rome, store)
+        if blocked is not None:
+            hour = str(blocked.get("download_rome") or "")[11:16]
+            clock = (" alle " + hour + " Roma") if len(hour) == 5 else ""
+            st.warning(
+                f"Acquisizione SPX del {today_rome:%d/%m/%Y}{clock} "
+                "non riuscita: Cboe ha risposto HTTP 403 (accesso negato). "
+                "Nessuna nuova fotografia verificata è stata acquisita "
+                "in questo tentativo. I grafici restano basati sulle "
+                "fotografie realmente archiviate, con la loro data originale; "
+                "Pine di emergenza e acquisizione manuale che interrogano "
+                "lo stesso endpoint Cboe possono essere bloccati. "
+                "È disponibile l'importazione di un file Cboe originale "
+                "ottenuto tramite accesso autorizzato."
+            )
+
     with snapshot_slot:
         from gamma_section import render_snapshot_selector
         render_snapshot_selector(store, week, snaps, logs)
