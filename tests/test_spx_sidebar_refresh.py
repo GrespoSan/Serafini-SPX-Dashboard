@@ -37,7 +37,8 @@ class SidebarRefreshTests(unittest.TestCase):
 
     def test_button_inside_authenticated_shared_sidebar_not_admin_branch(self):
         source = (ROOT / "app.py").read_text(encoding="utf-8")
-        start = source.index("role = st.session_state.role\n")\n        self.assertIn("st.info(PAUSE_MESSAGE)", source[start:source.index("with st.sidebar:", start)])
+        start = source.index("role = st.session_state.role\\n")
+        self.assertIn("st.info(PAUSE_MESSAGE)", source[start:source.index("with st.sidebar:", start)])
         end = source.index("# Allineamento al layout Multi-Market:", start)
         sidebar = source[start:end]
         self.assertIn("st.button('🔄 Aggiorna dati'", sidebar)
