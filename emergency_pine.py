@@ -8,6 +8,7 @@ from decimal import Decimal, ROUND_HALF_UP
 import gzip
 import math
 import hashlib
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
@@ -168,10 +169,25 @@ def render():
     with left:
         if st.button("Scarica CBOE adesso", key="emergency_pine_download",
                      use_container_width=True):
-            st.session_state.pop(STORE_KEY, None)
+            # Conserva una eventuale fotografia precedente se la fonte Cboe
+            # blocca la nuova richiesta. Non presentarla come aggiornata.
             try:
                 with st.spinner("Scaricamento diretto CBOE (solo manuale)..."):
-                    st.session_state[STORE_KEY] = download_current_snapshot()
+                    fresh = download_current_snapshot()
+                st.session_state[STORE_KEY] = fresh
+            except HTTPError as exc:
+                if exc.code == 403:
+                    st.error(
+                        "Cboe ha rifiutato la richiesta (HTTP 403 Forbidden). "
+                        "Non è disponibile una nuova fotografia. "
+                        "Il Pine di emergenza non può superare il blocco: "
+                        "puoi utilizzare l'importazione di un file originale "
+                        "ottenuto tramite una fonte autorizzata. "
+                        "Se una fotografia precedente resta selezionata, "
+                        "la sua data rimane invariata."
+                    )
+                else:
+                    st.error(f"Download CBOE non riuscito: HTTP {exc.code}.")
             except Exception as exc:
                 st.error("Download CBOE non riuscito: " +
                          f"{type(exc).__name__}: {str(exc)[:180]}")
