@@ -224,14 +224,20 @@ def render():
         return
 
     if local.import_provenance:
+        from cboe_csv_import import csv_coverage_warning
         details = local.import_provenance
         st.warning(
             "Origine CSV manuale: non è un download JSON ufficiale. "
             "Timestamp esportazione: " + str(details["original_timestamp_text"]) +
             " · UTC derivato: " + local.timestamp +
-            ". Riferimento SPX = Last − Change dal CSV; "
-            "le scadenze escluse dall'export non sono ricostruite."
+            " · chiusura SPX precedente: "
+            + f'{float(details["prior_close_spx"]):,.2f}'
+            + " (" + str(details["previous_close_method"]) + "). "
+            "Verificare la chiusura SPX della seduta precedente."
         )
+        coverage_warning = csv_coverage_warning(details)
+        if coverage_warning:
+            st.error(coverage_warning)
         st.markdown(f"**Fonte:** {active['source']} · **Data di riferimento:** {day:%d/%m/%Y}")
     else:
         st.markdown(f"**Fonte:** {active['source']} · **Data CBOE:** {day:%d/%m/%Y} "
