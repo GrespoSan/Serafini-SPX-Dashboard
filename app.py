@@ -238,7 +238,10 @@ st.markdown("""
 context_slot = st.empty()
 with st.expander('ANALISI NET GAMMA', expanded=True):
     st.header('NET GAMMA · formula Serafini')
-    st.subheader('Fotografia opzioni Cboe · SPX')
+    st.markdown(
+        "### Fotografia opzioni Cboe · SPX · "
+        "[↗ Apri Cboe](https://www.cboe.com/data/quotes/SPX/options)"
+    )
     snapshot_slot = st.container()
     with st.expander("Acquisizione manuale / importazione JSON o CSV", expanded=False):
         st.caption("Carica ZIP GitHub Actions, JSON originale o CSV esportato manualmente "
