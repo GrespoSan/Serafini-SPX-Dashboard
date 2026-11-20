@@ -174,12 +174,21 @@ class EmergencyPineTests(unittest.TestCase):
 
     def test_download_direct_to_cboe_and_no_supabase(self):
         raw = json.dumps(fixture()).encode()
-        with patch("emergency_pine.urlopen", return_value=CBOEResponse(raw)) as fake:
+        # Test old transport only with a synthetic explicit override.
+        # The real application remains paused by the shared kill switch.
+        with patch("cboe_acquisition_pause.CBOE_ACQUISITIONS_PAUSED", False), \
+             patch("emergency_pine.urlopen", return_value=CBOEResponse(raw)) as fake:
             record = download_current_snapshot()
         self.assertEqual(fake.call_args.args[0].full_url, CBOE_URL)
         self.assertEqual(record["source"], "Download manuale CBOE")
         self.assertEqual(json.loads(gzip.decompress(record["content"])), fixture())
         self.assertNotIn("SUPABASE_", str(record))
+
+    def test_emergency_download_is_paused_without_network(self):
+        with patch("emergency_pine.urlopen") as fake:
+            with self.assertRaisesRegex(RuntimeError, "temporaneamente sospese"):
+                download_current_snapshot()
+            fake.assert_not_called()
 
     def test_zip_json_can_be_imported_without_store_credentials(self):
         raw = json.dumps(fixture()).encode()
