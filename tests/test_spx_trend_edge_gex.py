@@ -41,6 +41,11 @@ class FakeUI:
         self.headings = []
         self.markdowns = []
         self.messages = []
+        self.secrets = {}  # No Massive key: test explicitly uses Daily-only fallback
+
+    def html(self, html):
+        # Production renders the composite card with st.html, not st.markdown.
+        self.markdowns.append((html, True))
 
     def subheader(self, value):
         self.headings.append(value)
@@ -115,18 +120,13 @@ class EdgeDailyKPITests(unittest.TestCase):
         self.assertEqual(len(ui.markdowns), 1)
         html = ui.markdowns[0][0]
         self.assertLess(html.index('class="spx-trend-label">GEX'),
-                        html.index('class="spx-trend-weekly-row"'))
-        self.assertIn("Weekly precedente · 09–13/11/2026", html)
-        self.assertIn("Max 7.690,00", html)
-        self.assertIn("Min 7.460,00", html)
-        self.assertLess(html.index("Max 7.690,00"), html.index("Min 7.460,00"))
-        self.assertIn('style="color:#ef4444">-1,68%</b>', html)
-        self.assertIn('style="color:#22c55e">+1,35%</b>', html)
-        self.assertIn("vs close Daily 13/11/2026 · 7.560,75 ES", html)
-        self.assertIn("+1,35%", html)
-        self.assertIn("-1,68%", html)
+                        html.index('class="spx-trend-weekly"'))
+        # The approved current UI is a vertical previous-range explorer,
+        # not the former two-percentage summary.
+        self.assertIn("Esplorazione Weekly · 09–13/11/2026", html)
+        self.assertIn("Esplorazione N/D", html)
+        self.assertIn("spx-weekly-unavailable", html)
         self.assertIn("minmax(200px,1.12fr)", html)
-        self.assertEqual(html.count('class="spx-trend-weekly-row"'), 2)
 
     def test_impulse_midpoint_replaces_daily_midpoint_kpi_and_sentence_moves_up(self):
         # L'ultima Daily è del 10/11; l'impulso valido è del 09/11.
@@ -171,8 +171,8 @@ class EdgeDailyKPITests(unittest.TestCase):
         self.assertNotIn('class="spx-trend-label">GEX', html)
         self.assertNotIn("Segno Gamma modellato", html)
         self.assertNotIn("GEX EDGE 0DTE", html)
-        self.assertIn("Weekly precedente", html)
-        self.assertIn("Dati Massive della settimana precedente insufficienti", html)
+        self.assertIn("Esplorazione Weekly", html)
+        self.assertIn("Esplorazione N/D", html)
 
     def test_gex_remains_nonblocking_if_daily_data_missing(self):
         context = prepare_daily_gex(report(), date(2026,11,5), "15:50")
