@@ -64,11 +64,11 @@ class EdgeMetricColorsTest(unittest.TestCase):
         self.assertNotIn("<negative>", column.rendered)
 
     def test_current_regime_and_net_gex_use_value_color(self):
-        # Regime Edge is the visible modeled sign. The first lower card
-        # now reports quality, not a duplicated sign metric.
-        self.assertIn('_colored_edge_metric(p[4], "Regime Edge"', EDGE)
-        self.assertIn('columns[0].metric(', EDGE)
-        self.assertIn('"Qualità Edge"', EDGE)
+        # Current approved layout: quality at top right; regime (colored)
+        # in the first lower card. The earlier assertion described old UI.
+        self.assertIn('p[4].metric("Qualità Edge"', EDGE)
+        self.assertIn('columns[0], "Regime Edge"', EDGE)
+        self.assertNotIn('_colored_edge_metric(p[4], "Regime Edge"', EDGE)
         self.assertIn('columns[1], "NET GEX"', EDGE)
         self.assertNotIn('columns[0], "Segno Gamma modellato"', EDGE)
         self.assertNotIn("@st.fragment(run_every=", EDGE)
