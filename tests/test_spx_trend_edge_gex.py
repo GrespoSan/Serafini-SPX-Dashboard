@@ -120,7 +120,7 @@ class EdgeDailyKPITests(unittest.TestCase):
         self.assertEqual(len(ui.markdowns), 1)
         html = ui.markdowns[0][0]
         self.assertLess(html.index('class="spx-trend-label">GEX'),
-                        html.index('class="spx-trend-weekly"'))
+                        html.index('class="spx-trend-kpi spx-trend-weekly"'))
         # The approved current UI is a vertical previous-range explorer,
         # not the former two-percentage summary.
         self.assertIn("Esplorazione Weekly · 09–13/11/2026", html)
