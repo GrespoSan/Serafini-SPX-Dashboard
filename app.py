@@ -232,12 +232,14 @@ with st.expander('ANALISI NET GAMMA', expanded=True):
     st.header('NET GAMMA · formula Serafini')
     st.subheader('Fotografia opzioni Cboe · SPX')
     snapshot_slot = st.container()
-    with st.expander("Acquisizione manuale / importazione JSON", expanded=False):
-        st.caption("Carica lo ZIP GitHub Actions o un JSON CBOE: nessun upload su Supabase. "
+    with st.expander("Acquisizione manuale / importazione JSON o CSV", expanded=False):
+        st.caption("Carica ZIP GitHub Actions, JSON originale o CSV esportato manualmente "
+                   "dal Quotes Dashboard Cboe. Il CSV viene convertito solo in memoria, "
+                   "non viene spacciato per JSON ufficiale e non è caricato su Supabase. "
                    "La formula Serafini resta invariata.")
         uploaded_snapshot = st.file_uploader(
-            "Carica snapshot SPX (.zip, .json.gz, .json)",
-            type=["zip", "gz", "json"], key="serafini_offline_cboe")
+            "Carica snapshot SPX (.zip, .json.gz, .json, .csv)",
+            type=["zip", "gz", "json", "csv"], key="serafini_offline_cboe")
         if role == 'admin':
             from manual_acquisition import render as render_manual_acquisition
             today_rome = datetime.now(ZoneInfo('Europe/Rome'))
@@ -256,8 +258,21 @@ with st.expander('ANALISI NET GAMMA', expanded=True):
             st.error(f"Importazione SPX non valida: {exc}")
             st.stop()
         offline = True
-        st.success(f"Snapshot SPX caricato localmente · timestamp CBOE {store.timestamp} "
-                   "(fuso non dichiarato). Nessun dato inviato a Supabase.")
+        if store.import_provenance:
+            info = store.import_provenance
+            st.warning(
+                "CSV Cboe importato localmente (NON fotografia JSON originale). "
+                "Ora sorgente: " + str(info["original_timestamp_text"]) +
+                " · convertita esplicitamente in UTC: " + str(store.timestamp) +
+                " · chiusura precedente ricavata da Last − Change "
+                "dell'intestazione Cboe. "
+                "I risultati dipendono dalle scadenze/opzioni incluse nell'export; "
+                "scarica All expirations / All options. "
+                "Nessun upload remoto e nessun rilevamento ufficiale retroattivo."
+            )
+        else:
+            st.success(f"Snapshot SPX caricato localmente · timestamp CBOE {store.timestamp} "
+                       "(fuso non dichiarato). Nessun dato inviato a Supabase.")
     else:
         store = Store(url, service_key, bucket)
 
