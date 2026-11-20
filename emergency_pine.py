@@ -47,10 +47,12 @@ def download_current_snapshot():
 
 
 def use_uploaded_snapshot(filename, payload):
-    """Conserva in memoria i byte originali, dopo la validazione esistente."""
+    """CSV originale conservato localmente; derivazione solo in memoria."""
     store = load_local_snapshot(filename, payload)
+    source = ("Importazione CSV Cboe · JSON derivato (NON originale)"
+              if store.import_provenance else "Importazione locale")
     return {"name": filename, "content": bytes(payload),
-            "source": "Importazione locale",
+            "source": source,
             "download_rome": None,
             "timestamp": store.timestamp}
 
@@ -193,8 +195,8 @@ def render():
                          f"{type(exc).__name__}: {str(exc)[:180]}")
     with right:
         uploaded = st.file_uploader(
-            "In alternativa importa ZIP / JSON / JSON.GZ",
-            type=["zip", "json", "gz"],
+            "In alternativa importa ZIP / JSON / JSON.GZ / CSV Cboe",
+            type=["zip", "json", "gz", "csv"],
             key="emergency_pine_uploader",
         )
         if st.button("Usa file importato", key="emergency_pine_import",
@@ -218,8 +220,19 @@ def render():
         st.error(f"Fotografia CBOE non utilizzabile: {exc}")
         return
 
-    st.markdown(f"**Fonte:** {active['source']} · **Data CBOE:** {day:%d/%m/%Y} "
-                f"· **timestamp originale:** {local.timestamp} (fuso non dichiarato)")
+    if local.import_provenance:
+        details = local.import_provenance
+        st.warning(
+            "Origine CSV manuale: non è un download JSON ufficiale. "
+            "Timestamp esportazione: " + str(details["original_timestamp_text"]) +
+            " · UTC derivato: " + local.timestamp +
+            ". Riferimento SPX = Last − Change dal CSV; "
+            "le scadenze escluse dall'export non sono ricostruite."
+        )
+        st.markdown(f"**Fonte:** {active['source']} · **Data di riferimento:** {day:%d/%m/%Y}")
+    else:
+        st.markdown(f"**Fonte:** {active['source']} · **Data CBOE:** {day:%d/%m/%Y} "
+                    f"· **timestamp originale:** {local.timestamp} (fuso non dichiarato)")
     if active["download_rome"]:
         st.caption("Download effettuato alle " + active["download_rome"][11:19] +
                    " ora di Roma; il timestamp CBOE non identifica quell'ora.")
