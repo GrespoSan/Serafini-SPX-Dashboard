@@ -14,6 +14,7 @@ from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 from storage import Store
+from cboe_acquisition_pause import require_cboe_acquisition_enabled
 
 URL = "https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json"
 SCHEDULE_SLOTS = {
@@ -125,6 +126,9 @@ def acquire(now=None, store=None, slot=None, fetch=None, sleep=None):
             # Un solo recupero a 60 secondi se la catena Cboe non contiene Gamma.
             # L'attesa avviene nel workflow GitHub, non in Streamlit.
             for attempt in (1, 2):
+                # Pausa decisa dall'utente il 20/11/2026: anche chiamate
+                # dirette a questo downloader legacy non devono interrogare Cboe.
+                require_cboe_acquisition_enabled()
                 if fetch is None:
                     req = Request(URL, headers={
                         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
