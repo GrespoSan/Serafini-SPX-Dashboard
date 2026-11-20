@@ -100,6 +100,13 @@ class InvalidSnapshot(Exception):
 
 
 def acquire(now=None, store=None, slot=None, fetch=None, sleep=None):
+    # STOP prima di qualsiasi accesso a storage, recupero o rete: anche
+    # avvii diretti di questa copia legacy non acquisiscono nuove fotografie.
+    from cboe_acquisition_pause import CBOE_ACQUISITIONS_PAUSED, PAUSE_MESSAGE
+    if CBOE_ACQUISITIONS_PAUSED:
+        print(json.dumps({"status": "CBOE_PAUSED", "note": PAUSE_MESSAGE},
+                         ensure_ascii=False))
+        return 0
     now = now or datetime.now(timezone.utc)
     sleep = sleep or time.sleep
     rome = now.astimezone(ZoneInfo("Europe/Rome"))
