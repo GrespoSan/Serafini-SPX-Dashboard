@@ -12,7 +12,7 @@ MANUAL = (ROOT / "manual_acquisition.py").read_text(encoding="utf-8")
 class SPXLayoutParityTests(unittest.TestCase):
     def test_all_modules_compile(self):
         for file in ("app.py", "gamma_section.py", "manual_acquisition.py",
-                     "offline_snapshot.py"):
+                     "offline_snapshot.py", "cboe_csv_import.py", "cboe_source_health.py"):
             with self.subTest(file=file):
                 ast.parse((ROOT / file).read_text(encoding="utf-8"),
                           filename=file)
@@ -26,12 +26,12 @@ class SPXLayoutParityTests(unittest.TestCase):
         self.assertIn("expanded=False", APP.split(
             "with st.expander('ANALISI DEL CONTESTO", 1)[1][:90])
         self.assertEqual(APP.count("st.file_uploader("), 1)
-        self.assertIn('with st.expander("Acquisizione manuale / importazione JSON"',
+        self.assertIn('with st.expander("Acquisizione manuale / importazione JSON o CSV"',
                       APP)
         self.assertLess(APP.index("render_snapshot_selector(store, week, snaps, logs)"),
                         APP.index("render(store, week, snaps, logs, show_heading=False"))
         self.assertTrue(APP.index("with st.expander('ANALISI NET GAMMA'") <
-                        APP.index('with st.expander("Acquisizione manuale / importazione JSON"'))
+                        APP.index('with st.expander("Acquisizione manuale / importazione JSON o CSV"'))
 
     def test_external_selector_exported(self):
         functions = {n.name for n in ast.parse(GAMMA).body
