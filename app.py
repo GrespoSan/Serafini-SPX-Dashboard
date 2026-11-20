@@ -12,10 +12,15 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import streamlit as st
-from storage import Store
-from spx_massive_day_cache import purge_expired
 
 st.set_page_config(page_title='Serafini SPX — Archivio', page_icon='📊', layout='wide')
+
+# Maintenance always runs BEFORE credentials, storage or Massive cache.
+from app_maintenance import suspend_if_enabled
+suspend_if_enabled(st, "Serafini · SPX — NET GAMMA")
+
+from storage import Store
+from spx_massive_day_cache import purge_expired
 
 # Only temporary Massive ES data are purged at the next Rome day. Do not
 # clear global st.cache_data: it also holds unrelated immutable Cboe snapshots.
