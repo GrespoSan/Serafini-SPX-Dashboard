@@ -30,8 +30,7 @@ def blocked_acquisition_today(week, log_names, store, today):
             if status in SUCCESS:
                 return None
             err = str(report.get("error") or "")
-            if status == "ERRORE" and "403" in err and (
-                "HTTPError" in err or "HTTP" in err):
+            if status == "ERRORE" and "HTTPError: HTTP Error 403" in err:
                 return {
                     "download_rome": report.get("download_rome"),
                     "slot": report.get("scheduled_slot"),
