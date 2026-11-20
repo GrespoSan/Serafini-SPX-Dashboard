@@ -34,7 +34,7 @@ def _read_gzip_bounded(payload):
 
 
 def load_local_snapshot(filename, payload):
-    """Accetta ZIP GitHub Actions, .json.gz originale o JSON originale."""
+    """Accetta ZIP/JSON originali o CSV Cboe convertito localmente (derivato)."""
     if len(payload) > MAX_COMPRESSED:
         raise InvalidLocalSnapshot("File superiore al limite di 25 MiB.")
     filename = str(filename).lower()
@@ -60,8 +60,19 @@ def load_local_snapshot(filename, payload):
     elif filename.endswith(".json"):
         raw = payload
         payload = gzip.compress(raw, compresslevel=6, mtime=0)
+    elif filename.endswith(".csv"):
+        # Il file originale CSV resta locale. La rappresentazione JSON derivata
+        # mantiene byte/metadata separati dal download JSON Cboe ufficiale.
+        from cboe_csv_import import csv_to_snapshot, InvalidCboeCSV
+        try:
+            converted = csv_to_snapshot(payload)
+        except InvalidCboeCSV as exc:
+            raise InvalidLocalSnapshot(str(exc)) from exc
+        raw = json.dumps(converted, ensure_ascii=False,
+                         separators=(",", ":")).encode("utf-8")
+        payload = gzip.compress(raw, compresslevel=6, mtime=0)
     else:
-        raise InvalidLocalSnapshot("Carica un file ZIP GitHub, .json.gz o .json CBOE.")
+        raise InvalidLocalSnapshot("Carica ZIP GitHub, .json.gz, .json o CSV Cboe SPX.")
 
     try:
         document = json.loads(raw)
@@ -96,12 +107,15 @@ def load_local_snapshot(filename, payload):
     file_name = f"SPX_CBOE_{date_stamp:%Y%m%d_%H%M%S}_{sha}.json.gz"
     iso = date_stamp.date().isocalendar()
     week = f"{iso.year}-W{iso.week:02d}"
-    return LocalSnapshotStore(week, file_name, payload, document["timestamp"])
+    return LocalSnapshotStore(
+        week, file_name, payload, document["timestamp"],
+        import_provenance=document.get("_import_provenance"))
 
 
 class LocalSnapshotStore:
     """Interfaccia read-only compatibile con Store, limitata a un solo file."""
-    def __init__(self, week, filename, compressed, timestamp):
+    def __init__(self, week, filename, compressed, timestamp, import_provenance=None):
+        self.import_provenance = import_provenance
         self.week = week
         self.filename = filename
         self.compressed = compressed
