@@ -3,6 +3,8 @@ on:
   push:
     paths:
       - app.py
+      - app_maintenance.py
+      - tests/test_app_maintenance.py
       - emergency_pine.py
       - pine_export.py
       - pine_gex_overlay.py
@@ -52,7 +54,9 @@ jobs:
       - name: Install minimal runtime for macro calendar test
         run: python -m pip install -q "streamlit>=1.42,<2"
       - name: Compile dashboard and offline importer
-        run: python -m py_compile app.py gamma_section.py manual_acquisition.py offline_snapshot.py cboe_csv_import.py cboe_source_health.py macro_calendar.py emergency_pine.py pine_export.py pine_compare.py pine_news_overlay.py pine_sources.py pine_gex_overlay.py pine_gex_sources.py edge_auto_engine.py edge_gex_exposure.py edge_auto.py edge_triptych.py edge_daily_gex.py trend_daily_section.py
+        run: python -m py_compile app.py app_maintenance.py gamma_section.py manual_acquisition.py offline_snapshot.py cboe_csv_import.py cboe_source_health.py macro_calendar.py emergency_pine.py pine_export.py pine_compare.py pine_news_overlay.py pine_sources.py pine_gex_overlay.py pine_gex_sources.py edge_auto_engine.py edge_gex_exposure.py edge_auto.py edge_triptych.py edge_daily_gex.py trend_daily_section.py
+      - name: Test fail-closed Streamlit maintenance gate and explicit resume
+        run: python -m unittest discover -s tests -p 'test_app_maintenance.py' -v
       - name: Test offline import without credentials
         run: python -m unittest discover -s tests -p 'test_offline_snapshot.py' -v
       - name: Test Cboe user-exported CSV parsing and Serafini NET GAMMA parity
