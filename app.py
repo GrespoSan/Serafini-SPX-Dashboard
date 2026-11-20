@@ -259,17 +259,22 @@ with st.expander('ANALISI NET GAMMA', expanded=True):
             st.stop()
         offline = True
         if store.import_provenance:
+            from cboe_csv_import import csv_coverage_warning
             info = store.import_provenance
             st.warning(
                 "CSV Cboe importato localmente (NON fotografia JSON originale). "
                 "Ora sorgente: " + str(info["original_timestamp_text"]) +
                 " · convertita esplicitamente in UTC: " + str(store.timestamp) +
-                " · chiusura precedente ricavata da Last − Change "
-                "dell'intestazione Cboe. "
-                "I risultati dipendono dalle scadenze/opzioni incluse nell'export; "
-                "scarica All expirations / All options. "
+                " · chiusura SPX precedente: "
+                + f'{float(info["prior_close_spx"]):,.2f}'
+                + " (" + str(info["previous_close_method"]) + "). "
+                "Non è un prezzo live: verificare la chiusura ufficiale "
+                "se l'ultima quotazione del portale è ritardata. "
                 "Nessun upload remoto e nessun rilevamento ufficiale retroattivo."
             )
+            coverage_warning = csv_coverage_warning(info)
+            if coverage_warning:
+                st.error(coverage_warning)
         else:
             st.success(f"Snapshot SPX caricato localmente · timestamp CBOE {store.timestamp} "
                        "(fuso non dichiarato). Nessun dato inviato a Supabase.")
