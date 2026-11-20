@@ -180,8 +180,7 @@ def csv_to_snapshot(payload):
             "spot e chiusura precedente, senza stime.")
     spot = _number(m_last.group(1), "Last")
     change = _number(m_change.group(1), "Change")
-    reference = spot - change
-    if not (spot > 0 and reference > 0 and abs(change) < spot * .25):
+    if not (spot > 0 and spot - change > 0 and abs(change) < spot * .25):
         raise InvalidCboeCSV("CSV: Last/Change non coerenti.")
     date_cell = next(
         (cell.strip()[5:].strip() for row in lines[:7] for cell in row
@@ -189,6 +188,22 @@ def csv_to_snapshot(payload):
     if date_cell is None:
         raise InvalidCboeCSV("CSV: manca Date nell'intestazione; nessun timestamp inventato.")
     recorded, clock_source = _source_time(date_cell)
+    ny_timestamp = recorded.astimezone(ZoneInfo("America/New_York"))
+    # The SPX index has no premarket cash session. Before 09:30 New York,
+    # Cboe 'Last' is normally the last US cash close (yesterday's close).
+    # 'Change' is the movement of that LAST cash session, so subtracting it
+    # before the next open shifts the reference back by one extra session.
+    # Outside US weekdays (when market cash cannot open) use the same rule.
+    before_cash_open = (ny_timestamp.weekday() >= 5 or
+                        (ny_timestamp.hour, ny_timestamp.minute) < (9, 30))
+    if before_cash_open:
+        reference = spot
+        reference_method = (
+            "Last Cboe pre-apertura cash USA (valore ultimo indice, "
+            "verificare la chiusura precedente)")
+    else:
+        reference = spot - change
+        reference_method = "Last meno Change Cboe (sessione cash USA)"
     header_at, strike_index, columns = _get_csv_fields(lines)
     options = []
     seen = set()
@@ -239,7 +254,31 @@ def csv_to_snapshot(payload):
     if len(options) < 100 or not any(opt["gamma"] > 0 for opt in options):
         raise InvalidCboeCSV(
             "CSV: catena SPX insufficiente o senza Gamma. "
-            "Esporta 'All expirations' e 'All options' dal portale Cboe.")
+            "Seleziona Options Range = All, poi View Chain e Download CSV.")
+    # Detect narrow Cboe 'Near the Money' exports before attempting 25+25.
+    # Report coverage, but do not invent strikes or change Serafini's method.
+    from volatility_levels import weekly_expiry
+    market_day = ny_timestamp.date()
+    coverage = {}
+    if market_day.weekday() < 5:
+        for label, expiry in (("0DTE", market_day),
+                              ("Weekly", weekly_expiry(market_day))):
+            price_levels = set()
+            for item in options:
+                match = CODE.fullmatch(item["option"])
+                if match and match.group(2) == expiry.strftime("%y%m%d"):
+                    price_levels.add(int(match.group(4)) / 1000.0)
+            coverage[label] = {
+                "expiry": expiry.isoformat(),
+                "below": len([k for k in price_levels if k < reference]),
+                "above": len([k for k in price_levels if k > reference]),
+                "distinct": len(price_levels),
+                "minimum": min(price_levels) if price_levels else None,
+                "maximum": max(price_levels) if price_levels else None,
+                "complete": (
+                    sum(k < reference for k in price_levels) >= 25 and
+                    sum(k > reference for k in price_levels) >= 25),
+            }
     return {
         "symbol": "_SPX",
         # UTC convention required by the existing Pine labels; unlike Cboe
@@ -253,7 +292,11 @@ def csv_to_snapshot(payload):
             "original_timestamp_text": date_cell,
             "timezone_conversion": clock_source,
             "timestamp_utc_converted": True,
-            "previous_close_method": "Cboe header Last minus Change",
+            "previous_close_method": reference_method,
+            "prior_close_spx": reference,
+            "reference_is_preopen_last": before_cash_open,
+            "reference_market_day_ny": market_day.isoformat(),
+            "coverage_by_expiry": coverage,
             "contracts": len(options),
             "unsupported_contracts_excluded": omitted,
             "not_original_cboe_json": True,
