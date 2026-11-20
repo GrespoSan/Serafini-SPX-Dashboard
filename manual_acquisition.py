@@ -14,12 +14,15 @@ import threading
 import time
 
 import streamlit as st
+from cboe_acquisition_pause import (CBOE_ACQUISITIONS_PAUSED, PAUSE_MESSAGE,
+                                    require_cboe_acquisition_enabled)
 
 POLL_SECONDS = 5
 MAX_WAIT_SECONDS = 150
 
 
 def dispatch_snapshot(token: str, repo: str, workflow: str = 'spx.yml') -> None:
+    require_cboe_acquisition_enabled()
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo):
         raise ValueError('Nome repository GitHub non valido.')
     if not re.fullmatch(r'[A-Za-z0-9_.-]+\.ya?ml', workflow):
@@ -142,7 +145,10 @@ def render(role: str, week: str, store, embedded: bool = False) -> None:
     with section:
         if embedded:
             st.markdown('**Acquisizione Cboe supplementare**')
-        st.caption('Nuova acquisizione manuale. Le acquisizioni ufficiali delle 07:30, 15:50 e 20:30 restano invariate.')
+        if CBOE_ACQUISITIONS_PAUSED:
+            st.info(PAUSE_MESSAGE)
+            return
+        st.caption('Nuova acquisizione manuale Cboe, solo quando autorizzata.')
         rome = datetime.now(ZoneInfo('Europe/Rome'))
         iso = rome.isocalendar()
         if rome.weekday() >= 5:
