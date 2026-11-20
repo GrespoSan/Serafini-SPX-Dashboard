@@ -303,3 +303,32 @@ def csv_to_snapshot(payload):
             "filtered_chain_possible": True,
         },
     }
+
+
+def csv_coverage_warning(provenance):
+    """Explain an incomplete Cboe CSV chain without filling missing strikes."""
+    info = (provenance or {}).get("coverage_by_expiry") or {}
+    incomplete = []
+    for label in ("0DTE", "Weekly"):
+        v = info.get(label)
+        if not v or v.get("complete"):
+            continue
+        low = v.get("minimum")
+        high = v.get("maximum")
+        span = (f" · strike {low:,.0f}–{high:,.0f}" if
+                isinstance(low, (float, int)) and isinstance(high, (float, int))
+                else " · nessuno strike per la scadenza")
+        incomplete.append(
+            f'{label} {v.get("expiry", "?")}: '
+            f'{v.get("below", 0)}/25 sotto, {v.get("above", 0)}/25 sopra'
+            + span)
+    if not incomplete:
+        return None
+    return (
+        "CSV Cboe con catena INCOMPLETA per il metodo Serafini: "
+        + "; ".join(incomplete)
+        + ". Nel portale Cboe imposta **Options Range = All** "
+          "(NON Near the Money), **Expiration = All**, poi "
+          "**View Chain** e infine **Download CSV**. "
+          "L'app non genera profili 25+25 da strike assenti."
+    )
