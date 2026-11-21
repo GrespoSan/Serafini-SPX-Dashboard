@@ -293,7 +293,8 @@ def show(week, store, logs=None, *, on_valid_gex=None):
             )
         for c,key,lab in zip(p[1:4],("put_wall_spx","gamma_flip_spx","call_wall_spx"),("Put Wall","Gamma Flip","Call Wall")):
             v=e.get(key);c.metric(lab,f"{float(v)+shift:,.2f}" if v is not None else "N/D")
-        p[4].metric("Qualità Edge", _format_edge_quality(e.get("quality_pct")))
+        quality = e.get("quality_pct")
+        p[4].metric("Qualità Edge", _format_edge_quality(quality))
 
         # This is the complete 0DTE Edge chain (not just the strike bars
         # shown +/-10% on the chart). Source snapshot SHA-256 and selected
