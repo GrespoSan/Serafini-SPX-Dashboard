@@ -181,7 +181,7 @@ def _latest_downloaded_snapshot(store, week, snaps, logs):
 
     Uses the cached acquisition-log index; selecting never downloads raw chains.
     """
-    names = {item['name'] for item in snaps if accepted(item.get('name',''))}
+    names = {item['name'] for item in snaps if item.get('name','').startswith(('SPX_CBOE_', 'SPX_ALPACA_'))}
     if not names:
         return None
     index = _snapshot_log_index(week, tuple(item['name'] for item in logs), store)
@@ -196,7 +196,7 @@ def _latest_downloaded_snapshot(store, week, snaps, logs):
 
 def _sync_snapshot_selection(store, week, snaps, logs):
     """Follow latest by default, preserving explicit manual historical selection."""
-    names = sorted((item['name'] for item in snaps if accepted(item.get('name',''))), reverse=True)
+    names = sorted((item['name'] for item in snaps if item.get('name','').startswith(('SPX_CBOE_', 'SPX_ALPACA_'))), reverse=True)
     if not names:
         return names, None
     selected_key = f'serafini_selected_snapshot_{week}'
@@ -762,7 +762,7 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
     # When the selector was already rendered in app.py, never write its widget
     # session_state again in this same Streamlit run (widget-state restriction).
     if selector_external:
-        names = sorted((item['name'] for item in snaps if accepted(item.get('name',''))), reverse=True)
+        names = sorted((item['name'] for item in snaps if item.get('name','').startswith(('SPX_CBOE_', 'SPX_ALPACA_'))), reverse=True)
     else:
         names, _ = _sync_snapshot_selection(store, week, snaps, logs)
     selection_key = f'serafini_selected_snapshot_{week}'
