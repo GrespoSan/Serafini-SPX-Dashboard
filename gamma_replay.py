@@ -127,7 +127,9 @@ def _official_frames(_store, week, day, logs):
                 result[slot] = {
                     "slot_rome": slot, "clock": clock.strftime("%H:%M:%S"),
                     "download_rome": clock.isoformat(timespec="seconds"),
-                    "origin": ("SLOT UFFICIALE · ALPACA INDICATIVE / GAMMA MODELLATO"
+                    "origin": (("PRE-USA · ALPACA QUOTE SEDUTA PRECEDENTE"
+                                if snap.get("source_provenance",{}).get("quote_age_mode") == "PREMARKET_PRIOR_SESSION"
+                                else "SLOT UFFICIALE · ALPACA INDICATIVE / GAMMA MODELLATO")
                                if snap.get("source_provenance",{}).get("source") == "ALPACA_INDICATIVE_OCC_OI"
                                else ("STUDIO STORICO DA ARCHIVIO"
                                      if slot == "13:30" and raw_study_1330_for_day(day)
@@ -173,7 +175,9 @@ def _study_frames(_store, week, day):
             data[slot] = {
                 "slot_rome": slot, "clock": dt.strftime("%H:%M:%S"),
                 "download_rome": dt.isoformat(timespec="seconds"),
-                "origin": ("STUDIO REPLAY · ALPACA INDICATIVE / GAMMA MODELLATO"
+                "origin": (("PRE-USA · REPLAY QUOTE SEDUTA PRECEDENTE"
+                            if (item.get("source_provenance") or {}).get("quote_age_mode") == "PREMARKET_PRIOR_SESSION"
+                            else "STUDIO REPLAY · ALPACA INDICATIVE / GAMMA MODELLATO")
                            if replay_origin == "ALPACA_INDICATIVE_DERIVED"
                            else "STUDIO NON UFFICIALE · CBOE STORICO"),
                 "source": replay_origin,
