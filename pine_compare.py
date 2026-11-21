@@ -10,7 +10,7 @@ from pine_gex_overlay import append_gex_overlays
 
 def make_pine_comparison(previous_odte, current_odte, current_weekly,
                          offset, date_text, previous_slot, current_slot,
-                         cboe_stamp="", *, gex=None):
+                         cboe_stamp="", *, gex=None, data_source="CBOE_ORIGINAL"):
     if (previous_slot, current_slot) not in (
             ("07:30", "13:30"), ("07:30", "14:46"), ("07:30", "15:50"),
             ("07:30", "16:16"), ("16:16", "17:46"),
@@ -29,7 +29,7 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
         raise ValueError("0DTE precedente e attuale: scadenze differenti")
 
     code = make_pine(current_odte, current_weekly, float(offset),
-                     date_text, cboe_stamp, current_slot)
+                     date_text, cboe_stamp, current_slot, data_source=data_source)
     # Il quarto Pine può avere gamma molto maggiori della rilevazione 15:50.
     # Il default è calcolato dai dati reali, ma resta una scala MANUALE.
     previous_display = previous_odte.get("display_rows") or previous_odte["rows"]
@@ -70,7 +70,7 @@ def make_pine_comparison(previous_odte, current_odte, current_weekly,
     )
     patch("// EXPORT REVISION: V53-TV-MANUAL-SCALE",
           "// EXPORT REVISION: V53-TV-MANUAL-CLOSE-THREE-COLUMNS")
-    patch("// La scala MANUALE e' COMUNE ai profili e non altera i gamma Cboe calcolati.",
+    patch("// La scala MANUALE e' COMUNE ai profili e non altera i Gamma della fotografia.",
           "// I tre profili usano ESATTAMENTE la stessa scala manuale.")
     # Il parametro offsetOdte fissa SEMPRE il primo profilo 0DTE visibile:
     # con precedente ON e' quello precedente, con OFF e' quello corrente.
