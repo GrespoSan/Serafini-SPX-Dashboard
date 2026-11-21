@@ -14,7 +14,7 @@ import streamlit as st
 
 
 def scenario_gex(curve, spx_spot):
-    """Interpolazione lineare DENTRO la curva teorica originale, mai extrapolazione.
+    """Esegue interpolazione lineare DENTRO la curva teorica originale, mai extrapolazione.
 
     Restituisce l'esposizione NET GEX in USD della curva congelata.
     Non ricostruisce gamma per singola opzione (necessaria per nuove Wall).
@@ -187,11 +187,11 @@ def show_price_lab(edge, es_basis, last_es=None, *, key="edge_scenario",
             unsafe_allow_html=True,
         )
         with st.expander("Dettagli tecnici degli orari", expanded=False):
-            st.caption(f"Timestamp della fotografia: {snapshot_time}")
-            st.caption(f"Timestamp di valutazione del modello Edge: {valuation_time}")
+            st.caption(f"Fotografia Cboe del calcolo GEX: {snapshot_time}")
+            st.caption(f"Valutazione modello GEX: {valuation_time}")
             st.caption(
-                "La valutazione del modello può riferirsi a un istante diverso "
-                "dal download; non è l'orario di acquisizione della catena Cboe."
+                "La valutazione del modello non coincide necessariamente con il download; "
+                "non è l'orario di acquisizione della catena Cboe."
             )
         if edge.get("quality_sufficient") is not True:
             st.warning(
