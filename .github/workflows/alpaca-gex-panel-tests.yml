@@ -1,0 +1,30 @@
+name: SPX derived Alpaca GEX provenance and panel checks
+
+on:
+  pull_request:
+    paths:
+      - 'alpaca_gex_verify.py'
+      - 'alpaca_gex_panel.py'
+      - 'app.py'
+      - 'tests/test_alpaca_gex_verify.py'
+      - '.github/workflows/alpaca-gex-panel-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Syntax only UI and pure validator
+        run: python -m py_compile alpaca_gex_verify.py alpaca_gex_panel.py app.py
+      - name: Verify official and Replay source/SHA lineage
+        run: python -m unittest discover -s tests -p 'test_alpaca_gex_verify.py' -v
+      - name: Preserve original Serafini and Replay source behavior
+        run: python -m unittest discover -s tests -p 'test_spx_snapshot_source.py' -v
