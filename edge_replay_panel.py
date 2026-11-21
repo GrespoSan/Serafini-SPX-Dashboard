@@ -296,6 +296,7 @@ def show_replay(week, store, plotter, logs=None, *, selected=None):
                 "Qualità Edge",
                 _format_edge_quality(quality),
             )
+            st.caption("Copertura del modello, NON freschezza delle quotazioni SPX.")
         if previous_edge is not None:
             st.caption(
                 f"Δ rispetto al Replay {compare} · stesso modello e scadenza "
