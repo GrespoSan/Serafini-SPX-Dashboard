@@ -51,6 +51,22 @@ class SourceSelectionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             read_snapshot(gzip.compress(json.dumps(doc).encode()))
 
+    def test_source_aware_replay_accepts_only_verified_alpaca(self):
+        from spx_snapshot_source import replay_source_kind
+        core={"schema":"serafini_replay_v1", "rome_date":"2026-11-23",
+              "kind":"STUDIO_INTRADAY_ALPACA_DERIVED",
+              "source":"ALPACA_INDICATIVE_OCC_OI",
+              "source_provenance":{"source":"ALPACA_INDICATIVE_OCC_OI",
+                                   "kind":"DERIVED_ALPACA_INDICATIVE_NOT_CBOE"}}
+        self.assertEqual(replay_source_kind(core),"ALPACA_INDICATIVE_DERIVED")
+        core["source_provenance"]["source"]="CBOE_ORIGINAL"
+        self.assertIsNone(replay_source_kind(core))
+        original={"schema":"serafini_replay_v1",
+                  "kind":"STUDIO_INTRADAY_NON_UFFICIALE"}
+        self.assertEqual(replay_source_kind(original),"CBOE_ORIGINAL")
+        original["source"]="ALPACA_INDICATIVE_OCC_OI"
+        self.assertIsNone(replay_source_kind(original))
+
     def test_legacy_cboe_without_provenance_remains_compatible(self):
         doc=read_snapshot(gzip.compress(json.dumps(self._sample()).encode()))
         self.assertEqual(visible_source(doc),"CBOE_ORIGINAL_OR_MANUAL")
