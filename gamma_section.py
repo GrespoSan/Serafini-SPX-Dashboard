@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from datetime import datetime
 import streamlit as st
 from net_gamma import profile, profile_csv, read_snapshot, visual_profile
+from spx_snapshot_source import accepted, parse_name, date_label, same_source_day_prefix, source_label, visible_source
 from feed_quality import timestamp_state
 from volatility_levels import weekly_expiry
 from gamma_compare import compare_profiles
@@ -180,7 +181,7 @@ def _latest_downloaded_snapshot(store, week, snaps, logs):
 
     Uses the cached acquisition-log index; selecting never downloads raw chains.
     """
-    names = {item['name'] for item in snaps if item.get('name','').startswith('SPX_CBOE_')}
+    names = {item['name'] for item in snaps if item.get('name','').startswith(('SPX_CBOE_', 'SPX_ALPACA_'))}
     if not names:
         return None
     index = _snapshot_log_index(week, tuple(item['name'] for item in logs), store)
@@ -195,7 +196,7 @@ def _latest_downloaded_snapshot(store, week, snaps, logs):
 
 def _sync_snapshot_selection(store, week, snaps, logs):
     """Follow latest by default, preserving explicit manual historical selection."""
-    names = sorted((item['name'] for item in snaps), reverse=True)
+    names = sorted((item['name'] for item in snaps if item.get('name','').startswith(('SPX_CBOE_', 'SPX_ALPACA_'))), reverse=True)
     if not names:
         return names, None
     selected_key = f'serafini_selected_snapshot_{week}'
@@ -308,7 +309,10 @@ def render_comparison(store, week, snaps, logs):
     day, ref, offset, weekly_exp = (ctx['day'], ctx['ref'], ctx['offset'], ctx['weekly_exp'])
     names = sorted((obj['name'] for obj in snaps), reverse=True)
     st.subheader('Confronto NET GAMMA — rilevamenti della stessa giornata')
-    same_day = sorted(n for n in names if n.startswith(f'SPX_CBOE_{day:%Y%m%d}_'))
+    alpaca_day = sorted(n for n in names if n.startswith(f'SPX_ALPACA_{day:%Y%m%d}_'))
+    cboe_day = sorted(n for n in names if n.startswith(f'SPX_CBOE_{day:%Y%m%d}_'))
+    # Cross-source modeled Gamma vs Cboe Gamma is never a single comparison.
+    same_day = alpaca_day if alpaca_day else cboe_day
     # Escludere dal confronto gli snapshot senza Gamma, compresi gli storici
     # precedenti all'introduzione del controllo qualita' nel downloader.
     valid_names = []
@@ -715,14 +719,14 @@ def render_comparison(store, week, snaps, logs):
 
 def render_snapshot_selector(store, week, snaps, logs):
     """Default to latest download while historical selections remain available."""
-    if not snaps:
-        st.caption("Nessuna fotografia Cboe disponibile: importa uno ZIP/JSON qui sotto.")
+    if not snaps or not any(accepted(item.get('name','')) for item in snaps):
+        st.caption("Nessuna fotografia SPX disponibile: puoi importare una fotografia Cboe storica.")
         return
     names, latest = _sync_snapshot_selection(store, week, snaps, logs)
     selection_key = f'serafini_selected_snapshot_{week}'
     follow_key = f'serafini_follow_latest_{week}'
     st.checkbox(
-        "Segui automaticamente l'ultimo download Cboe",
+        "Segui automaticamente l'ultimo rilevamento SPX",
         value=True, key=follow_key,
         help="Attivo: il profilo principale passa all'ultimo download. "
              "Scegliere uno storico disattiva il seguito automatico; "
@@ -730,16 +734,14 @@ def render_snapshot_selector(store, week, snaps, logs):
     )
     labels = {}
     for name in names:
-        day_code = name[len('SPX_CBOE_'):len('SPX_CBOE_') + 8]
-        readable_date = (f'{day_code[6:8]}/{day_code[4:6]}/{day_code[:4]}'
-                         if len(day_code) == 8 and day_code.isdigit() else 'Data n.d.')
+        readable_date = date_label(name) if accepted(name) else 'Data n.d.'
         if getattr(store, 'object_path', None) == f'{week}/snapshots/{name}':
             capture = 'Importazione locale'
         else:
             capture = _acquisition_label(store, week, logs, name)
-        labels[name] = f'{readable_date} · {capture} · {name}'
+        labels[name] = f'{readable_date} · {source_label(name)} · {capture} · {name}'
     st.selectbox(
-        'Snapshot originale Cboe', names, key=selection_key,
+        'Fotografia SPX · fonte identificata', names, key=selection_key,
         format_func=lambda name: labels.get(name, name),
         on_change=_snapshot_choice_changed, args=(week, latest),
     )
@@ -748,19 +750,19 @@ def render_snapshot_selector(store, week, snaps, logs):
     else:
         st.caption("Modalità storica: la fotografia scelta rimane attiva anche con nuovi download.")
     if not logs:
-        st.caption("Orario download non verificabile dai registri: ordinamento dei nomi Cboe.")
+        st.caption("Orario download non verificabile dai registri: nessun orario viene inventato.")
 
 
 def render(store, week, snaps, logs, *, show_heading=True, selector_external=False):
     if show_heading:
         st.header('NET GAMMA · formula Serafini')
-    if not snaps:
-        st.info('Nessuno snapshot disponibile nella settimana selezionata.')
+    if not snaps or not any(accepted(item.get('name','')) for item in snaps):
+        st.info('Nessuno snapshot riconosciuto disponibile nella settimana selezionata.')
         return
     # When the selector was already rendered in app.py, never write its widget
     # session_state again in this same Streamlit run (widget-state restriction).
     if selector_external:
-        names = sorted((item['name'] for item in snaps), reverse=True)
+        names = sorted((item['name'] for item in snaps if item.get('name','').startswith(('SPX_CBOE_', 'SPX_ALPACA_'))), reverse=True)
     else:
         names, _ = _sync_snapshot_selection(store, week, snaps, logs)
     selection_key = f'serafini_selected_snapshot_{week}'
@@ -772,12 +774,19 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
     except Exception as exc:
         st.error(f'Impossibile leggere lo snapshot: {type(exc).__name__}')
         return
+    kind, _, _ = parse_name(choice)
+    if kind == 'ALPACA':
+        if visible_source(snap) != 'ALPACA_INDICATIVE_DERIVED':
+            st.error("Fotografia Alpaca senza provenienza verificabile: NET GAMMA non mostrato.")
+            return
+        st.warning("ALPACA INDICATIVE + OCC · Gamma modellato da Bid/Ask, NON Gamma Cboe/OPRA. "
+                   "La formula Serafini resta invariata; confrontabilità storica ancora da verificare.")
     timestamp = str(snap.get('timestamp') or '')
     acquisition_label = _acquisition_label(store, week, logs, choice)
     download_clock = _snapshot_download_clock(store, week, logs, choice)
     # Confronto soltanto con il file precedente della STESSA giornata;
     # non interpreta il fuso del timestamp Cboe e non blocca il profilo.
-    day_prefix = choice[:len('SPX_CBOE_') + 8]
+    day_prefix = same_source_day_prefix(choice)
     same_day_names = [name for name in names if name.startswith(day_prefix)]
     position = same_day_names.index(choice)
     preceding = same_day_names[position + 1] if position + 1 < len(same_day_names) else None
@@ -797,7 +806,7 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
     }[quality]
     # Si usa la data dello snapshot per gli esempi e per impedire look-ahead.
     try:
-        day = date.fromisoformat(choice.split('SPX_CBOE_')[1][:8][:4] + '-' + choice.split('SPX_CBOE_')[1][4:6] + '-' + choice.split('SPX_CBOE_')[1][6:8])
+        day = parse_name(choice)[1]
     except Exception:
         st.error('Data dello snapshot non riconosciuta nel nome del file.')
         return
@@ -916,30 +925,28 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
     # di acquisizione ricavati dai registri, non dal timestamp originale Cboe.
     snapshot_menu_labels = {}
     for snapshot_name in names:
-        date_code = snapshot_name[len('SPX_CBOE_'):len('SPX_CBOE_') + 8]
-        date_display = (f'{date_code[6:8]}/{date_code[4:6]}/{date_code[:4]}'
-                        if len(date_code) == 8 and date_code.isdigit() else 'Data n.d.')
+        date_display = date_label(snapshot_name) if accepted(snapshot_name) else 'Data n.d.'
         slot_label = _acquisition_label(store, week, logs, snapshot_name)
         actual_clock = _snapshot_download_clock(store, week, logs, snapshot_name)
         clock_label = (f' · download {actual_clock} Roma'
                        if actual_clock else ' · ora download non disponibile')
         snapshot_menu_labels[snapshot_name] = (
-            f'{date_display} · {slot_label}{clock_label} · {snapshot_name}'
+            f'{date_display} · {source_label(snapshot_name)} · {slot_label}{clock_label} · {snapshot_name}'
         )
     if selector_external:
         st.caption(f'Rilevamento selezionato: {acquisition_label} · '
-                   f'Timestamp Cboe: {timestamp or "n.d."} · '
-                   f'Cboe: {quality_label} · file {choice}')
+                   f'Timestamp sorgente: {timestamp or "n.d."} · '
+                   f'Qualità timestamp: {quality_label} · file {choice}')
     else:
         col_snapshot, col_snapshot_info = st.columns(
             [1.25, 2.75], gap='small', vertical_alignment='bottom')
         with col_snapshot:
-            st.selectbox('Snapshot originale Cboe', names, key=selection_key,
+            st.selectbox('Fotografia SPX · fonte identificata', names, key=selection_key,
                          format_func=lambda snapshot_name: snapshot_menu_labels.get(snapshot_name, snapshot_name))
         with col_snapshot_info:
             st.caption(f'Rilevamento selezionato: {acquisition_label} · '
-                       f'Timestamp Cboe: {timestamp or "n.d."} · '
-                       f'Cboe: {quality_label} · file {choice}')
+                       f'Timestamp sorgente: {timestamp or "n.d."} · '
+                       f'Qualità timestamp: {quality_label} · file {choice}')
     st.markdown('**Priorità operativa alle 0DTE:** Serafini richiama un peso numerico del '
                 '**60% per le 0DTE** e del **23% per le Weekly** e, in caso di dubbio, '
                 'privilegia i livelli 0DTE più marcati.')

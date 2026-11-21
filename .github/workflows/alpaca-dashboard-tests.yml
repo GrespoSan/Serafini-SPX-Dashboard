@@ -1,0 +1,30 @@
+name: Serafini SPX Alpaca source-aware dashboard
+
+on:
+  pull_request:
+    paths:
+      - 'spx_snapshot_source.py'
+      - 'net_gamma.py'
+      - 'gamma_section.py'
+      - 'gamma_replay.py'
+      - 'app.py'
+      - 'tests/test_spx_snapshot_source.py'
+      - '.github/workflows/alpaca-dashboard-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify dashboard syntax
+        run: python -m py_compile app.py gamma_section.py gamma_replay.py net_gamma.py spx_snapshot_source.py
+      - name: Verify original and derived source selection and formula
+        run: python -m unittest discover -s tests -p 'test_spx_snapshot_source.py' -v

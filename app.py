@@ -238,7 +238,7 @@ st.markdown("""
 context_slot = st.empty()
 with st.expander('ANALISI NET GAMMA', expanded=True):
     st.header('NET GAMMA · formula Serafini')
-    st.subheader('Fotografia opzioni Cboe · SPX')
+    st.subheader('Fotografie opzioni SPX · Cboe storico / Alpaca nuovo')
     snapshot_slot = st.container()
     with st.expander("Acquisizione manuale / importazione JSON o CSV", expanded=False):
         st.caption("Carica ZIP GitHub Actions, JSON originale o CSV esportato manualmente "
@@ -364,7 +364,7 @@ with st.expander('ANALISI NET GAMMA', expanded=True):
     # «1 snapshot · 0 registri» in fondo ai grafici e ai quattro export Pine.
     # Mantieni la consultazione storica per fotografie archiviate e log reali.
     if not offline and logs and st.checkbox(
-            f'RILEVAMENTI CBOE — {len(snaps)} snapshot · {len(logs)} registri',
+            f'RILEVAMENTI SPX — {len(snaps)} snapshot · {len(logs)} registri',
             value=False, key=f'cb_show_records_{week}'):
         col_snapshots, col_logs = st.columns([1, 1], gap='medium')
         col_snapshots.metric('Snapshot distinti', len(snaps))
@@ -388,10 +388,11 @@ with st.expander('ANALISI NET GAMMA', expanded=True):
                         ),
                         'Stato': value.get('status', ''),
                         'Qualità dati': describe_quality(value, store),
-                        'Timestamp Cboe (originale)': value.get('cboe_timestamp', ''),
+                        'Timestamp sorgente': value.get('source_timestamp_utc') or value.get('cboe_timestamp', ''),
+                        'Fonte': value.get('source') or 'CBOE_ORIGINALE',
                         'SPX': value.get('spot_spx', ''),
                         'Contratti': value.get('contracts', ''),
-                        'File originale': value.get('file', ''),
+                        'File sorgente': value.get('file', ''),
                     })
                 except Exception:
                     rows.append({'Stato': 'Impossibile leggere un registro', 'Qualità dati': 'DA VERIFICARE'})

@@ -14,7 +14,12 @@ CONTRACT = re.compile(r'^SPX(W?)(\d{6})([CP])(\d{8})$')
 def read_snapshot(blob: bytes):
     data = json.loads(gzip.decompress(blob))
     if data.get('symbol') not in ('SPX', '_SPX') or not isinstance(data.get('data', {}).get('options'), list):
-        raise ValueError('Snapshot SPX Cboe non valido')
+        raise ValueError('Snapshot SPX non valido')
+    provenance = data.get('source_provenance')
+    if provenance is not None:
+        from spx_snapshot_source import visible_source
+        if visible_source(data) != 'ALPACA_INDICATIVE_DERIVED':
+            raise ValueError('Fotografia derivata senza provenienza ALPACA valida')
     return data
 
 

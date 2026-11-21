@@ -127,9 +127,11 @@ def _official_frames(_store, week, day, logs):
                 result[slot] = {
                     "slot_rome": slot, "clock": clock.strftime("%H:%M:%S"),
                     "download_rome": clock.isoformat(timespec="seconds"),
-                    "origin": ("STUDIO STORICO DA ARCHIVIO"
-                               if slot == "13:30" and raw_study_1330_for_day(day)
-                               else "UFFICIALE"),
+                    "origin": ("SLOT UFFICIALE · ALPACA INDICATIVE / GAMMA MODELLATO"
+                               if snap.get("source_provenance",{}).get("source") == "ALPACA_INDICATIVE_OCC_OI"
+                               else ("STUDIO STORICO DA ARCHIVIO"
+                                     if slot == "13:30" and raw_study_1330_for_day(day)
+                                     else "UFFICIALE")),
                     "spot": snap["data"].get("current_price"),
                     "reference_spx": ref, "profiles": profiles,
                     "cboe_timestamp_original": snap.get("timestamp"),
