@@ -1,0 +1,28 @@
+name: SPX Alpaca Pine provenance
+
+on:
+  pull_request:
+    paths:
+      - 'pine_export.py'
+      - 'pine_compare.py'
+      - 'pine_sources.py'
+      - 'pine_gex_sources.py'
+      - 'gamma_section.py'
+      - 'tests/test_pine_alpaca_source.py'
+      - '.github/workflows/alpaca-pine-source-tests.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify syntax
+        run: python -m py_compile pine_export.py pine_compare.py pine_sources.py pine_gex_sources.py gamma_section.py
+      - name: Test source provenance and GEX overlays
+        run: python -m unittest discover -s tests -p 'test_pine_alpaca_source.py' -v
