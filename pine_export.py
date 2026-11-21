@@ -56,7 +56,7 @@ def _initial_manual_scale(profiles):
     return ceil(minimum * 10.0 - 1e-8) / 10.0
 
 
-def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stamp: str, acquisition_label: str = '', *, current_only: bool = False, gex: dict | None = None) -> str:
+def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stamp: str, acquisition_label: str = '', *, current_only: bool = False, gex: dict | None = None, data_source: str = "CBOE_ORIGINAL") -> str:
     if not isfinite(offset):
         raise ValueError('Il differenziale non è finito')
     if not odte.get('rows') or not weekly.get('rows'):
@@ -87,7 +87,17 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
         ({"rows": odte_display}, 100), ({"rows": weekly_display}, 200)
     ])
     same_exp = odte['expiry'] == weekly['expiry']
-    origin = re.sub(r'[^0-9T: .-]', '', cboe_stamp)[:72]
+    if data_source not in ("CBOE_ORIGINAL","ALPACA_INDICATIVE_OCC_OI"):
+        raise ValueError("Provenienza Pine non riconosciuta")
+    if current_only and data_source != "CBOE_ORIGINAL":
+        raise ValueError("Il Pine emergenza presume timestamp Cboe e non vale per Alpaca")
+    is_alpaca = data_source == "ALPACA_INDICATIVE_OCC_OI"
+    source_name = ("ALPACA INDICATIVE + OI OCC (Gamma BSM modellato, NON Cboe/OPRA)"
+                   if is_alpaca else "Cboe originale")
+    source_token = ("fotografia Alpaca" if is_alpaca else "snapshot Cboe")
+    extension_token = ("Alpaca" if is_alpaca else "Cboe")
+    origin = ("Ora Alpaca da registro di download (non timestamp Cboe)"
+              if is_alpaca else re.sub(r'[^0-9T: .-]', '', cboe_stamp)[:72])
     # Usa solo etichette del registro di acquisizione, non presume il fuso del timestamp Cboe.
     clean_label = re.sub(r'[^a-zA-Z0-9À-ÿ :()._-]', '', acquisition_label or '')[:50]
     tag = f' | {clean_label}' if clean_label else ''
@@ -129,12 +139,12 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
 indicator("{indicator_title}", overlay=true, max_lines_count=500, max_labels_count=20)
 // EXPORT REVISION: V53-TV-MANUAL-SCALE
 // Rilevamento selezionato: {clean_label or "Non identificato"}
-// Esportazione STATICA da uno snapshot Cboe; aggiornare ricopiando il Pine generato dalla dashboard.
-// Fonte: {origin}
+// Esportazione STATICA da {source_token}; aggiornare ricopiando il Pine generato dalla dashboard.
+// Fonte: {source_name} | {origin}
 {clock_note}// Data snapshot: {date_text} | 0DTE: {odte['expiry']} | Weekly: {weekly['expiry']}
 // Differenziale ES-SPX GIA' APPLICATO agli strike: {offset:.4f}
 // Formula originale: (OI_CALL+VOL_CALL)*GAMMA_CALL - (OI_PUT+VOL_PUT)*GAMMA_PUT.
-// Metodo Serafini INVARIATO: 25 strike SOPRA e 25 SOTTO per C1/P1 e analisi.\n// Estensione grafica: strike Cboe veri della stessa fotografia, MAX 140 per profilo; non modifica i 50 originali.
+// Metodo Serafini INVARIATO: 25 strike SOPRA e 25 SOTTO per C1/P1 e analisi.\n// Estensione grafica: strike {extension_token} realmente presenti nella stessa fotografia, MAX 140 per profilo; non modifica i 50 originali.
 // Profili graficamente separati come slide 139: 0DTE vicino alle candele, Weekly piu' a destra.
 {warning}// Scala MANUALE, unica per tutti i profili e mai adattata dal codice.
 // Se la scala selezionata supera il limite grafico di TradingView (+500 barre),
@@ -183,7 +193,7 @@ float weeklyCoreHigh = {max(float(r['strike_spx']) for r in weekly['rows']) + of
 
 // Resta un margine di 20 barre rispetto al limite xloc.bar_index +500.
 // Evita anche di spingersi oltre le 10.000 barre storiche a sinistra.
-// La scala MANUALE e' COMUNE ai profili e non altera i gamma Cboe calcolati.
+// La scala MANUALE e' COMUNE ai profili e non altera i Gamma della fotografia.
 requiredScale(array<float> gamma, int offsetBars) =>
     float maxPos = 0.0
     float maxNeg = 0.0
