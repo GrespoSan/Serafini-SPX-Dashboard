@@ -196,7 +196,7 @@ def _latest_downloaded_snapshot(store, week, snaps, logs):
 
 def _sync_snapshot_selection(store, week, snaps, logs):
     """Follow latest by default, preserving explicit manual historical selection."""
-    names = sorted((item['name'] for item in snaps), reverse=True)
+    names = sorted((item['name'] for item in snaps if accepted(item.get('name',''))), reverse=True)
     if not names:
         return names, None
     selected_key = f'serafini_selected_snapshot_{week}'
@@ -719,7 +719,7 @@ def render_comparison(store, week, snaps, logs):
 
 def render_snapshot_selector(store, week, snaps, logs):
     """Default to latest download while historical selections remain available."""
-    if not snaps:
+    if not snaps or not any(accepted(item.get('name','')) for item in snaps):
         st.caption("Nessuna fotografia SPX disponibile: puoi importare una fotografia Cboe storica.")
         return
     names, latest = _sync_snapshot_selection(store, week, snaps, logs)
@@ -756,13 +756,13 @@ def render_snapshot_selector(store, week, snaps, logs):
 def render(store, week, snaps, logs, *, show_heading=True, selector_external=False):
     if show_heading:
         st.header('NET GAMMA · formula Serafini')
-    if not snaps:
-        st.info('Nessuno snapshot disponibile nella settimana selezionata.')
+    if not snaps or not any(accepted(item.get('name','')) for item in snaps):
+        st.info('Nessuno snapshot riconosciuto disponibile nella settimana selezionata.')
         return
     # When the selector was already rendered in app.py, never write its widget
     # session_state again in this same Streamlit run (widget-state restriction).
     if selector_external:
-        names = sorted((item['name'] for item in snaps), reverse=True)
+        names = sorted((item['name'] for item in snaps if accepted(item.get('name',''))), reverse=True)
     else:
         names, _ = _sync_snapshot_selection(store, week, snaps, logs)
     selection_key = f'serafini_selected_snapshot_{week}'
