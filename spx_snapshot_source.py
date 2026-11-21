@@ -52,3 +52,22 @@ def visible_source(snapshot):
     if src.get("source")=="ALPACA_INDICATIVE_OCC_OI" and src.get("kind")=="DERIVED_ALPACA_INDICATIVE_NOT_CBOE":
         return "ALPACA_INDICATIVE_DERIVED"
     return "UNVERIFIED_PROVENANCE"
+
+
+ALPACA_REPLAY_KIND = "STUDIO_INTRADAY_ALPACA_DERIVED"
+CBOE_REPLAY_KIND = "STUDIO_INTRADAY_NON_UFFICIALE"
+
+
+def replay_source_kind(record):
+    """Identify eligible compact Replay without inventing vendor provenance."""
+    if not isinstance(record, dict) or record.get("schema") != "serafini_replay_v1":
+        return None
+    kind = record.get("kind")
+    if kind == CBOE_REPLAY_KIND and record.get("source") in (None, "", "CBOE_ORIGINAL"):
+        return "CBOE_ORIGINAL"
+    meta = record.get("source_provenance")
+    if (kind == ALPACA_REPLAY_KIND and record.get("source") == "ALPACA_INDICATIVE_OCC_OI"
+            and isinstance(meta,dict) and meta.get("kind") == "DERIVED_ALPACA_INDICATIVE_NOT_CBOE"
+            and meta.get("source") == "ALPACA_INDICATIVE_OCC_OI"):
+        return "ALPACA_INDICATIVE_DERIVED"
+    return None
