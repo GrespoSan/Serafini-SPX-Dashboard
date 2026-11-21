@@ -67,6 +67,20 @@ class SourceSelectionTests(unittest.TestCase):
         original["source"]="ALPACA_INDICATIVE_OCC_OI"
         self.assertIsNone(replay_source_kind(original))
 
+    def test_premarket_asof_display_is_honest_and_source_aware(self):
+        from spx_snapshot_source import premarket_provenance_warning
+        doc=self._sample({"kind":"DERIVED_ALPACA_INDICATIVE_NOT_CBOE",
+                          "source":"ALPACA_INDICATIVE_OCC_OI",
+                          "quote_age_mode":"PREMARKET_PRIOR_SESSION",
+                          "quote_asof_date":"2026-11-20",
+                          "source_quote_latest_utc":"2026-11-20T20:59:58+00:00"})
+        banner=premarket_provenance_warning(doc)
+        self.assertIn("20",banner)
+        self.assertIn("NON rappresentano nuove",banner)
+        doc["source_provenance"]["quote_age_mode"]="LIVE_INDICATIVE_QUOTE"
+        self.assertIsNone(premarket_provenance_warning(doc))
+        self.assertIsNone(premarket_provenance_warning(self._sample()))
+
     def test_legacy_cboe_without_provenance_remains_compatible(self):
         doc=read_snapshot(gzip.compress(json.dumps(self._sample()).encode()))
         self.assertEqual(visible_source(doc),"CBOE_ORIGINAL_OR_MANUAL")

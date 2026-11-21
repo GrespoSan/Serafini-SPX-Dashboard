@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from datetime import datetime
 import streamlit as st
 from net_gamma import profile, profile_csv, read_snapshot, visual_profile
-from spx_snapshot_source import accepted, parse_name, date_label, same_source_day_prefix, source_label, visible_source
+from spx_snapshot_source import accepted, parse_name, date_label, same_source_day_prefix, source_label, visible_source, premarket_provenance_warning
 from feed_quality import timestamp_state
 from volatility_levels import weekly_expiry
 from gamma_compare import compare_profiles
@@ -781,6 +781,9 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
             return
         st.warning("ALPACA INDICATIVE + OCC · Gamma modellato da Bid/Ask, NON Gamma Cboe/OPRA. "
                    "La formula Serafini resta invariata; confrontabilità storica ancora da verificare.")
+        asof_notice=premarket_provenance_warning(snap)
+        if asof_notice:
+            st.info(asof_notice)
     timestamp = str(snap.get('timestamp') or '')
     acquisition_label = _acquisition_label(store, week, logs, choice)
     download_clock = _snapshot_download_clock(store, week, logs, choice)
