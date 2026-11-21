@@ -49,6 +49,11 @@ def levels_for_export(store, week, day: date, slot, frame, logs):
     """
     if not isinstance(day, date) or not isinstance(frame, dict):
         return None
+    # This old resolver certifies ORIGINAL Cboe + pinned Edge only.
+    # Never use another Cboe snapshot to fill modeled ALPACA GEX Wall/Flip.
+    if ("ALPACA" in str(frame.get("origin","")).upper()
+            or str(frame.get("snapshot_path","")).split("/")[-1].startswith("SPX_ALPACA_")):
+        return None
     source_clock = frame.get("clock")
     cboe_stamp = frame.get("cboe_timestamp_original")
     source_spot = frame.get("spot")
