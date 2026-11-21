@@ -79,9 +79,16 @@ def load_export_profiles(store, week, day: date, logs):
                     p.get("visual_coverage_complete") if valid_visual else None),
             }
         if len(clean) == 2:
+            source_is_alpaca = "ALPACA" in str(frame.get("origin", "")).upper()
             result[slot] = {
                 "origin": frame.get("origin", "NON VERIFICATO"),
-                "cboe_timestamp": frame.get("cboe_timestamp_original", ""),
+                "data_source": ("ALPACA_INDICATIVE_OCC_OI" if source_is_alpaca
+                                else "CBOE_ORIGINAL"),
+                # Timestamp Alpaca is source-quote UTC, never Cboe.
+                "cboe_timestamp": ("" if source_is_alpaca else
+                                    frame.get("cboe_timestamp_original", "")),
+                "source_quote_timestamp": (frame.get("cboe_timestamp_original", "")
+                                           if source_is_alpaca else None),
                 # Prefer the actual *verified* log timestamp over the
                 # slot nickname: the Cboe field itself has no certified TZ.
                 "download_rome": frame.get("download_rome"),
