@@ -156,9 +156,9 @@ def _study_frames(_store, week, day):
             continue
         try:
             item = json.loads(_store.download(f"replay/{week}/{name}"))
-            if (item.get("schema") != "serafini_replay_v1"
-                    or item.get("rome_date") != day.isoformat()
-                    or item.get("kind") != "STUDIO_INTRADAY_NON_UFFICIALE"):
+            from spx_snapshot_source import replay_source_kind
+            replay_origin = replay_source_kind(item)
+            if item.get("rome_date") != day.isoformat() or replay_origin is None:
                 continue
             slot = item.get("slot_rome")
             # 13:30 è Replay, non promuoverlo automaticamente ad ufficiale.
@@ -173,7 +173,10 @@ def _study_frames(_store, week, day):
             data[slot] = {
                 "slot_rome": slot, "clock": dt.strftime("%H:%M:%S"),
                 "download_rome": dt.isoformat(timespec="seconds"),
-                "origin": "STUDIO NON UFFICIALE",
+                "origin": ("STUDIO REPLAY · ALPACA INDICATIVE / GAMMA MODELLATO"
+                           if replay_origin == "ALPACA_INDICATIVE_DERIVED"
+                           else "STUDIO NON UFFICIALE · CBOE STORICO"),
+                "source": replay_origin,
                 "spot": item.get("spot_spx"),
                 "reference_spx": item.get("reference_spx"),
                 "cboe_timestamp_original": item.get("cboe_timestamp_original"),
@@ -216,7 +219,8 @@ def render(store, week, logs, view_mode=None):
                        index=weekdays.index(default_day),
                        format_func=lambda d: d.strftime("%d/%m/%Y"),
                        key=f"replay_day_{week}")
-    # Ogni profilo conserva scadenza e catena Cboe proprie. Weekly è
+    # Ogni profilo conserva scadenza e dati della SUA fonte (Cboe o Alpaca).
+    # Non confondere Gamma Cboe originale e Gamma Alpaca modellato. Weekly è
     # visualizzabile ma NON deve usare il filtro post-scadenza 0DTE.
     kind = st.radio(
         "Scadenza Replay", ("0DTE", "Weekly"), horizontal=True,
