@@ -71,3 +71,18 @@ def replay_source_kind(record):
             and meta.get("source") == "ALPACA_INDICATIVE_OCC_OI"):
         return "ALPACA_INDICATIVE_DERIVED"
     return None
+
+
+def premarket_provenance_warning(document):
+    """Explicitly mark a previous-session quote; never imply new Gamma at 07:30."""
+    if visible_source(document) != "ALPACA_INDICATIVE_DERIVED":
+        return None
+    meta=document.get("source_provenance") or {}
+    if meta.get("quote_age_mode") != "PREMARKET_PRIOR_SESSION":
+        return None
+    day=str(meta.get("quote_asof_date") or "N/D")
+    instant=str(meta.get("source_quote_latest_utc") or "N/D")
+    return ("PRE-SESSIONE · Opzioni SPXW riferite alla seduta precedente "
+            f"({day}). Ultima quotazione sorgente: {instant}. "
+            "Gamma e Volume NON rappresentano nuove quotazioni della mattina; "
+            "nessun segnale live implicito.")
