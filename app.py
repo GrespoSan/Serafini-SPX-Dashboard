@@ -232,7 +232,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-context_slot = st.empty()
 with st.expander('ANALISI NET GAMMA', expanded=True):
     st.header('NET GAMMA · formula Serafini')
     st.subheader('Fotografie opzioni SPX · Cboe storico / Alpaca nuovo')
@@ -286,38 +285,23 @@ with st.expander('ANALISI NET GAMMA', expanded=True):
     else:
         store = Store(url, service_key, bucket)
 
-    # Il contesto viene visualizzato PRIMA di NET GAMMA, come nella Multi-Market.
-    # Lo riempiamo dopo l'uploader affinché il fallback locale non dipenda
-    # dalla disponibilità di Supabase, anche in caso di HTTP 402.
-    with context_slot.container():
-        with st.expander('ANALISI DEL CONTESTO — News · Volatilità · Trend Daily',
-                         expanded=False):
-            col_week, col_snapshots, col_logs = st.columns([2.2, 1, 1], gap='medium', vertical_alignment='bottom')
-            with col_week:
-                if offline:
-                    week = store.week
-                    st.text_input("Settimana ISO (AAAA-WNN)", value=week,
-                                  disabled=True, key="offline_week")
-                else:
-                    week = week_choice()
-            try:
-                snaps = store.list(f'{week}/snapshots/')
-                logs = store.list(f'{week}/logs/')
-            except Exception:
-                # L'archivio può essere temporaneamente non accessibile (es. quota 402).
-                # I contatori restano al loro posto e mostrano zero, senza avvisi
-                # nell'analisi del contesto. I calcoli VX/Daily sono indipendenti.
-                storage_unavailable = True
-                snaps, logs = [], []
-
-            # Questi contatori descrivono soltanto l'archivio selezionato;
-            # rimangono nel pannello Contesto come richiesto.
-            col_snapshots.metric('Snapshot distinti', len(snaps))
-            col_logs.metric('Registri', len(logs))
-            # The data-heavy context has a placeholder in its original
-            # position but is populated only AFTER the Gamma and Pine panels.
-            # Collapsed expanders are eager; this avoids delaying NET GAMMA.
-            context_details_slot = st.empty()
+    # SPX-specific archive controls stay in NET GAMMA, not in the shared context.
+    col_week, col_snapshots, col_logs = st.columns([2.2, 1, 1], gap='medium', vertical_alignment='bottom')
+    with col_week:
+        if offline:
+            week = store.week
+            st.text_input("Settimana ISO (AAAA-WNN)", value=week,
+                          disabled=True, key="offline_week")
+        else:
+            week = week_choice()
+    try:
+        snaps = store.list(f'{week}/snapshots/')
+        logs = store.list(f'{week}/logs/')
+    except Exception:
+        storage_unavailable = True
+        snaps, logs = [], []
+    col_snapshots.metric('Snapshot distinti', len(snaps))
+    col_logs.metric('Registri', len(logs))
 
     # Un HTTP 403 Cboe impedisce l'acquisizione, ma non invalida
     # le fotografie archiviate. Rendi visibile l'errore senza assegnare
@@ -351,7 +335,7 @@ with st.expander('ANALISI NET GAMMA', expanded=True):
         from gamma_section import render_snapshot_selector
         render_snapshot_selector(store, week, snaps, logs)
     from gamma_section import render
-    render(store, week, snaps, logs, show_heading=False, selector_external=True)
+    asia_panel = render(store, week, snaps, logs, show_heading=False, selector_external=True)
     # Nessun controllo periodico di Supabase: il selettore segue l'ultimo
     # download solo all'apertura/ricaricamento o durante una normale interazione.
     # Consultazione rilevamenti Cboe disponibile ad amministratore e lettore.
@@ -420,6 +404,9 @@ with st.expander('ANALISI GEX · Edge-style — modulo indipendente', expanded=F
         st.warning('GEX non disponibile: '+type(exc).__name__+
                    '. NET GAMMA rimane utilizzabile; nessun livello sostitutivo.')
     
+# Same position as Serafini CSV: context follows GEX; populate last to avoid delaying other panels.
+context_slot = st.empty()
+
 # Transient read-only copy: never keep yesterday's GEX after an Edge
 # failure, an unavailable Supabase archive or a changed Cboe snapshot.
 # Only the already verified Edge panel can populate this per-run dict.
@@ -506,42 +493,57 @@ if role == 'admin':
             render_serafini_lab_admin(
                 role, Store(url, service_key, bucket), inside_section=True)
 
-# Render optional external-data context LAST, inside its earlier placeholder.
-# Users see it in the original upper CONTEXT panel, while Gamma/Replay/Pine
-# reach the browser before the slower calendar/Cboe/Massive requests.
-with context_details_slot.container():
-    # L'analisi viene visualizzata automaticamente; il download Massive ES
-    # viene gestito dalla cache condivisa giornaliera. Anche con expander
-    # chiuso il codice esegue, ma i dati Massive già letti non si riscaricano.
-    st.markdown('#### News e calendario macroeconomico')
-    from macro_calendar import render as render_macro_calendar
-    render_macro_calendar()
-    st.divider()
-
-    # Il quadro VX e il Daily usano le proprie fonti CBOE/Massive.
-    # La data corrente italiana non dipende dalla presenza di snapshot
-    # Supabase, dal numero di registri o dal file CBOE selezionato.
-    from vix_regime import render as render_vix_context
-    trend_day = datetime.now(ZoneInfo('Europe/Rome')).date()
-    es_daily_context = None
-    daily_error = None
-    try:
-        context_data = render_vix_context(trend_day, return_context=True)
-        es_daily_context = context_data.get('previous_daily_range')
-    except Exception:
-        st.info('Il quadro volatilità VX non è disponibile per la giornata corrente.')
-        # Il Trend Daily conserva la sua fonte Massive anche se la
-        # lettura dei settlement CBOE fallisce.
+# Source of truth: Serafini-CSV/app.py · ANALISI DEL CONTESTO.
+# Only the archive week label and verified morning-data adapter are SPX-specific.
+with context_slot.container():
+    with st.expander("ANALISI DEL CONTESTO — News · Volatilità · Trend Daily", expanded=False):
+        week_label = week
+        st.markdown(f"**Settimana ISO (AAAA-WNN)** · {week_label}")
+        # L'analisi viene visualizzata automaticamente; il download Massive ES
+        # viene gestito dalla cache condivisa giornaliera. Anche con expander
+        # chiuso il codice esegue, ma i dati Massive già letti non si riscaricano.
+        st.markdown('#### News e calendario macroeconomico')
+        from macro_calendar import render as render_macro_calendar
+        render_macro_calendar()
+        st.divider()
+    
+        # Il quadro VX e il Daily usano le proprie fonti CBOE/Massive.
+        # La data corrente italiana non dipende dalla presenza di snapshot
+        # Supabase, dal numero di registri o dal file CBOE selezionato.
+        from vix_regime import render as render_vix_context
+        trend_day = datetime.now(ZoneInfo('Europe/Rome')).date()
+        es_daily_context = None
+        daily_error = None
         try:
-            from daily_volatility import previous_es_daily_range
-            es_daily_context = previous_es_daily_range(trend_day)
+            context_data = render_vix_context(trend_day, return_context=True)
+            es_daily_context = context_data.get('previous_daily_range')
         except Exception:
-            daily_error = 'Massive ES non disponibile: verificare Secrets e contratto.'
-    st.divider()
-    from trend_daily_section import render as render_trend_daily
-    es_daily_context = es_daily_context or {}
-    render_trend_daily(reference_day=trend_day,
-                       daily_bars=es_daily_context.get('daily_bars'),
-                       contract=es_daily_context.get('ticker'),
-                       daily_error=daily_error,
-                       modeled_gex=trend_edge_gex or None)
+            st.info('Il quadro volatilità VX non è disponibile per la giornata corrente.')
+            # Il Trend Daily conserva la sua fonte Massive anche se la
+            # lettura dei settlement CBOE fallisce.
+            try:
+                from daily_volatility import previous_es_daily_range
+                es_daily_context = previous_es_daily_range(trend_day)
+            except Exception:
+                daily_error = 'Massive ES non disponibile: verificare Secrets e contratto.'
+        st.divider()
+        from trend_daily_section import render as render_trend_daily
+        es_daily_context = es_daily_context or {}
+        render_trend_daily(reference_day=trend_day,
+                           daily_bars=es_daily_context.get('daily_bars'),
+                           contract=es_daily_context.get('ticker'),
+                           daily_error=daily_error,
+                           modeled_gex=None)
+    
+        # Il Quadro è sempre visibile dopo il Trend Daily. Senza uno snapshot SPX
+        # resta la lettura autonoma dell'Asia ES, senza inventare candidati C1/P1.
+        st.divider()
+        st.subheader("QUADRO OPERATIVO — ORE 09:00")
+        from asia_gamma import render_auto as render_asia_gamma
+        if asia_panel is not None:
+            render_asia_gamma(
+                asia_panel['day'], asia_panel['c1_es'], asia_panel['p1_es'],
+                level_context=asia_panel['level_context'],
+            )
+        else:
+            render_asia_gamma(trend_day, None, None)
