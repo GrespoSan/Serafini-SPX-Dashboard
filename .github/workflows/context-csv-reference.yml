@@ -1,0 +1,26 @@
+name: SPX Context aligned to Serafini CSV
+on:
+  pull_request:
+    paths:
+      - 'app.py'
+      - 'gamma_section.py'
+      - 'daily_volatility.py'
+      - 'asia_gamma.py'
+      - 'mercati/quarterly_contract.py'
+      - 'tests/test_context_csv_reference.py'
+      - '.github/workflows/context-csv-reference.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r requirements.txt
+      - run: python -m py_compile app.py gamma_section.py asia_gamma.py daily_volatility.py mercati/quarterly_contract.py
+      - run: python -m unittest discover -s tests -p test_context_csv_reference.py -v
