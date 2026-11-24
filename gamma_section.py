@@ -6,7 +6,7 @@ from datetime import date, timedelta, time
 from zoneinfo import ZoneInfo
 from datetime import datetime
 import streamlit as st
-from net_gamma import profile, profile_csv, read_snapshot, visual_profile, intelligent_visual_profile, gamma_component_totals
+from net_gamma import profile, read_snapshot, visual_profile, intelligent_visual_profile, gamma_component_totals
 from spx_snapshot_source import accepted, parse_name, date_label, same_source_day_prefix, source_label, visible_source, premarket_provenance_warning
 from feed_quality import timestamp_state
 from volatility_levels import weekly_expiry
@@ -1248,24 +1248,6 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
         """)
 
     # Dettagli numerici allineati sotto entrambi i grafici.
-    detail_cols = st.columns(2, gap='small')
-    for detail_title, detail_col in zip(('0DTE', 'Weekly'), detail_cols):
-        with detail_col:
-            detail_result = computed_profiles.get(detail_title)
-            if detail_result and detail_result.get('rows'):
-                detail_records = [
-                    {**row, 'strike_es': row['strike_spx'] + offset if offset is not None else None}
-                    for row in detail_result['rows']
-                ]
-                with st.expander(f'Dettaglio numerico {detail_title} (50 strike)', expanded=False):
-                    import pandas as pd
-                    st.dataframe(pd.DataFrame(detail_records), width="stretch", hide_index=True)
-                st.download_button(
-                    f'Scarica calcolo CSV {detail_title}',
-                    profile_csv(detail_result, offset),
-                    file_name=f'NET_GAMMA_{detail_title}_{day.isoformat()}_{choice}.csv',
-                    mime='text/csv', key=f'csv_{detail_title}_{choice}',
-                )
     if candidate_0dte is not None:
         from option_structure_lab import render_lab
         snapshot_description = (
