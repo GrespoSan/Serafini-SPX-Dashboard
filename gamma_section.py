@@ -6,7 +6,7 @@ from datetime import date, timedelta, time
 from zoneinfo import ZoneInfo
 from datetime import datetime
 import streamlit as st
-from net_gamma import profile, profile_csv, read_snapshot, visual_profile
+from net_gamma import profile, profile_csv, read_snapshot, visual_profile, intelligent_visual_profile, gamma_component_totals
 from spx_snapshot_source import accepted, parse_name, date_label, same_source_day_prefix, source_label, visible_source, premarket_provenance_warning
 from feed_quality import timestamp_state
 from volatility_levels import weekly_expiry
@@ -754,6 +754,7 @@ def render_snapshot_selector(store, week, snaps, logs):
 
 
 def render(store, week, snaps, logs, *, show_heading=True, selector_external=False):
+    st.session_state.pop(f'gamma_compare_context_{week}', None)
     if show_heading:
         st.header('NET GAMMA · formula Serafini')
     if not snaps or not any(accepted(item.get('name','')) for item in snaps):
@@ -785,6 +786,15 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
         if asof_notice:
             st.info(asof_notice)
     timestamp = str(snap.get('timestamp') or '')
+    if kind == 'ALPACA':
+        source_stamp = (snap.get('source_provenance') or {}).get('source_quote_latest_utc')
+        try:
+            clock = datetime.fromisoformat(str(source_stamp).replace('Z','+00:00')).astimezone(ZoneInfo('Europe/Rome'))
+            profile_clock = f'Alpaca indicative · ultima quotazione {clock:%d/%m/%Y %H:%M:%S} Roma · OI OCC, data OI non certificata'
+        except (ValueError, TypeError):
+            profile_clock = 'Alpaca indicative · ora sorgente N/D · OI OCC, data OI non certificata'
+    else:
+        profile_clock = f'Timestamp originale Cboe: {timestamp} (fuso non dichiarato)'
     acquisition_label = _acquisition_label(store, week, logs, choice)
     download_clock = _snapshot_download_clock(store, week, logs, choice)
     # Confronto soltanto con il file precedente della STESSA giornata;
@@ -967,15 +977,33 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
     except Exception as exc:
         sigma_levels = None
         sigma_error = f'{type(exc).__name__}: {str(exc)[:115]}'
-    # L'estensione non entra nei 50 strike di calcolo Serafini, C1/P1,
-    # confronti o graduatorie: cambia soltanto la visualizzazione.
+    # Estensione INTELLIGENTE, solo grafica. La spunta resta ON per default
+    # ma non aggiunge strike se i 25+25 già coprono la fascia richiesta.
+    # Calcolo Serafini, C1/P1 e valori riepilogativi rimangono identici.
     show_visual_extension = st.checkbox(
-        'Estensione automatica NET GAMMA — solo grafici',
+        'Estensione intelligente NET GAMMA — solo grafici',
         value=True, key='gamma_visual_extension_v1',
-        help='Strike esterni autentici della stessa fotografia Cboe, con fascia '
-             'di sicurezza del 2,5% intorno al prezzo SPX acquisito. '
-             'La selezione originale 25+25 e i livelli C1/P1 restano invariati.'
+        help='ON di default. Se il nucleo 25+25 copre i prezzi noti e un '
+             'piccolo margine adattivo, visualizza soltanto 50 strike. '
+             'Altrimenti estende solo dove serve, massimo 200 strike reali '
+             'della fotografia per scadenza. Usa chiusura precedente, spot della foto '
+             'e, quando verificati, estremi RTH precedenti. '
+             'Non modifica NET GAMMA e C1/P1.'
     )
+    known_low = known_high = None
+    range_reference = 'SPX chiusura precedente + spot della fotografia'
+    if sigma_levels and sigma_levels.get('status') == 'VALIDO' and offset is not None:
+        previous_low = sigma_levels.get('previous_rth_low_es')
+        previous_high = sigma_levels.get('previous_rth_high_es')
+        if previous_low is not None and previous_high is not None:
+            candidate_low = float(previous_low) - float(offset)
+            candidate_high = float(previous_high) - float(offset)
+            # Evita di usare un dato in conflitto con il riferimento SPX.
+            if (0 < candidate_low <= candidate_high
+                    and abs(candidate_low / ref - 1.0) < .15
+                    and abs(candidate_high / ref - 1.0) < .15):
+                known_low, known_high = candidate_low, candidate_high
+                range_reference += ' + RTH precedente ES (basis verificato)'
     visual_profiles = {}
     for title, expiry in [('0DTE', day), ('Weekly', weekly_exp)]:
         if title not in computed_profiles:
@@ -985,18 +1013,31 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
             visual_profiles[title] = core
             continue
         try:
-            visual_profiles[title] = visual_profile(
-                snap, core, expiry, ref, snap['data'].get('current_price'))
-        except (ValueError, TypeError, KeyError, OverflowError):
+            visual_profiles[title] = intelligent_visual_profile(
+                snap, core, expiry, ref, snap['data'].get('current_price'),
+                max_strikes=200,  # margine adattivo predefinito nel motore
+                known_low=known_low, known_high=known_high,
+            )
+        except (ValueError, TypeError, KeyError, OverflowError) as exc:
+            st.caption(f'Estensione {title} non disponibile: {exc}. '
+                       'Mostro soltanto i 50 strike Serafini originali.')
             visual_profiles[title] = core
-    # Solo riepilogo visivo NET / CALL / PUT delle scadenze mostrate.
-    # Non modifica profili, selezione 25+25, Gamma, grafici o Pine.
-    shown_profiles = [p for p in visual_profiles.values() if p.get('rows')]
-    if shown_profiles:
-        shown_rows = [row for p in shown_profiles for row in p['rows']]
-        net_summary = sum(float(row['net_gamma']) for row in shown_rows)
-        call_summary = sum(float(row['call_gamma_component']) for row in shown_rows)
-        put_summary = sum(float(row['put_gamma_component']) for row in shown_rows)
+    if show_visual_extension:
+        st.caption('Estensione intelligente: ' + range_reference +
+                   ' · margine adattivo basato su griglia strike e '
+                   'ampiezza dei prezzi già noti (0,25–1% del riferimento). '
+                   'Se bastano 25+25 non aggiunge nulla; altrimenti estende '
+                   'solo il lato scoperto, fino a 200 strike reali/scadenza.')
+    # Riepilogo CANONICO: solo profili Serafini 25+25, non gli strike
+    # selezionati per la grafica. Il valore NON cambia attivando
+    # l'estensione, la sua copertura o il suo limite (140/200).
+    core_summary = gamma_component_totals(
+        computed_profiles.values(), require_core=True
+    )
+    if core_summary is not None:
+        net_summary = core_summary['net']
+        call_summary = core_summary['call']
+        put_summary = core_summary['put']
 
         def _gamma_it(value, signed=False):
             formatted = f'{value:+,.2f}' if signed else f'{value:,.2f}'
@@ -1007,15 +1048,21 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
             net_color = '#f05252' if net_summary < 0 else '#f1f5f9'
             st.markdown(
                 '<div style="font-size:0.88rem;color:#d1d5db;'
-                'margin-bottom:0.35rem">NET GAMMA · Call − Put</div>'
+                'margin-bottom:0.35rem">NET GAMMA · Call − Put · 25+25</div>'
                 f'<div style="font-size:1.85rem;line-height:1.25;'
                 f'font-weight:400;color:{net_color};font-variant-numeric:tabular-nums">'
                 f'{_gamma_it(net_summary, signed=True)}</div>',
                 unsafe_allow_html=True,
             )
-        call_col.metric('GAMMA CALL (+)',
+        call_col.metric('GAMMA CALL (+) · 25+25',
                         _gamma_it(call_summary, signed=True))
-        put_col.metric('GAMMA PUT (−)', '−' + _gamma_it(put_summary))
+        put_col.metric('GAMMA PUT (−) · 25+25',
+                       '−' + _gamma_it(put_summary))
+        st.caption(
+            f"**Totali originali Serafini:** {core_summary['profiles']} scadenze, "
+            f"{core_summary['strikes']} strike (25 sopra e 25 sotto per scadenza). "
+            "L'estensione dinamica modifica solo i grafici, mai questi totali."
+        )
     shared_bounds = profile_gamma_bounds(visual_profiles.values())
     st.caption('Tooltip: componente Call positiva, componente Put negativa e saldo netto '
                'della formula Serafini (OI + Volume) × Gamma; non valori monetari delle posizioni.')
@@ -1034,8 +1081,8 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
             result = computed_profiles[title]
             if title == '0DTE' and result['rows']:
                 candidate_0dte = find_candidates(result['rows'], ref)
-            capture_info = (f'{acquisition_label} · download ore {download_clock} Roma'
-                            if download_clock else f'{acquisition_label} · ora download non disponibile')
+            capture_info = (f'{source_label(choice)} · {acquisition_label} · download ore {download_clock} Roma'
+                            if download_clock else f'{source_label(choice)} · {acquisition_label} · ora download non disponibile')
             # Data e ora della fotografia evidenziate: nessuna conversione
             # del timestamp Cboe privo di fuso, né modifica ai Gamma.
             from html import escape as _html_escape
@@ -1048,7 +1095,7 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                 f'</div>',
                 unsafe_allow_html=True,
             )
-            st.caption(f'Scadenza opzioni: {expiry:%d/%m/%Y} · Timestamp originale Cboe: {timestamp} (fuso non dichiarato)')
+            st.caption(f'Scadenza opzioni: {expiry:%d/%m/%Y} · {profile_clock}')
             if not result['rows']:
                 st.warning('Nessun contratto trovato per questa scadenza nello snapshot: nessun risultato inventato.')
                 continue
@@ -1059,7 +1106,7 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                        + (f" + {extra_count} estesi solo per il grafico" if extra_count else ""))
             if extra_count and visual.get('coverage_complete') is False:
                 st.caption('Estensione parziale: strike esterni non sufficienti '
-                           'nella fotografia Cboe o limite di 140 livelli.')
+                           'nella fotografia selezionata o limite di 200 livelli.')
             records = [{**r, 'strike_es': r['strike_spx'] + offset if offset is not None else None} for r in visual['rows']]
             import pandas as pd
             frame = pd.DataFrame(records)
