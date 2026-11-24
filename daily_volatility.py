@@ -9,6 +9,7 @@ from datetime import date
 
 import streamlit as st
 
+from mercati.quarterly_contract import quarterly_contract
 from massive_futures_daily import (
     MassiveSourceError, previous_sessions, previous_daily_context,
 )
@@ -29,15 +30,11 @@ def previous_es_daily_range(target_day: date):
         raise ValueError("Data di riferimento Daily non valida.")
     try:
         api_key = str(st.secrets.get("MASSIVE_API_KEY", "")).strip()
-        contract = str(st.secrets.get("MASSIVE_ES_CONTRACT", "")).strip().upper()
     except Exception:
-        api_key, contract = "", ""
+        api_key = ""
     if not api_key:
         raise MassiveSourceError(
             "MASSIVE_API_KEY mancante: configura una chiave Futures nei Secrets SPX."
         )
-    if not contract:
-        raise MassiveSourceError(
-            "MASSIVE_ES_CONTRACT mancante: seleziona il contratto ES reale (es. ESZ6)."
-        )
+    contract = quarterly_contract("ES", target_day)["ticker"]
     return _fetch_massive_es(target_day, contract, api_key)
