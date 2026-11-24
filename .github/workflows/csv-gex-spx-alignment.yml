@@ -1,0 +1,28 @@
+name: SPX CSV GEX and canonical NET GAMMA alignment
+on:
+  pull_request:
+    paths:
+      - 'csv_gex_**'
+      - 'csv_gex_core/**'
+      - 'spx_csv_gex_*.py'
+      - 'net_gamma.py'
+      - 'gamma_section.py'
+      - 'serafini_sigma.py'
+      - 'app.py'
+      - 'tests/test_csv_gex_spx_alignment.py'
+      - '.github/workflows/csv-gex-spx-alignment.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r requirements.txt
+      - run: python -m compileall -q csv_gex_core csv_gex_engine.py csv_gex_panel.py spx_csv_gex_adapter.py spx_csv_gex_section.py net_gamma.py gamma_section.py serafini_sigma.py app.py
+      - run: python -m unittest discover -s tests -p test_csv_gex_spx_alignment.py -v

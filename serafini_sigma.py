@@ -90,6 +90,33 @@ def compute_cash_levels(candles, day: date):
         if not observed.equals(required):
             raise ValueError("Buchi nelle M15 cash Yahoo: deviazione non verificabile")
 
+    # Estremi RTH PRECEDENTE: si riusano SOLO le stesse 27 M15 complete
+    # già validate dal modulo StdDev. Niente download aggiuntivi o barre
+    # successive alla sessione precedente. Facoltativi se Yahoo non fornisce
+    # High/Low, senza modificare il calcolo sigma preesistente.
+    prior_extremes = {}
+    if {"High", "Low"}.issubset(candles.columns):
+        all_ohlc = pd.DataFrame(
+            {
+                "high": pd.to_numeric(candles["High"], errors="coerce").to_numpy(),
+                "low": pd.to_numeric(candles["Low"], errors="coerce").to_numpy(),
+            },
+            index=candles.index.tz_convert(CHICAGO),
+        )
+        all_ohlc = all_ohlc[~all_ohlc.index.duplicated(keep="last")].sort_index()
+        previous_rth = all_ohlc.loc[all_ohlc.index.isin(expected)]
+        if (len(previous_rth) == 27 and previous_rth.index.equals(expected)
+                and previous_rth.notna().all().all()
+                and (previous_rth["high"] >= previous_rth["low"]).all()):
+            rth_low = float(previous_rth["low"].min())
+            rth_high = float(previous_rth["high"].max())
+            if (math.isfinite(rth_low) and math.isfinite(rth_high)
+                    and rth_low > 0 and rth_high >= rth_low):
+                prior_extremes = {
+                    "previous_rth_low_es": rth_low,
+                    "previous_rth_high_es": rth_high,
+                    "previous_rth_session_chicago": session.isoformat(),
+                }
     close_ref = float(frame.loc[ref_time, "close"])
     sigma90 = float(selected.iloc[-90:].std(ddof=0))
     sigma350 = float(selected.std(ddof=0))
@@ -105,6 +132,7 @@ def compute_cash_levels(candles, day: date):
         "L90": close_ref + sigma90,
         "L350": close_ref + sigma350,
         "S350": close_ref - sigma350,
+        **prior_extremes,
         "sample90": 90, "sample350": 350,
         "source": "Yahoo Finance ES=F M15",
         "method": "Pine v1.4 RTH 08:30-15:15 Chicago incl. M15 15:00; freeze 15:15; ddof=0",
