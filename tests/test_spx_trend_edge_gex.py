@@ -250,7 +250,9 @@ class EdgeDailyKPITests(unittest.TestCase):
         self.assertIn("trend_edge_gex = {}", app)
         self.assertIn("on_valid_gex=trend_edge_gex.update", app)
         self.assertIn("trend_edge_gex.clear()", app)
-        self.assertIn("modeled_gex=trend_edge_gex or None", app)
+        # CSV is the reference for CONTESTO: keep legacy GEX out of Trend Daily.
+        self.assertIn("modeled_gex=None", app)
+        self.assertNotIn("modeled_gex=trend_edge_gex or None", app)
         self.assertLess(edge.index('e.get("sha256") != digest'),
                         edge.index("on_valid_gex(duplicate)"))
         self.assertLess(edge.index("serafini = profile(snapshot, day, reference)"),
