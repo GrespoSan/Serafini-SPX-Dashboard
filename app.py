@@ -413,19 +413,16 @@ with st.expander('ANALISI NET GAMMA', expanded=True):
 
         # I registri restano consultabili solo quando l'archivio è disponibile.
 
-# New independent Alpaca/OCC Edge-style model, source-verified and
-# separate from the historical Cboe Edge and original Serafini NET GAMMA.
-# Never inject diagnostic dealer GEX into Trend Daily operational signals.
-if not offline and not storage_unavailable:
-    with st.expander('GEX SPX · ALPACA + OCC — modello indipendente', expanded=False):
-        try:
-            from alpaca_gex_panel import render as show_alpaca_gex
-            show_alpaca_gex(week, store)
-        except (RuntimeError, ValueError, TypeError, KeyError, OSError,
-                ImportError, OverflowError) as exc:
-            st.warning('GEX Alpaca non disponibile: '+type(exc).__name__+
-                       '. Nessun livello sostitutivo o presunto.')
-
+# Shared CSV GEX mathematics and presentation. Selected NET GAMMA source
+# is the only input; historical Cboe Edge comparison remains separate below.
+with st.expander('ANALISI GEX · Edge-style — modulo indipendente', expanded=False):
+    try:
+        from spx_csv_gex_section import render as show_csv_gex
+        show_csv_gex(week, store, uploaded_snapshot if offline else None)
+    except Exception as exc:
+        st.warning('GEX non disponibile: '+type(exc).__name__+
+                   '. NET GAMMA rimane utilizzabile; nessun livello sostitutivo.')
+    
 # Transient read-only copy: never keep yesterday's GEX after an Edge
 # failure, an unavailable Supabase archive or a changed Cboe snapshot.
 # Only the already verified Edge panel can populate this per-run dict.
