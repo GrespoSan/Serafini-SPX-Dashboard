@@ -399,8 +399,7 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
     )
     st.caption(
         f"**Modello:** {MODEL_LABEL} · "
-        "**Calcolo automatico:** il Pine include i livelli GEX quando "
-        "superano i controlli di qualità · "
+        "**Calcolo automatico:** report diagnostico separato dal Pine ufficiale · "
         f"Contratti analizzati: {info['csv_contracts']} · "
         f"OI assenti nel CSV: {info['oi_missing']} · "
         f"IV assenti: {info['iv_missing']}."
@@ -414,7 +413,7 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
     if oi.get("fallback_reason"):
         st.warning(
             "**Fallback OCC → CSV dichiarato:** "+str(oi["fallback_reason"]) +
-            ". I valori GEX e il Pine sono calcolati soltanto con l'OI CSV."
+            ". I valori GEX sono calcolati soltanto con l'OI CSV."
         )
     st.caption(info["iv_note"])
     render_report(info, symbol, es_spx_basis=es_spx_basis)
