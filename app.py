@@ -200,9 +200,6 @@ if st.session_state.role not in ('admin', 'friend'):
     st.stop()
 
 role = st.session_state.role
-from cboe_acquisition_pause import CBOE_ACQUISITIONS_PAUSED, PAUSE_MESSAGE
-if CBOE_ACQUISITIONS_PAUSED:
-    st.info(PAUSE_MESSAGE)
 with st.sidebar:
     st.write('**Accesso:** ' + ('Amministratore' if role == 'admin' else 'Lettore'))
     # Available to BOTH authorized roles. A Streamlit button already triggers
