@@ -24,14 +24,11 @@ class SPXLayoutParityTests(unittest.TestCase):
         self.assertIn("context_slot = st.empty()", APP)
         self.assertIn("with context_slot.container():", APP)
         self.assertIn("expanded=False", APP.split(
-            "with st.expander('ANALISI DEL CONTESTO", 1)[1][:90])
-        self.assertEqual(APP.count("st.file_uploader("), 1)
-        self.assertIn('with st.expander("Acquisizione manuale / importazione JSON o CSV"',
-                      APP)
+            'with st.expander("ANALISI DEL CONTESTO', 1)[1][:90])
+        self.assertNotIn("st.file_uploader(", APP)
+        self.assertNotIn("Acquisizione manuale / importazione JSON o CSV", APP)
         self.assertLess(APP.index("render_snapshot_selector(store, week, snaps, logs)"),
                         APP.index("render(store, week, snaps, logs, show_heading=False"))
-        self.assertTrue(APP.index("with st.expander('ANALISI NET GAMMA'") <
-                        APP.index('with st.expander("Acquisizione manuale / importazione JSON o CSV"'))
 
     def test_external_selector_exported(self):
         functions = {n.name for n in ast.parse(GAMMA).body
@@ -43,16 +40,14 @@ class SPXLayoutParityTests(unittest.TestCase):
     def test_fallback_does_not_stop_on_402(self):
         self.assertIn("storage_unavailable = True", APP)
         self.assertIn("snaps, logs = [], []", APP)
-        self.assertIn("if not offline and not storage_unavailable:", APP)
-        self.assertIn("load_local_snapshot(uploaded_snapshot.name", APP)
-        self.assertIn("Nessun dato inviato a Supabase", APP)
+        self.assertIn("if not storage_unavailable:", APP)
+        self.assertNotIn("load_local_snapshot(uploaded_snapshot.name", APP)
 
     def test_context_independent_of_supabase_and_counters_preserved(self):
         # The counters are intentionally still inside ANALISI DEL CONTESTO.
         self.assertIn("col_snapshots.metric('Snapshot distinti', len(snaps))", APP)
         self.assertIn("col_logs.metric('Registri', len(logs))", APP)
         # A quota failure only clears archive metadata; it does not stop VX/Daily.
-        self.assertIn("except Exception:\n                # L'archivio", APP)
         self.assertIn("storage_unavailable = True", APP)
         self.assertIn("snaps, logs = [], []", APP)
         self.assertNotIn("Supabase HTTP 402: gli snapshot archiviati", APP)
@@ -65,7 +60,14 @@ class SPXLayoutParityTests(unittest.TestCase):
 
     def test_manual_button_unique_and_pine_preserved(self):
         self.assertEqual(MANUAL.count("if st.button('Scarica nuovo snapshot Cboe'"), 1)
-        self.assertEqual(APP.count("render_manual_acquisition("), 1)
+        self.assertNotIn("render_manual_acquisition(", APP)
+        self.assertNotIn("PINE DI EMERGENZA — NET GAMMA CORRENTE", APP)
+        self.assertNotIn("🧪 SERAFINI LAB", APP)
+        self.assertNotIn("render_research_lab(", APP)
+        self.assertNotIn("render_serafini_lab_admin(", APP)
+        self.assertNotIn("NON Gamma Cboe/OPRA", GAMMA)
+        self.assertIn("(put_col, 'GAMMA PUT (−) · 25+25', -put_summary)", GAMMA)
+        self.assertIn("color = '#f05252' if value < 0", GAMMA)
         self.assertIn("Esporta i profili su TradingView — 5 situazioni", GAMMA)
         self.assertNotIn("from v2_market_engine", APP)
 

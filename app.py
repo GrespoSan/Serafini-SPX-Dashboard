@@ -217,7 +217,7 @@ with st.sidebar:
         st.rerun()
 
 # Allineamento al layout Multi-Market: CONTEXTO collassato, NET GAMMA aperto,
-# selettore originale e importazione CBOE nello stesso pannello.
+# selettore archivio SPX nel pannello NET GAMMA.
 # Nessun cambiamento ai calcoli o ai flussi Supabase/GitHub.
 st.markdown("""
 <style>
@@ -236,64 +236,13 @@ with st.expander('ANALISI NET GAMMA', expanded=True):
     st.header('NET GAMMA · formula Serafini')
     st.subheader('Fotografie opzioni SPX · Cboe storico / Alpaca nuovo')
     snapshot_slot = st.container()
-    with st.expander("Acquisizione manuale / importazione JSON o CSV", expanded=False):
-        st.caption("Carica ZIP GitHub Actions, JSON originale o CSV esportato manualmente "
-                   "dal Quotes Dashboard Cboe. Il CSV viene convertito solo in memoria, "
-                   "non viene spacciato per JSON ufficiale e non è caricato su Supabase. "
-                   "La formula Serafini resta invariata.")
-        uploaded_snapshot = st.file_uploader(
-            "Carica snapshot SPX (.zip, .json.gz, .json, .csv)",
-            type=["zip", "gz", "json", "csv"], key="serafini_offline_cboe")
-        if role == 'admin':
-            from manual_acquisition import render as render_manual_acquisition
-            today_rome = datetime.now(ZoneInfo('Europe/Rome'))
-            this_week = today_rome.isocalendar()
-            current_week = f'{this_week.year}-W{this_week.week:02d}'
-            render_manual_acquisition(
-                role, current_week, Store(url, service_key, bucket), embedded=True)
-
-    offline = False
     storage_unavailable = False
-    if uploaded_snapshot is not None:
-        from offline_snapshot import InvalidLocalSnapshot, load_local_snapshot
-        try:
-            store = load_local_snapshot(uploaded_snapshot.name, uploaded_snapshot.getvalue())
-        except InvalidLocalSnapshot as exc:
-            st.error(f"Importazione SPX non valida: {exc}")
-            st.stop()
-        offline = True
-        if store.import_provenance:
-            from cboe_csv_import import csv_coverage_warning
-            info = store.import_provenance
-            st.warning(
-                "CSV Cboe importato localmente (NON fotografia JSON originale). "
-                "Ora sorgente: " + str(info["original_timestamp_text"]) +
-                " · convertita esplicitamente in UTC: " + str(store.timestamp) +
-                " · chiusura SPX precedente: "
-                + f'{float(info["prior_close_spx"]):,.2f}'
-                + " (" + str(info["previous_close_method"]) + "). "
-                "Non è un prezzo live: verificare la chiusura ufficiale "
-                "se l'ultima quotazione del portale è ritardata. "
-                "Nessun upload remoto e nessun rilevamento ufficiale retroattivo."
-            )
-            coverage_warning = csv_coverage_warning(info)
-            if coverage_warning:
-                st.error(coverage_warning)
-        else:
-            st.success(f"Snapshot SPX caricato localmente · timestamp CBOE {store.timestamp} "
-                       "(fuso non dichiarato). Nessun dato inviato a Supabase.")
-    else:
-        store = Store(url, service_key, bucket)
+    store = Store(url, service_key, bucket)
 
     # SPX-specific archive controls stay in NET GAMMA, not in the shared context.
     col_week, col_snapshots, col_logs = st.columns([2.2, 1, 1], gap='medium', vertical_alignment='bottom')
     with col_week:
-        if offline:
-            week = store.week
-            st.text_input("Settimana ISO (AAAA-WNN)", value=week,
-                          disabled=True, key="offline_week")
-        else:
-            week = week_choice()
+        week = week_choice()
     try:
         snaps = store.list(f'{week}/snapshots/')
         logs = store.list(f'{week}/logs/')
@@ -302,34 +251,6 @@ with st.expander('ANALISI NET GAMMA', expanded=True):
         snaps, logs = [], []
     col_snapshots.metric('Snapshot distinti', len(snaps))
     col_logs.metric('Registri', len(logs))
-
-    # Un HTTP 403 Cboe impedisce l'acquisizione, ma non invalida
-    # le fotografie archiviate. Rendi visibile l'errore senza assegnare
-    # artificialmente al giorno corrente l'ultimo snapshot disponibile.
-    if not offline and not storage_unavailable and logs:
-        from cboe_source_health import blocked_acquisition_today
-
-        @st.cache_data(ttl=120, show_spinner=False, max_entries=12)
-        def _latest_cboe_block(week_name, names, today, _store):
-            return blocked_acquisition_today(week_name, names, _store, today)
-
-        today_rome = datetime.now(ZoneInfo("Europe/Rome")).date()
-        blocked = _latest_cboe_block(
-            week, tuple(x["name"] for x in logs), today_rome, store)
-        if blocked is not None:
-            hour = str(blocked.get("download_rome") or "")[11:16]
-            clock = (" alle " + hour + " Roma") if len(hour) == 5 else ""
-            st.warning(
-                f"Acquisizione SPX del {today_rome:%d/%m/%Y}{clock} "
-                "non riuscita: Cboe ha risposto HTTP 403 (accesso negato). "
-                "Nessuna nuova fotografia verificata è stata acquisita "
-                "in questo tentativo. I grafici restano basati sulle "
-                "fotografie realmente archiviate, con la loro data originale; "
-                "Pine di emergenza e acquisizione manuale che interrogano "
-                "lo stesso endpoint Cboe possono essere bloccati. "
-                "È disponibile l'importazione di un file Cboe originale "
-                "ottenuto tramite accesso autorizzato."
-            )
 
     with snapshot_slot:
         from gamma_section import render_snapshot_selector
@@ -344,7 +265,7 @@ with st.expander('ANALISI NET GAMMA', expanded=True):
     # Con file locale non esistono registri Supabase: evita il riquadro
     # «1 snapshot · 0 registri» in fondo ai grafici e ai quattro export Pine.
     # Mantieni la consultazione storica per fotografie archiviate e log reali.
-    if not offline and logs and st.checkbox(
+    if logs and st.checkbox(
             f'RILEVAMENTI SPX — {len(snaps)} snapshot · {len(logs)} registri',
             value=False, key=f'cb_show_records_{week}'):
         col_snapshots, col_logs = st.columns([1, 1], gap='medium')
@@ -399,7 +320,7 @@ with st.expander('ANALISI NET GAMMA', expanded=True):
 with st.expander('ANALISI GEX · Edge-style — modulo indipendente', expanded=False):
     try:
         from spx_csv_gex_section import render as show_csv_gex
-        show_csv_gex(week, store, uploaded_snapshot if offline else None)
+        show_csv_gex(week, store)
     except Exception as exc:
         st.warning('GEX non disponibile: '+type(exc).__name__+
                    '. NET GAMMA rimane utilizzabile; nessun livello sostitutivo.')
@@ -413,7 +334,7 @@ context_slot = st.empty()
 trend_edge_gex = {}
 # Edge e Replay sono confronti storici: non sono disponibili con un solo
 # file offline e senza registri di acquisizione verificati.
-if not offline and not storage_unavailable:
+if not storage_unavailable:
     try:
         from edge_triptych import show as show_edge_triptych
         show_edge_triptych(
@@ -428,7 +349,7 @@ if not offline and not storage_unavailable:
                        'Nessun livello sostitutivo o simulato.')
 
 # Confronto e Replay condividono la stessa sezione, con calcoli invariati.
-if not offline and not storage_unavailable:
+if not storage_unavailable:
     with st.expander('REPLAY E CONFRONTO', expanded=False):
         mode = st.radio(
             'Modalità di analisi',
@@ -454,44 +375,10 @@ if not offline and not storage_unavailable:
             render_gamma_replay(store, week, logs, view_mode='Candele ES + NET GAMMA')
 
 # Report storico disponibile solo per snapshot archiviati in Supabase.
-if not offline and not storage_unavailable:
+if not storage_unavailable:
     with st.expander('REPORT GIORNALIERO AI', expanded=False):
         from ai_report import render as render_ai_report
         render_ai_report(store, week, snaps, logs)
-
-# Strumento manuale autonomo: non accede a Store/Supabase, non modifica
-# la selezione degli snapshot ufficiali né i quattro Pine storici.
-with st.expander('PINE DI EMERGENZA — NET GAMMA CORRENTE', expanded=False):
-    try:
-        from emergency_pine import render as render_emergency_pine
-        render_emergency_pine()
-    except Exception as exc:
-        # La sezione principale SPX deve restare accessibile anche se fallisce
-        # questo strumento facoltativo.
-        st.error('Pine di emergenza temporaneamente non disponibile: '
-                 + type(exc).__name__)
-
-# SERAFINI LAB: one closed outer section, visible exclusively to ADMIN.
-# Two clearly separated tabs (not nested Streamlit expanders, which are
-# unsupported); calculations and the privileged report reader are unchanged.
-if role == 'admin':
-    with st.expander('🧪 SERAFINI LAB', expanded=False):
-        evolution_tab, greeks_tab = st.tabs([
-            '📊 Evoluzione NET GAMMA (sperimentale)',
-            '🧪 GRECHE SUPERIORI',
-        ])
-        with evolution_tab:
-            st.markdown('#### Evoluzione NET GAMMA · Ricerca intraday')
-            if not offline and not storage_unavailable:
-                from gamma_replay import render_research_lab
-                render_research_lab(store, week, logs, inside_section=True)
-            else:
-                st.info('Archivio Replay non disponibile per la ricerca.')
-        with greeks_tab:
-            st.markdown('#### GRECHE SUPERIORI · Ricerca diagnostica')
-            from serafini_lab_admin import render as render_serafini_lab_admin
-            render_serafini_lab_admin(
-                role, Store(url, service_key, bucket), inside_section=True)
 
 # Source of truth: Serafini-CSV/app.py · ANALISI DEL CONTESTO.
 # Only the archive week label and verified morning-data adapter are SPX-specific.

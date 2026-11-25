@@ -780,8 +780,6 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
         if visible_source(snap) != 'ALPACA_INDICATIVE_DERIVED':
             st.error("Fotografia Alpaca senza provenienza verificabile: NET GAMMA non mostrato.")
             return
-        st.warning("ALPACA INDICATIVE + OCC · Gamma modellato da Bid/Ask, NON Gamma Cboe/OPRA. "
-                   "La formula Serafini resta invariata; confrontabilità storica ancora da verificare.")
         asof_notice=premarket_provenance_warning(snap)
         if asof_notice:
             st.info(asof_notice)
@@ -1044,20 +1042,22 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
             return formatted.replace(',', '_').replace('.', ',').replace('_', '.')
 
         net_col, call_col, put_col = st.columns(3)
-        with net_col:
-            net_color = '#f05252' if net_summary < 0 else '#f1f5f9'
-            st.markdown(
-                '<div style="font-size:0.88rem;color:#d1d5db;'
-                'margin-bottom:0.35rem">NET GAMMA · Call − Put · 25+25</div>'
-                f'<div style="font-size:1.85rem;line-height:1.25;'
-                f'font-weight:400;color:{net_color};font-variant-numeric:tabular-nums">'
-                f'{_gamma_it(net_summary, signed=True)}</div>',
-                unsafe_allow_html=True,
-            )
-        call_col.metric('GAMMA CALL (+) · 25+25',
-                        _gamma_it(call_summary, signed=True))
-        put_col.metric('GAMMA PUT (−) · 25+25',
-                       '−' + _gamma_it(put_summary))
+        for col, label, value in (
+            (net_col, 'NET GAMMA · Call − Put · 25+25', net_summary),
+            (call_col, 'GAMMA CALL (+) · 25+25', call_summary),
+            (put_col, 'GAMMA PUT (−) · 25+25', -put_summary),
+        ):
+            color = '#f05252' if value < 0 else '#f1f5f9'
+            formatted = _gamma_it(value, signed=True).replace('-', '−')
+            with col:
+                st.markdown(
+                    '<div style="font-size:0.88rem;color:#d1d5db;'
+                    'margin-bottom:0.35rem">' + label + '</div>'
+                    f'<div style="font-size:1.85rem;line-height:1.25;'
+                    f'font-weight:400;color:{color};font-variant-numeric:tabular-nums">'
+                    f'{formatted}</div>',
+                    unsafe_allow_html=True,
+                )
         st.caption(
             f"**Totali originali Serafini:** {core_summary['profiles']} scadenze, "
             f"{core_summary['strikes']} strike (25 sopra e 25 sotto per scadenza). "
