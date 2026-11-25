@@ -213,7 +213,7 @@ with st.sidebar:
         st.toast('Aggiornamento richiesto: ricarico i dati disponibili.', icon='🔄')
     if st.button('Esci'):
         for key in list(st.session_state.keys()):
-            if key == 'role' or key.startswith('manual_csv_'):
+            if key in ('role', 'chain_identity', '_ndx_basis_target') or key.startswith(('manual_csv_', 'ndx_', 'gld_', 'uso_', 'universal_', 'v2_', 'pine_download_', 'pine_copy_', 'gamma_candle_', 'gamma_price_chart_')):
                 st.session_state.pop(key, None)
         st.rerun()
 
@@ -229,6 +229,21 @@ st.markdown("""
     box-sizing: border-box;
     padding-left: clamp(1rem, 2vw, 3rem);
     padding-right: clamp(1rem, 2vw, 3rem);
+}
+.st-key-manual_csv_mercato_selector label p,
+.st-key-manual_csv_mercato_selector [data-baseweb="select"] > div,
+.st-key-manual_csv_mercato_selector [data-baseweb="select"] span {
+    color: #55d5f6 !important;
+    font-weight: 700 !important;
+}
+[class*="st-key-pine_download_"] button,
+[class*="st-key-pine_download_"] button p,
+[class*="st-key-pine_download_"] button span,
+[class*="st-key-pine_copy_"] [data-testid="stExpander"] summary,
+[class*="st-key-pine_copy_"] [data-testid="stExpander"] summary p,
+[class*="st-key-pine_copy_"] [data-testid="stExpander"] summary span {
+    color: #ff626b !important;
+    font-weight: 750 !important;
 }
 .st-key-manual_csv_pine_download_control button,
 .st-key-manual_csv_pine_download_control button p,

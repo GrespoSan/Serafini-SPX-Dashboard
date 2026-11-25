@@ -1,29 +1,39 @@
-"""Manual CSV SPX — no cloud writes, no automatic snapshot or MT4 substitution."""
+"""Manual CSV multi-market — reference Serafini CSV; SPX-only explicit MT4 publication."""
 from datetime import datetime
 import hashlib
 import streamlit as st
 from .offline_snapshot import load_local_snapshot, InvalidLocalSnapshot
 from .cboe_csv_import import InvalidCboeCSV, csv_coverage_warning
 from .gamma_section import render as render_csv_net_gamma
+from .csv_market import MARKETS, render_market, ticker_azione_da_csv
 
 
 def render(mt4_store=None):
     with st.expander("ANALISI NET GAMMA — CSV MANUALE", expanded=False):
         st.header("NET GAMMA · formula Serafini")
-        st.markdown("### Fotografia opzioni Cboe · SPX · [↗ Apri Cboe](https://www.cboe.com/data/quotes/SPX/options)")
-        st.caption("Solo il CSV SPX caricato. Separato dall'archivio automatico Alpaca e Replay. Pubblicazione MT4 solo su richiesta dell'amministratore.")
-        upload = st.file_uploader("Carica il CSV della catena opzioni Cboe", type=["csv"], key="manual_csv_upload")
+        market = st.selectbox("Mercato", list(MARKETS), key="manual_csv_mercato_selector")
+        equity = market == "Azioni"
+        symbol = MARKETS[market]
+        if symbol in ("SPX", "NDX", "RUT", "DJX", "GLD", "USO"):
+            st.markdown(
+                f"### Fotografia opzioni Cboe · {symbol} · "
+                f"[↗ Apri Cboe](https://www.cboe.com/data/quotes/{symbol}/options)"
+            )
+        else:
+            st.markdown(
+                "### Fotografia opzioni Cboe · Azioni · "
+                "[↗ Apri Cboe (NVDA)](https://www.cboe.com/data/quotes/NVDA/options)"
+            )
+        upload = st.file_uploader("Carica il CSV della catena opzioni Cboe", type=["csv"], key=f"manual_csv_upload_{market}")
         st.session_state['manual_csv_gex_current_source'] = None
         st.session_state['manual_csv_gex_last_report'] = None
         st.session_state['manual_csv_gex_last_error'] = None
         if upload is None:
             return
-        symbol = "SPX"
         try:
-            store = load_local_snapshot(upload.name, upload.getvalue())
-            warning = csv_coverage_warning(store.import_provenance)
-            if warning:
-                st.warning(warning)
+            if equity:
+                symbol = ticker_azione_da_csv(upload.getvalue())
+                st.caption(f"Titolo individuato automaticamente dal CSV Cboe: **{symbol}**")
             csv_bytes = upload.getvalue()
             csv_sha256 = hashlib.sha256(csv_bytes).hexdigest()
             # La visualizzazione GEX non deve mai essere una dipendenza
@@ -88,23 +98,30 @@ def render(mt4_store=None):
                     type(exc).__name__ + ': ' + str(exc)[:250]
                 )
 
-            week = store.week
-            snaps = store.list(f"{week}/snapshots/")
-            st.session_state[f"manual_csv_serafini_selected_snapshot_{week}"] = store.filename
-            result = render_csv_net_gamma(store, week, snaps, [], show_heading=False, selector_external=True)
-            if mt4_store is not None and st.session_state.get("role")=="admin" and result:
-                st.caption("MT4: 100 strike reali per scadenza (50+50); il nucleo 25+25 resta invariato.")
-                if st.button("INVIA A MT4",type="primary",key="manual_csv_mt4_send"):
-                    try:
-                        from .mt4 import build_feed, publish
-                        payload=build_feed(result["snapshot"],result["reference_spx"],
-                            result["es_spx_basis"],result["basis_info"],
-                            st.session_state.get("manual_csv_gex_current_source"),
-                            st.session_state.get("manual_csv_gex_last_report"),
-                            st.session_state.get("manual_csv_gex_iv_units",""))
-                        publish(mt4_store,payload,st.session_state.get("role"))
-                        st.success("CSV manuale pubblicato e verificato nel feed privato MT4.")
-                    except Exception as exc:
-                        st.error("Invio MT4 non riuscito: "+(str(exc) if isinstance(exc,ValueError) else type(exc).__name__))
+            if market == "SP500":
+                store = load_local_snapshot(upload.name, upload.getvalue())
+                warning = csv_coverage_warning(store.import_provenance)
+                if warning:
+                    st.warning(warning)
+                week = store.week
+                snaps = store.list(f"{week}/snapshots/")
+                st.session_state[f"manual_csv_serafini_selected_snapshot_{week}"] = store.filename
+                result = render_csv_net_gamma(store, week, snaps, [], show_heading=False, selector_external=True)
+                if mt4_store is not None and st.session_state.get("role")=="admin" and result:
+                    st.caption("MT4: 100 strike reali per scadenza (50+50); il nucleo 25+25 resta invariato.")
+                    if st.button("INVIA A MT4",type="primary",key="manual_csv_mt4_send"):
+                        try:
+                            from .mt4 import build_feed, publish
+                            payload=build_feed(result["snapshot"],result["reference_spx"],
+                                result["es_spx_basis"],result["basis_info"],
+                                st.session_state.get("manual_csv_gex_current_source"),
+                                st.session_state.get("manual_csv_gex_last_report"),
+                                st.session_state.get("manual_csv_gex_iv_units",""))
+                            publish(mt4_store,payload,st.session_state.get("role"))
+                            st.success("CSV manuale pubblicato e verificato nel feed privato MT4.")
+                        except Exception as exc:
+                            st.error("Invio MT4 non riuscito: "+(str(exc) if isinstance(exc,ValueError) else type(exc).__name__))
+            else:
+                render_market(upload, symbol, equity)
         except (InvalidLocalSnapshot, InvalidCboeCSV, ValueError) as exc:
             st.error(str(exc))
