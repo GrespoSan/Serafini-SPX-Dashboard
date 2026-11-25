@@ -24,7 +24,7 @@ class SPXLayoutParityTests(unittest.TestCase):
         self.assertIn("context_slot = st.empty()", APP)
         self.assertIn("with context_slot.container():", APP)
         self.assertIn("expanded=False", APP.split(
-            "with st.expander('ANALISI DEL CONTESTO", 1)[1][:90])
+            'with st.expander("ANALISI DEL CONTESTO', 1)[1][:90])
         self.assertNotIn("st.file_uploader(", APP)
         self.assertNotIn("Acquisizione manuale / importazione JSON o CSV", APP)
         self.assertLess(APP.index("render_snapshot_selector(store, week, snaps, logs)"),
