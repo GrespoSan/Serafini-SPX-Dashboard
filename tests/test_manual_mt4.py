@@ -39,15 +39,19 @@ class ManualMT4Tests(unittest.TestCase):
     def test_same_csv_gex_only(self):
         source={"sha256":self.sha,"symbol":"SPX","oi_mode":"csv"}
         report={"sha256":self.sha,"symbol":"SPX","source":SOURCE,"quality_certified":False,
-            "timestamp_utc":"2026-11-23T09:47:00+00:00","oi_info":{"requested_mode":"csv"},
+            "timestamp_utc":"2026-11-23T09:47:00+00:00","spot_info":{"method":"SPXW_0DTE_PUT_CALL_PARITY_R0_Q0"},"oi_info":{"requested_mode":"csv"},
             "reports":{"0DTE":{"status":"DIAGNOSTICO","expiry":"2026-11-23",
-                "net_gex":-2e9,"call_wall":6100.,"put_wall":5900.,"flip":None},
+                "net_gex":-2e9,"regime":"negative","call_wall":6100.,"put_wall":5900.,"flip":None},
                 "Weekly":{"status":"INSUFFICIENTE"}}}
         saved=((self.sha,"SPX","auto","csv"),report)
         body=self.build(saved,source).decode()
         self.assertIn("gex_call_wall_es,6116.000000",body)
         self.assertIn("gex_modeled_sign,Negative",body)
         self.assertNotIn("gex_gamma_flip_es",body)
+        report["reports"]["0DTE"]["regime"]="neutral"
+        self.assertIn("gex_modeled_sign,Zero",self.build(saved,source).decode())
+        report["spot_info"]={"method":"CSV_LAST"}
+        self.assertNotIn("gex_model",self.build(saved,source).decode())
         report["sha256"]="a"*64
         self.assertNotIn("gex_model",self.build(saved,source).decode())
 
