@@ -27,6 +27,9 @@ class ManualMT4Tests(unittest.TestCase):
         self.assertEqual(meta["snapshot_sha256"],self.sha)
         self.assertEqual(meta["download_clock_rome"],"10:47:00")
         self.assertEqual(meta["mode"],"Manuale")
+        self.assertEqual(meta["serafini_net_gamma_core_strikes"],"100")
+        core=sum(row["net_gamma"] for expiry in (date(2026,11,23),date(2026,11,27)) for row in profile(self.doc,expiry,6000)["rows"])
+        self.assertAlmostEqual(float(meta["serafini_net_gamma_core_25x2"]),core)
         self.assertNotIn("gex_model",meta)
         for label,expiry in (("0DTE",date(2026,11,23)),("Weekly",date(2026,11,27))):
             rows=[r for r in lines if r[0]==label]
