@@ -328,6 +328,54 @@ def _report(expiry: date, name: str, prepared: list[Contract],
     return basic
 
 
+def _premarket_spx_spot(options, expiry):
+    """Near-ATM SPXW put-call parity, r=q=0 as in the GEX model.
+    No quote timestamps per leg in the CSV: diagnostic estimate, not live spot.
+    """
+    from statistics import median
+    pairs = {}
+    for option in options:
+        occ = parse_occ(str(option["option"]))
+        if occ.root != "SPXW" or occ.expiry != expiry:
+            continue
+        bid, ask = float(option.get("bid") or 0), float(option.get("ask") or 0)
+        if not (math.isfinite(bid) and math.isfinite(ask) and 0 < bid <= ask):
+            continue
+        pair = pairs.setdefault(occ.strike, {})
+        if occ.type in pair:
+            raise ValueError("Parità SPXW: contratto duplicato.")
+        pair[occ.type] = (bid, ask)
+    estimates = []
+    for strike, pair in pairs.items():
+        if set(pair) != {"call", "put"}:
+            continue
+        cb, ca = pair["call"]
+        pb, pa = pair["put"]
+        low, high = strike + cb - pa, strike + ca - pb
+        mid = (low + high) / 2
+        if mid > 0 and high-low <= 4.0:
+            estimates.append((strike, mid, low, high))
+    if len(estimates) < 10:
+        raise ValueError("SPX implicito N/D: meno di 10 coppie Call/Put con spread combinato <= 4 punti.")
+    initial = median(x[1] for x in estimates)
+    near = [x for x in estimates if abs(x[0]-initial) <= .015*initial]
+    if len(near) < 10:
+        raise ValueError("SPX implicito N/D: campione vicino ATM insufficiente.")
+    center = median(x[1] for x in near)
+    good = [x for x in near if abs(x[1]-center) <= 2.0 and x[2]-1 <= center <= x[3]+1]
+    if (len(good) < 10 or len(good)/len(near) < .80
+            or sum(x[0]<center for x in good)<3
+            or sum(x[0]>center for x in good)<3):
+        raise ValueError("SPX implicito N/D: parità Call/Put incoerente o copertura ATM insufficiente.")
+    spot = float(median(x[1] for x in good))
+    return spot, {"method":"SPXW_0DTE_PUT_CALL_PARITY_R0_Q0",
+                  "expiry":expiry.isoformat(),"pairs":len(good),
+                  "near_pairs":len(near),"median_spread":median(x[3]-x[2] for x in good),
+                  "min_implied":min(x[1] for x in good),
+                  "max_implied":max(x[1] for x in good),
+                  "certified":False}
+
+
 def analyze_csv_gex(blob: bytes, symbol: str, iv_mode="auto", *,
                     oi_mode="csv", occ_values=None, occ_provenance=None,
                     occ_error=None) -> dict:
@@ -350,6 +398,12 @@ def analyze_csv_gex(blob: bytes, symbol: str, iv_mode="auto", *,
     presence = _raw_field_presence(blob, accepted)
     cal = _calendar(captured)
     target = _target_expiries(captured, cal)
+    csv_last = spot
+    spot_info = {"method":"CSV_LAST","certified":False}
+    if symbol.upper() == "SPX" and captured < cal.open_dt(target["0DTE"]):
+        if target["0DTE"] != captured.astimezone(NY).date():
+            raise ValueError("GEX SPX pre-USA N/D: nessuna scadenza 0DTE della seduta corrente.")
+        spot, spot_info = _premarket_spx_spot(doc["data"]["options"], target["0DTE"])
     unit, unit_note = _iv_normalization(
         doc["data"]["options"], presence, iv_mode,
         spot=spot, captured=captured, cal=cal, target_expiries=target,
@@ -386,7 +440,8 @@ def analyze_csv_gex(blob: bytes, symbol: str, iv_mode="auto", *,
         "sha256": hashlib.sha256(blob).hexdigest(),
         "timestamp_utc": captured.isoformat(),
         "timestamp_rome": captured.astimezone(ROME).strftime("%d/%m/%Y %H:%M:%S"),
-        "spot": spot, "iv_unit": unit, "iv_note": unit_note,
+        "spot": spot, "csv_last": csv_last, "spot_info": spot_info,
+        "iv_unit": unit, "iv_note": unit_note,
         "oi_info": oi_info,
         "oi_missing_effective": sum(c.oi is None for c in contract_list),
         "csv_contracts": len(contract_list), "oi_missing": sum(
