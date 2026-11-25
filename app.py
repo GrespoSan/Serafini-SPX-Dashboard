@@ -255,7 +255,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-with st.expander('ANALISI NET GAMMA', expanded=True):
+with st.expander('ANALISI NET GAMMA', expanded=False):
     st.header('NET GAMMA · formula Serafini')
     st.subheader('Fotografie opzioni SPX · Cboe storico / Alpaca nuovo')
     snapshot_slot = st.container()
