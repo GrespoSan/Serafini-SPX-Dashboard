@@ -19,7 +19,7 @@ class SPXLayoutParityTests(unittest.TestCase):
 
     def test_gamma_selector_and_import_in_one_panel(self):
         self.assertEqual(APP.count("with st.expander('ANALISI NET GAMMA'"), 1)
-        self.assertIn("expanded=True", APP.split(
+        self.assertIn("expanded=False", APP.split(
             "with st.expander('ANALISI NET GAMMA'", 1)[1][:75])
         self.assertIn("context_slot = st.empty()", APP)
         self.assertIn("with context_slot.container():", APP)
@@ -43,10 +43,13 @@ class SPXLayoutParityTests(unittest.TestCase):
         self.assertIn("if not storage_unavailable:", APP)
         self.assertNotIn("load_local_snapshot(uploaded_snapshot.name", APP)
 
-    def test_context_independent_of_supabase_and_counters_preserved(self):
-        # The counters are intentionally still inside ANALISI DEL CONTESTO.
-        self.assertIn("col_snapshots.metric('Snapshot distinti', len(snaps))", APP)
-        self.assertIn("col_logs.metric('Registri', len(logs))", APP)
+    def test_context_independent_of_supabase_and_archive_ui_removed(self):
+        # Archive remains internal; no redundant controls or counters.
+        self.assertNotIn("Snapshot distinti", APP)
+        self.assertNotIn("RILEVAMENTI SPX", APP)
+        self.assertNotIn("st.text_input('Settimana ISO", APP)
+        self.assertIn("week = week_choice()", APP)
+        self.assertNotIn("col_logs.metric", APP)
         # A quota failure only clears archive metadata; it does not stop VX/Daily.
         self.assertIn("storage_unavailable = True", APP)
         self.assertIn("snaps, logs = [], []", APP)

@@ -137,11 +137,7 @@ def check_password(entered: str, expected: str) -> bool:
 def week_choice() -> str:
     today = datetime.now(ZoneInfo('Europe/Rome')).date()
     iso = today.isocalendar()
-    week = st.text_input('Settimana ISO (AAAA-WNN)', value=f'{iso.year}-W{iso.week:02d}')
-    if not re.fullmatch(r'\d{4}-W(?:0[1-9]|[1-4]\d|5[0-3])', week):
-        st.error('Formato settimana non valido.')
-        st.stop()
-    return week
+    return f'{iso.year}-W{iso.week:02d}'
 
 
 st.title('Serafini · SPX — NET GAMMA')
@@ -262,81 +258,20 @@ with st.expander('ANALISI NET GAMMA', expanded=False):
     storage_unavailable = False
     store = Store(url, service_key, bucket)
 
-    # SPX-specific archive controls stay in NET GAMMA, not in the shared context.
-    col_week, col_snapshots, col_logs = st.columns([2.2, 1, 1], gap='medium', vertical_alignment='bottom')
-    with col_week:
-        week = week_choice()
+    # Use the current Rome ISO week automatically; retain archive data internally.
+    week = week_choice()
     try:
         snaps = store.list(f'{week}/snapshots/')
         logs = store.list(f'{week}/logs/')
     except Exception:
         storage_unavailable = True
         snaps, logs = [], []
-    col_snapshots.metric('Snapshot distinti', len(snaps))
-    col_logs.metric('Registri', len(logs))
 
     with snapshot_slot:
         from gamma_section import render_snapshot_selector
         render_snapshot_selector(store, week, snaps, logs)
     from gamma_section import render
     asia_panel = render(store, week, snaps, logs, show_heading=False, selector_external=True)
-    # Nessun controllo periodico di Supabase: il selettore segue l'ultimo
-    # download solo all'apertura/ricaricamento o durante una normale interazione.
-    # Consultazione rilevamenti Cboe disponibile ad amministratore e lettore.
-    # Solo la richiesta di un nuovo download rimane riservata all'admin.
-    # I registri sono letti solo quando il pannello viene aperto.
-    # Con file locale non esistono registri Supabase: evita il riquadro
-    # «1 snapshot · 0 registri» in fondo ai grafici e ai quattro export Pine.
-    # Mantieni la consultazione storica per fotografie archiviate e log reali.
-    if logs and st.checkbox(
-            f'RILEVAMENTI SPX — {len(snaps)} snapshot · {len(logs)} registri',
-            value=False, key=f'cb_show_records_{week}'):
-        col_snapshots, col_logs = st.columns([1, 1], gap='medium')
-        col_snapshots.metric('Snapshot distinti', len(snaps))
-        col_logs.metric('Registri', len(logs))
-
-        if logs:
-            rows = []
-            for obj in logs:
-                try:
-                    value = json.loads(store.download(f"{week}/logs/{obj['name']}"))
-                    rows.append({
-                        'Download (ora di Roma)': format_download_rome(value.get('download_utc')),
-                        'Acquisizione': (
-                            'Test manuale'
-                            if str(value.get('scheduled_slot') or '') == '30 13 * * 1-5'
-                            and str(value.get('download_rome') or '').startswith('2026-10-22T17:57:')
-                            else ('13:30 (studio storico)'
-                                  if str(value.get('scheduled_slot') or '') == '30 13 * * 1-5'
-                                  and str(value.get('rome_date') or '') < '2026-11-11'
-                                  else describe_slot(value.get('scheduled_slot'), value.get('rome_date')))
-                        ),
-                        'Stato': value.get('status', ''),
-                        'Qualità dati': describe_quality(value, store),
-                        'Timestamp sorgente': value.get('source_timestamp_utc') or value.get('cboe_timestamp', ''),
-                        'Fonte': value.get('source') or 'CBOE_ORIGINALE',
-                        'SPX': value.get('spot_spx', ''),
-                        'Contratti': value.get('contracts', ''),
-                        'File sorgente': value.get('file', ''),
-                    })
-                except Exception:
-                    rows.append({'Stato': 'Impossibile leggere un registro', 'Qualità dati': 'DA VERIFICARE'})
-            st.caption('Gli orari di download sono convertiti in Europe/Rome. Il timestamp Cboe rimane come nella fonte, senza attribuirgli un fuso non dichiarato. I vecchi registri etichettati “automatico” non identificano necessariamente lo slot.')
-            # La colorazione riguarda solo la qualita', non la colonna Stato (NUOVO/INVARIATO).
-            import pandas as pd
-            frame = pd.DataFrame(rows)
-            def quality_color(series):
-                return [
-                    'color: #FF4B4B; font-weight: 700' if str(value).startswith('NON VALIDO')
-                    else 'color: #28C76F; font-weight: 600' if str(value) == 'VALIDO'
-                    else 'color: #EAB308' for value in series
-                ]
-            st.dataframe(frame.style.apply(quality_color, subset=['Qualità dati']),
-                         width="stretch", hide_index=True)
-        else:
-            st.info('Non sono presenti registri per questa settimana.')
-
-        # I registri restano consultabili solo quando l'archivio è disponibile.
 
 # Manual CSV is deliberately independent from automatic SPX archive state.
 try:
