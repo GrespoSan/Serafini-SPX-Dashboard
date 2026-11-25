@@ -22,6 +22,7 @@ DEFAULT_OI_LABEL = "Auto · OCC se confrontabile, altrimenti CSV"
 @st.cache_data(show_spinner=False, max_entries=6, ttl=3600)
 def _cached_gex(blob, symbol, units, oi_mode="csv", occ_values=None,
                 occ_provenance=None, occ_error=None):
+    # Cache revision: premarket SPXW parity spot, never previous cash close.
     return analyze_csv_gex(
         blob, symbol, units, oi_mode=oi_mode,
         occ_values=occ_values, occ_provenance=occ_provenance,
