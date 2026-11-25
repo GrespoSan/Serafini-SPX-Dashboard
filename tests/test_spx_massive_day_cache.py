@@ -127,7 +127,7 @@ class SPXMassiveCacheTests(unittest.TestCase):
         # Edge still uses the same SPX snapshot and archive, but now
         # copies a validated read-only summary into Trend Daily.
         self.assertNotIn("show_edge_triptych(",app)
-        self.assertIn("week, store, logs, on_valid_gex=trend_edge_gex.update",app)
+        self.assertNotIn("week, store, logs, on_valid_gex=trend_edge_gex.update",app)
         self.assertIn("trend_edge_gex.clear()",app)
         self.assertIn("render_gamma_replay(store, week, logs",app)
         self.assertIn("render_emergency_pine()",app)
