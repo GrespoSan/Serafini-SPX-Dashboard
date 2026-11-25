@@ -205,7 +205,7 @@ class EmergencyPineTests(unittest.TestCase):
         self.assertIn("context_slot = st.empty()", app)
         self.assertIn("with st.expander('ANALISI NET GAMMA'", app)
         self.assertIn("with st.expander('REPLAY E CONFRONTO'", app)
-        self.assertIn("with st.expander('REPORT GIORNALIERO AI'", app)
+        self.assertNotIn("with st.expander('REPORT GIORNALIERO AI'", app)
         self.assertNotIn("from storage import", emg)
         self.assertNotIn("Supabase", emg.replace("senza Supabase", "").replace(
             "Nessun Supabase", ""))  # no backend calls
