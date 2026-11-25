@@ -1,11 +1,51 @@
 """Sessione asiatica ES 00:00–09:00 Roma; indipendente dai calcoli NET GAMMA."""
 from datetime import date, datetime, timedelta, time
+from html import escape
 from zoneinfo import ZoneInfo
 import math
 import pandas as pd
 import streamlit as st
 
 ROME = ZoneInfo("Europe/Rome")
+
+
+def _dark_asia_cards(entries):
+    """Presentazione: schede scure coordinate con Trend Daily, senza ricalcoli."""
+    cells = []
+    for label, value, detail, color in entries:
+        text_color = color if color in (
+            "#22c55e", "#ef4444", "#f59e0b", "#f4f5f6", "#b6bcc5"
+        ) else "#f4f5f6"
+        detail_html = (
+            '<div class="spx-asia-detail">' + escape(str(detail)) + '</div>'
+            if detail else ""
+        )
+        cells.append(
+            '<div class="spx-asia-kpi">'
+            '<div class="spx-asia-label">' + escape(str(label)) + '</div>'
+            '<div class="spx-asia-value" style="color:' + text_color + '">'
+            + escape(str(value)) + '</div>' + detail_html + '</div>'
+        )
+    st.html(
+        '<style>'
+        '.spx-asia-card{background:#090a0c;color:#f4f5f6;border:1px solid #34363c;'
+        'border-radius:13px;padding:14px 18px;margin:8px 0 12px}'
+        '.spx-asia-grid{display:grid;align-items:stretch;gap:0}'
+        '.spx-asia-kpi{min-width:0;padding:6px 16px;border-left:1px solid #292b30}'
+        '.spx-asia-kpi:first-child{border-left:0;padding-left:0}'
+        '.spx-asia-label{font-size:.82rem;color:#b6bcc5;margin-bottom:6px}'
+        '.spx-asia-value{font-size:1.16rem;font-weight:700;overflow-wrap:anywhere;line-height:1.4}'
+        '.spx-asia-detail{font-size:.8rem;color:#a9b4c3;line-height:1.5;margin-top:6px}'
+        '@media(max-width:900px){.spx-asia-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}'
+        '.spx-asia-kpi:nth-child(odd){border-left:0;padding-left:0}}'
+        '@media(max-width:600px){.spx-asia-grid{grid-template-columns:1fr!important}'
+        '.spx-asia-kpi{border-left:0;padding-left:0;border-top:1px solid #292b30}'
+        '.spx-asia-kpi:first-child{border-top:0}}'
+        '</style>'
+        '<div class="spx-asia-card"><div class="spx-asia-grid" style="grid-template-columns:'
+        'repeat(' + str(len(entries)) + ',minmax(0,1fr))">'
+        + ''.join(cells) + '</div></div>'
+    )
 
 
 def _column(frame, field):
@@ -361,10 +401,11 @@ def render(target: date, c1_es, p1_es, level_context=None):
         return
 
     hi, lo, price = result["high"], result["low"], result["close"]
-    a, b, c = st.columns(3)
-    a.metric("Massimo Asia", f"{hi:,.2f}")
-    b.metric("Minimo Asia", f"{lo:,.2f}")
-    c.metric("Chiusura ore 09:00", f"{price:,.2f}")
+    _dark_asia_cards([
+        ("Massimo Asia", f"{hi:,.2f}", "ES · sessione 00:00–09:00 Roma", "#f4f5f6"),
+        ("Minimo Asia", f"{lo:,.2f}", "ES · sessione 00:00–09:00 Roma", "#f4f5f6"),
+        ("Chiusura ore 09:00", f"{price:,.2f}", "Ultima barra verificata", "#f4f5f6"),
+    ])
     if result["missing_times"]:
         missing_count = len(result["missing_times"])
         description = ("manca la barra delle " if missing_count == 1
@@ -391,29 +432,20 @@ def render(target: date, c1_es, p1_es, level_context=None):
     # La lettura della sessione Asia e' disponibile anche senza livelli
     # C1/P1: questi servono SOLTANTO alla seconda classificazione Gamma.
     reading = asia_range_reading(result)
-    st.markdown(
-        f'### Responso Asia ore 09:00: '
-        f'<span style="color:{reading["color"]}">{reading["zone"]}</span>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        f'**{reading["verdict"]}** · '
-        f'chiusura al {reading["close_position_pct"]:.1f}% del range, '
-        f'{reading["distance_from_low"]:.2f} punti sopra il minimo e '
-        f'{reading["distance_from_high"]:.2f} sotto il massimo.'
-    )
+    _dark_asia_cards([
+        ("Responso Asia ore 09:00", reading["zone"], reading["verdict"], reading["color"]),
+        ("Chiusura nel range Asia", f'{reading["close_position_pct"]:.1f}%',
+         f'{reading["distance_from_low"]:.2f} pt sopra il minimo · '
+         f'{reading["distance_from_high"]:.2f} pt sotto il massimo', "#f4f5f6"),
+    ])
     st.caption(
         reading["reading"] + " " + reading["scope"] +
         (" Estremi provvisori per barre mancanti."
          if reading["extremes_provisional"] else "")
     )
     if c1_es is None or p1_es is None or not p1_es < c1_es:
-        st.info("Confronto con C1/P1 non determinabile: non e' disponibile "
-                "una coppia valida di livelli dal rilevamento ufficiale "
-                "delle 07:30 (oppure manca il differenziale ES-SPX). "
-                "Non uso automaticamente i livelli di rilevamenti "
-                "successivi alle 09:00. Il responso del range Asia "
-                "resta indipendente e leggibile.")
+        # Senza riferimenti validi resta visibile l'intero quadro del range Asia.
+        # Non si mostra l'avviso relativo al recupero automatico delle 07:30.
         return
 
     st.markdown("### Confronto ASIA con i livelli C1/P1 proposti")
@@ -422,7 +454,6 @@ def render(target: date, c1_es, p1_es, level_context=None):
     else:
         st.warning("C1/P1 candidati sperimentali: non sono livelli confermati "
                    "da Serafini. Confronto descrittivo, non segnale operativo.")
-    st.markdown(f"**Riferimenti proposti NET GAMMA (ES): C1 {c1_es:,.2f} · P1 {p1_es:,.2f}**")
     if price > c1_es:
         zone = "Sopra C1 — zona superiore"
     elif price < p1_es:
@@ -445,9 +476,13 @@ def render(target: date, c1_es, p1_es, level_context=None):
     else:
         behavior = "La sessione ha toccato uno o entrambi i livelli"
 
-    st.markdown(f"**Posizione alle 09:00:** {zone}")
-    st.markdown(f"**Andamento della sessione:** {behavior}" +
-                (" (cronologia 5m incompleta)" if result.get("timeline_missing_times") else ""))
+    _dark_asia_cards([
+        ("C1 proposto · ES", f"{c1_es:,.2f}", "Candidato sperimentale", "#22c55e"),
+        ("P1 proposto · ES", f"{p1_es:,.2f}", "Candidato sperimentale", "#ef4444"),
+        ("Posizione alle 09:00", zone,
+         behavior + (" · cronologia 5m incompleta" if result.get("timeline_missing_times") else ""),
+         "#f4f5f6"),
+    ])
     p1_events, _, _ = level_events(result, p1_es, "P1")
     c1_events, _, _ = level_events(result, c1_es, "C1")
     if price < p1_es:
@@ -462,22 +497,11 @@ def render(target: date, c1_es, p1_es, level_context=None):
         verdict = "CHIUSURA ASIATICA FRA P1/C1 PROPOSTI — FASCIA INTERMEDIA / FLIP NON VERIFICATO"
         distance = f"{price - p1_es:,.2f} punti sopra P1; {c1_es - price:,.2f} punti sotto C1"
         relevant = p1_events + c1_events
-    if price < p1_es:
-        st.markdown(
-            f'### Riscontro indicativo ore 09:00: <span style="color:#ef4444">{verdict}</span>',
-            unsafe_allow_html=True,
-        )
-    elif price > c1_es:
-        st.markdown(
-            f'### Riscontro indicativo ore 09:00: <span style="color:#22c55e">{verdict}</span>',
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(
-            f'### Riscontro indicativo ore 09:00: <span style="color:#f59e0b">{verdict}</span>',
-            unsafe_allow_html=True,
-        )
-    st.write(distance + ".")
+    verdict_color = ("#ef4444" if price < p1_es else
+                     "#22c55e" if price > c1_es else "#f59e0b")
+    _dark_asia_cards([
+        ("Riscontro indicativo ore 09:00", verdict, distance, verdict_color),
+    ])
     if p1_es <= price <= c1_es:
         if lo < p1_es and hi < c1_es:
             st.markdown("**Lettura indicativa:** incerta, con elementi di debolezza: "
