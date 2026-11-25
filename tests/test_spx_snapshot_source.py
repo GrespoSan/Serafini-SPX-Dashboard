@@ -81,6 +81,18 @@ class SourceSelectionTests(unittest.TestCase):
         self.assertIsNone(premarket_provenance_warning(doc))
         self.assertIsNone(premarket_provenance_warning(self._sample()))
 
+    def test_unvalidated_premarket_quarantined_without_relabeling(self):
+        from spx_snapshot_source import blocked_premarket
+        meta={"source":"ALPACA_INDICATIVE_OCC_OI",
+              "kind":"DERIVED_ALPACA_INDICATIVE_NOT_CBOE",
+              "quote_age_mode":"PREMARKET_PRIOR_SESSION"}
+        doc=self._sample(meta)
+        self.assertTrue(blocked_premarket(doc))
+        self.assertTrue(blocked_premarket({"source_provenance":meta}))
+        self.assertFalse(blocked_premarket(self._sample()))
+        doc["source_provenance"]["quote_age_mode"]="LIVE_INDICATIVE_QUOTE"
+        self.assertFalse(blocked_premarket(doc))
+
     def test_legacy_cboe_without_provenance_remains_compatible(self):
         doc=read_snapshot(gzip.compress(json.dumps(self._sample()).encode()))
         self.assertEqual(visible_source(doc),"CBOE_ORIGINAL_OR_MANUAL")
