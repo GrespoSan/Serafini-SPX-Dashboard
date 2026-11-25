@@ -86,3 +86,12 @@ def premarket_provenance_warning(document):
             f"({day}). Ultima quotazione sorgente: {instant}. "
             "Gamma e Volume NON rappresentano nuove quotazioni della mattina; "
             "nessun segnale live implicito.")
+
+
+def blocked_premarket(document):
+    """Prior-session Alpaca Gamma failed the 25 November CSV benchmark."""
+    if not isinstance(document, dict):
+        return False
+    meta = document.get("source_provenance") or {}
+    return (meta.get("source") == "ALPACA_INDICATIVE_OCC_OI"
+            and meta.get("quote_age_mode") == "PREMARKET_PRIOR_SESSION")

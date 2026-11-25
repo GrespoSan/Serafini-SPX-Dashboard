@@ -12,6 +12,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from net_gamma import profile, read_snapshot, visual_profile
+from spx_snapshot_source import blocked_premarket
 from feed_quality import summarize_timeline
 from replay_scale import dynamic_gamma_bounds
 from replay_profiles import choose_rows, gamma_bar_trace
@@ -81,6 +82,8 @@ def _official_frames(_store, week, day, logs):
             try:
                 raw_cboe = _store.download(item["file"])
                 snap = read_snapshot(raw_cboe)
+                if blocked_premarket(snap):
+                    continue
                 ref = float(snap["data"].get("prev_day_close") or 0)
                 if ref <= 0:
                     continue
@@ -160,7 +163,7 @@ def _study_frames(_store, week, day):
             item = json.loads(_store.download(f"replay/{week}/{name}"))
             from spx_snapshot_source import replay_source_kind
             replay_origin = replay_source_kind(item)
-            if item.get("rome_date") != day.isoformat() or replay_origin is None:
+            if item.get("rome_date") != day.isoformat() or replay_origin is None or blocked_premarket(item):
                 continue
             slot = item.get("slot_rome")
             # 13:30 è Replay, non promuoverlo automaticamente ad ufficiale.

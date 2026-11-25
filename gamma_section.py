@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from datetime import datetime
 import streamlit as st
 from net_gamma import profile, read_snapshot, visual_profile, intelligent_visual_profile, gamma_component_totals
-from spx_snapshot_source import accepted, parse_name, date_label, same_source_day_prefix, source_label, visible_source, premarket_provenance_warning
+from spx_snapshot_source import accepted, parse_name, date_label, same_source_day_prefix, source_label, visible_source, premarket_provenance_warning, blocked_premarket
 from feed_quality import timestamp_state
 from volatility_levels import weekly_expiry
 from gamma_compare import compare_profiles
@@ -320,7 +320,7 @@ def render_comparison(store, week, snaps, logs):
     for candidate in same_day:
         try:
             candidate_data = read_snapshot(store.download(f'{week}/snapshots/{candidate}'))
-            if _has_usable_gamma(candidate_data):
+            if not blocked_premarket(candidate_data) and _has_usable_gamma(candidate_data):
                 valid_names.append(candidate)
             else:
                 rejected.append(candidate)
@@ -775,7 +775,16 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
     except Exception as exc:
         st.error(f'Impossibile leggere lo snapshot: {type(exc).__name__}')
         return
-    kind, _, _ = parse_name(choice)
+    kind, selected_day, _ = parse_name(choice)
+    now_ny = datetime.now(ZoneInfo("America/New_York"))
+    if blocked_premarket(snap):
+        st.warning("NET GAMMA PRE-USA SOSPESO — modello mattutino non validato contro CSV. Nessun livello o Pine pubblicato.")
+        return
+    if (st.session_state.get(f'serafini_follow_latest_{week}', True)
+            and week == f"{now_ny.isocalendar().year}-W{now_ny.isocalendar().week:02d}"
+            and (now_ny.time() < time(9,30) or selected_day != now_ny.date())):
+        st.info("NET GAMMA in attesa di una nuova fotografia valida della seduta USA. Per consultare lo storico disattiva il seguito automatico.")
+        return
     if kind == 'ALPACA':
         if visible_source(snap) != 'ALPACA_INDICATIVE_DERIVED':
             st.error("Fotografia Alpaca senza provenienza verificabile: NET GAMMA non mostrato.")
