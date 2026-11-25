@@ -236,12 +236,12 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
     st.markdown('**Differenziale ES − SPX (sessione precedente)**')
     basis_key = f'manual_csv_basis_override_{day.isoformat()}'
     attempt_key = f'manual_csv_basis_auto_attempted_{day.isoformat()}'
-    if 'manual_csv_manual_csv_auto_basis_results' not in st.session_state:
-        st.session_state.manual_csv_manual_csv_auto_basis_results = {}
+    if 'manual_csv_auto_basis_results' not in st.session_state:
+        st.session_state.manual_csv_auto_basis_results = {}
 
     def _apply_auto_basis():
         result = _auto_basis(day)
-        st.session_state.manual_csv_manual_csv_auto_basis_results[day.isoformat()] = result
+        st.session_state.manual_csv_auto_basis_results[day.isoformat()] = result
         st.session_state[basis_key] = str(int(Decimal(str(result['basis'])).quantize(
             Decimal('1'), rounding=ROUND_HALF_UP)))
         return result
@@ -269,14 +269,14 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                 with st.spinner('Calcolo automatico differenziale ES − SPX...'):
                     _apply_auto_basis()
             except Exception as exc:
-                st.session_state.manual_csv_manual_csv_auto_basis_results[day.isoformat()] = None
+                st.session_state.manual_csv_auto_basis_results[day.isoformat()] = None
                 st.session_state[f'manual_csv_basis_auto_error_{day.isoformat()}'] = str(exc)[:250]
 
     # v41: Streamlit puo' conservare il risultato automatico ma lasciare vuoto
     # il widget dopo un cambio snapshot/rerun. Riallineiamo lo stato PRIMA
     # dell'istanziazione del text_input, senza sovrascrivere valori non vuoti
     # (anche se modificati manualmente dall'utente).
-    cached_basis = st.session_state.manual_csv_manual_csv_auto_basis_results.get(day.isoformat())
+    cached_basis = st.session_state.manual_csv_auto_basis_results.get(day.isoformat())
     if cached_basis is not None and not str(st.session_state.get(basis_key, '')).strip():
         st.session_state[basis_key] = str(int(Decimal(str(cached_basis['basis'])).quantize(
             Decimal('1'), rounding=ROUND_HALF_UP)))
@@ -306,7 +306,7 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
         st.caption('Calcolo automatico non disponibile: ' +
                    st.session_state[f'manual_csv_basis_auto_error_{day.isoformat()}'] +
                    '. Puoi inserire manualmente il differenziale.')
-    auto_result = st.session_state.manual_csv_manual_csv_auto_basis_results.get(day.isoformat())
+    auto_result = st.session_state.manual_csv_auto_basis_results.get(day.isoformat())
     if auto_result:
         st.caption(f"Proposta automatica **{auto_result['basis']:.2f} punti → arrotondata a {int(Decimal(str(auto_result['basis'])).quantize(Decimal('1'), rounding=ROUND_HALF_UP))} punti** · "
                    f"seduta {auto_result['reference_date']} · {auto_result['bar_count']} barre a 15 minuti "
@@ -476,20 +476,22 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
             return formatted.replace(',', '_').replace('.', ',').replace('_', '.')
 
         net_col, call_col, put_col = st.columns(3)
-        with net_col:
-            net_color = '#f05252' if net_summary < 0 else '#f1f5f9'
-            st.markdown(
-                '<div style="font-size:0.88rem;color:#d1d5db;'
-                'margin-bottom:0.35rem">NET GAMMA · Call − Put · 25+25</div>'
-                f'<div style="font-size:1.85rem;line-height:1.25;'
-                f'font-weight:400;color:{net_color};font-variant-numeric:tabular-nums">'
-                f'{_gamma_it(net_summary, signed=True)}</div>',
-                unsafe_allow_html=True,
-            )
-        call_col.metric('GAMMA CALL (+) · 25+25',
-                        _gamma_it(call_summary, signed=True))
-        put_col.metric('GAMMA PUT (−) · 25+25',
-                       '−' + _gamma_it(put_summary))
+        for col, label, value in (
+            (net_col, 'NET GAMMA · Call − Put · 25+25', net_summary),
+            (call_col, 'GAMMA CALL (+) · 25+25', call_summary),
+            (put_col, 'GAMMA PUT (−) · 25+25', -put_summary),
+        ):
+            color = '#f05252' if value < 0 else '#f1f5f9'
+            formatted = _gamma_it(value, signed=True).replace('-', '−')
+            with col:
+                st.markdown(
+                    '<div style="font-size:0.88rem;color:#d1d5db;'
+                    'margin-bottom:0.35rem">' + label + '</div>'
+                    f'<div style="font-size:1.85rem;line-height:1.25;'
+                    f'font-weight:400;color:{color};font-variant-numeric:tabular-nums">'
+                    f'{formatted}</div>',
+                    unsafe_allow_html=True,
+                )
         st.caption(
             f"**Totali originali Serafini:** {core_summary['profiles']} scadenze, "
             f"{core_summary['strikes']} strike (25 sopra e 25 sotto per scadenza). "
