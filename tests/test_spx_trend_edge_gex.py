@@ -247,9 +247,9 @@ class EdgeDailyKPITests(unittest.TestCase):
                          ("trend_daily_section.py",trend),
                          ("edge_daily_gex.py",display)):
             ast.parse(src,filename=name)
-        self.assertIn("trend_edge_gex = {}", app)
-        self.assertIn("on_valid_gex=trend_edge_gex.update", app)
-        self.assertIn("trend_edge_gex.clear()", app)
+        self.assertNotIn("trend_edge_gex = {}", app)
+        self.assertNotIn("on_valid_gex=trend_edge_gex.update", app)
+        self.assertNotIn("trend_edge_gex.clear()", app)
         # CSV is the reference for CONTESTO: keep legacy GEX out of Trend Daily.
         self.assertIn("modeled_gex=None", app)
         self.assertNotIn("modeled_gex=trend_edge_gex or None", app)

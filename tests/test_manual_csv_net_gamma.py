@@ -84,7 +84,7 @@ with patch.object(st,'file_uploader',return_value=Upload("""+data+""")), \\
         self.assertEqual(len(at.get("download_button")),1)
     def test_app_keeps_automatic_and_manual_independent(self):
         text=Path("app.py").read_text()
-        self.assertLess(text.index("asia_panel = render(store, week, snaps, logs"),text.index("render_manual_csv_net_gamma()"))
+        self.assertLess(text.index("asia_panel = render(store, week, snaps, logs"),text.index("render_manual_csv_net_gamma(mt4_store="))
         panel=Path("manual_csv/panel.py").read_text()
         self.assertNotIn("storage import",panel)
         self.assertNotIn("st.session_state[f\"serafini_selected_snapshot_",panel)
