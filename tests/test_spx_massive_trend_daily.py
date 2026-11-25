@@ -146,6 +146,12 @@ class SPXDailyTrendTests(unittest.TestCase):
         self.assertFalse(progress["upper_touched"])
         self.assertTrue(progress["lower_touched"])
         self.assertEqual(progress["last_day"], date(2026, 11, 17))
+        # Follow the CSV reference render path: its Daily fallback adds the
+        # last completed close before drawing the exploration widget.
+        progress["current_price"] = float(frame.iloc[-1]["Close"])
+        progress["source"] = "Ultima Daily ES chiusa"
+        progress["asof"] = None
+        self.assertEqual(progress["current_price"], 7580.)
         html = weekly_exploration_html(progress)
         self.assertIn("spx-weekly-fill", html)
         self.assertIn("17/11/2026", html)
