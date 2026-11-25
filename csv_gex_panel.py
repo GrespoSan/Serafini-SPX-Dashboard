@@ -129,8 +129,8 @@ def _curve_chart(report, spot, *, symbol, es_spx_basis=None, es_quote=None):
     display_symbol = gex_price_label(symbol)
     marker_on_curve(
         gex_display_price(spot, symbol, es_spx_basis),
-        f"Spot fotografia · {display_symbol} equivalente" if symbol == "SPX"
-        else f"Spot fotografia · {display_symbol}",
+        f"Spot modello GEX · {display_symbol} equivalente" if symbol == "SPX"
+        else f"Spot modello GEX · {display_symbol}",
         "#e5e7eb", "#9ca3af", 10,
     )
     for field, label, color, dash in (
