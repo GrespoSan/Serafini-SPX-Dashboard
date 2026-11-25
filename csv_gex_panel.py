@@ -162,7 +162,7 @@ def _curve_chart(report, spot, *, symbol, es_spx_basis=None, es_quote=None):
             fig.add_trace(go.Scatter(
                 x=[item["price"]], y=[item["gex"] / 1e9],
                 mode="markers+text", text=[f"{item['price']:,.2f}"], textposition=position,
-                textfont=dict(size=11, color=color),
+                textfont=dict(size=15, color="#86efac" if key == "maximum" else "#fda4af"),
                 marker=dict(size=10, color=color,
                             line=dict(width=1, color="#ffffff")),
                 name=label, showlegend=False,
