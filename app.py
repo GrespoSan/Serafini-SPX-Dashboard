@@ -326,12 +326,12 @@ with st.expander('ANALISI NET GAMMA', expanded=True):
 # Manual CSV is deliberately independent from automatic SPX archive state.
 try:
     from manual_csv.panel import render as render_manual_csv_net_gamma
-    render_manual_csv_net_gamma()
+    render_manual_csv_net_gamma(mt4_store=store if role == 'admin' else None)
 except Exception as exc:
     st.warning("Analisi NET GAMMA CSV non disponibile: " + type(exc).__name__)
 
 # Shared CSV GEX mathematics and presentation. Selected NET GAMMA source
-# is the only input; historical Cboe Edge comparison remains separate below.
+# is the only input; retired Edge comparison no longer runs.
 with st.expander('ANALISI GEX · Edge-style — modulo indipendente', expanded=False):
     try:
         from spx_csv_gex_section import render as show_csv_gex
@@ -343,57 +343,22 @@ with st.expander('ANALISI GEX · Edge-style — modulo indipendente', expanded=F
 # Same position as Serafini CSV: context follows GEX; populate last to avoid delaying other panels.
 context_slot = st.empty()
 
-# Transient read-only copy: never keep yesterday's GEX after an Edge
-# failure, an unavailable Supabase archive or a changed Cboe snapshot.
-# Only the already verified Edge panel can populate this per-run dict.
-trend_edge_gex = {}
-# Edge e Replay sono confronti storici: non sono disponibili con un solo
-# file offline e senza registri di acquisizione verificati.
-if not storage_unavailable:
-    try:
-        from edge_triptych import show as show_edge_triptych
-        show_edge_triptych(
-            week, store, logs, on_valid_gex=trend_edge_gex.update)
-    except Exception as exc:
-        # Un errore Edge non blocca Serafini/Trend Daily, ma non deve
-        # neppure far sparire silenziosamente l'intera sezione GEX.
-        trend_edge_gex.clear()
-        with st.expander('GEX EDGE — CONFRONTO · non disponibile', expanded=False):
-            st.warning('Caricamento GEX Edge non riuscito: '
-                       + type(exc).__name__ + '. '
-                       'Nessun livello sostitutivo o simulato.')
-
 # Confronto e Replay condividono la stessa sezione, con calcoli invariati.
 if not storage_unavailable:
     with st.expander('REPLAY E CONFRONTO', expanded=False):
         mode = st.radio(
             'Modalità di analisi',
             ('Replay con candele',
-             'Confronto diretto tra due rilevamenti',
-             'Replay Curva teorica GEX Edge + ES'),
+             'Confronto diretto tra due rilevamenti'),
             index=0,
             key='gamma_analysis_mode_v2',
         )
         if mode == 'Confronto diretto tra due rilevamenti':
             from gamma_section import render_comparison
             render_comparison(store, week, snaps, logs)
-        elif mode == 'Replay Curva teorica GEX Edge + ES':
-            try:
-                from edge_curve_replay import render as render_edge_curve_replay
-                render_edge_curve_replay(store, week, logs)
-            except (ValueError, TypeError, KeyError, RuntimeError, OSError,
-                    ImportError) as exc:
-                st.warning('Replay Curva GEX temporaneamente non disponibile: '
-                           + type(exc).__name__)
         else:
             from gamma_replay import render as render_gamma_replay
             render_gamma_replay(store, week, logs, view_mode='Candele ES + NET GAMMA')
-
-# Report storico disponibile solo per snapshot archiviati in Supabase.
-if not storage_unavailable:
-    with st.expander('REPORT GIORNALIERO AI', expanded=False):
-        from ai_report import render as render_ai_report
-        render_ai_report(store, week, snaps, logs)
 
 # Source of truth: Serafini-CSV/app.py · ANALISI DEL CONTESTO.
 # Only the archive week label and verified morning-data adapter are SPX-specific.
