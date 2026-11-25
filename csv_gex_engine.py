@@ -400,7 +400,10 @@ def analyze_csv_gex(blob: bytes, symbol: str, iv_mode="auto", *,
     target = _target_expiries(captured, cal)
     csv_last = spot
     spot_info = {"method":"CSV_LAST","certified":False}
-    if symbol.upper() == "SPX" and captured < datetime.combine(target["0DTE"], cal.sessions[target["0DTE"]].open, NY):
+    ny_stamp = captured.astimezone(NY)
+    session = cal.sessions.get(ny_stamp.date())
+    before_open = (ny_stamp.time() < session.open if session else True)
+    if symbol.upper() == "SPX" and before_open:
         if target["0DTE"] != captured.astimezone(NY).date():
             raise ValueError("GEX SPX pre-USA N/D: nessuna scadenza 0DTE della seduta corrente.")
         spot, spot_info = _premarket_spx_spot(doc["data"]["options"], target["0DTE"])
