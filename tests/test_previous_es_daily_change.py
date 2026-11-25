@@ -96,14 +96,15 @@ class DailyMovementTests(unittest.TestCase):
         self.assertEqual(observed,result)
         fetch.assert_called_once_with(date(2026,10,30),"ESZ6","fake-key")
 
-    def test_no_key_or_contract_does_not_fallback_to_yahoo(self):
+    def test_no_key_fails_and_contract_is_selected_automatically(self):
         with patch("daily_volatility.st.secrets",{}):
             with self.assertRaisesRegex(ValueError,"MASSIVE_API_KEY"):
                 previous_es_daily_range(date(2026,10,30))
         with patch("daily_volatility.st.secrets",
                    {"MASSIVE_API_KEY":"private-test-token"}):
-            with self.assertRaisesRegex(ValueError,"MASSIVE_ES_CONTRACT"):
-                previous_es_daily_range(date(2026,10,30))
+            with patch("daily_volatility._fetch_massive_es", return_value={"status":"VALIDO"}) as fetch:
+                self.assertEqual(previous_es_daily_range(date(2026,12,14)),{"status":"VALIDO"})
+                fetch.assert_called_once_with(date(2026,12,14),"ESH7","private-test-token")
 
 
 if __name__=="__main__":
