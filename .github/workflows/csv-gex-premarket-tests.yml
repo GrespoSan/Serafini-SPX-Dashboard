@@ -1,0 +1,24 @@
+name: CSV GEX premarket parity regression
+on:
+  pull_request:
+    paths:
+      - 'csv_gex_engine.py'
+      - 'csv_gex_services.py'
+      - 'csv_gex_panel.py'
+      - 'tests/test_csv_gex_premarket_spot.py'
+      - 'manual_csv/mt4.py'
+      - '.github/workflows/csv-gex-premarket-tests.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -p test_csv_gex_premarket_spot.py -v
