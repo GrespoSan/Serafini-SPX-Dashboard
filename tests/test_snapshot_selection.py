@@ -2,7 +2,7 @@
 import ast
 import json
 import unittest
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
@@ -44,6 +44,8 @@ def load_functions(fake_st):
     expected = {
         "_snapshot_log_index", "_latest_downloaded_snapshot",
         "_sync_snapshot_selection", "_snapshot_choice_changed",
+        "_snapshot_download_clock", "_compact_snapshot_label",
+        "_historical_menu_changed", "render_snapshot_selector",
     }
     selected = []
     for node in tree.body:
@@ -53,7 +55,10 @@ def load_functions(fake_st):
     assert {node.name for node in selected} == expected
     module = ast.fix_missing_locations(ast.Module(body=selected, type_ignores=[]))
     namespace = {
-        "st": fake_st, "datetime": datetime, "json": json, "ZoneInfo": ZoneInfo,
+        "st": fake_st, "datetime": datetime, "date": date, "json": json, "ZoneInfo": ZoneInfo,
+        "accepted": lambda name: name.startswith(("SPX_CBOE_", "SPX_ALPACA_")),
+        "parse_name": lambda name: (name.split("_")[1], datetime.strptime(name.split("_")[2], "%Y%m%d").date(), name.split("_")[3]),
+        "date_label": lambda name: datetime.strptime(name.split("_")[2], "%Y%m%d").strftime("%d/%m/%Y"),
     }
     exec(compile(module, str(path), "exec"), namespace)
     return namespace
@@ -106,6 +111,42 @@ class SnapshotSelectionTests(unittest.TestCase):
             self.st.session_state[f"serafini_selected_snapshot_{self.week}"],
             self.evening,
         )
+
+    def test_menu_only_visible_in_history_and_selection_persists(self):
+        calls = []
+        self.st.checkbox = lambda *a, **kw: None
+        self.st.caption = lambda label: calls.append(("caption", label))
+        self.st.selectbox = lambda label, names, **kw: calls.append(
+            ("selectbox", [kw["format_func"](name) for name in names]))
+        follow = f"serafini_follow_latest_{self.week}"
+        selected = f"serafini_selected_snapshot_{self.week}"
+        menu = f"serafini_snapshot_menu_{self.week}"
+
+        def render():
+            self.fn["render_snapshot_selector"](
+                self.store, self.week, self.store.list("x/snapshots/"),
+                self.store.list("x/logs/"))
+
+        render()
+        self.assertEqual(calls, [("caption", "04/11/2026 · ore 15:50 Roma · Cboe storico")])
+        self.st.session_state[follow] = False
+        calls.clear()
+        render()
+        self.assertEqual(calls[0][0], "selectbox")
+        self.assertFalse(any(".json.gz" in x for x in calls[0][1]))
+        self.st.session_state[menu] = self.morning
+        self.fn["_historical_menu_changed"](self.week, self.afternoon)
+        self.assertEqual(self.st.session_state[selected], self.morning)
+        # Simulate Streamlit dropping a conditional widget.
+        self.st.session_state.pop(menu)
+        self.store.add(self.evening, "log3", "20:30")
+        render()
+        self.assertEqual(self.st.session_state[selected], self.morning)
+        self.st.session_state[follow] = True
+        calls.clear()
+        render()
+        self.assertEqual(self.st.session_state[selected], self.evening)
+        self.assertEqual(calls[0][0], "caption")
 
     def test_no_scheduled_snapshot_or_edge_refresh(self):
         root = Path(__file__).resolve().parents[1]

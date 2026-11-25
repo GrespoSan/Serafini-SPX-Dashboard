@@ -717,10 +717,25 @@ def render_comparison(store, week, snaps, logs):
 
 
 
+def _compact_snapshot_label(store, week, logs, name):
+    kind, _, _ = parse_name(name)
+    source = "Alpaca · Gamma modellato" if kind == "ALPACA" else "Cboe storico"
+    clock = _snapshot_download_clock(store, week, logs, name)
+    when = f"ore {clock} Roma" if clock else "ora download N/D"
+    return f"{date_label(name)} · {when} · {source}"
+
+
+def _historical_menu_changed(week, latest):
+    # A conditional widget must not own the persistent snapshot selection.
+    widget_key = f'serafini_snapshot_menu_{week}'
+    st.session_state[f'serafini_selected_snapshot_{week}'] = st.session_state[widget_key]
+    _snapshot_choice_changed(week, latest)
+
+
 def render_snapshot_selector(store, week, snaps, logs):
-    """Default to latest download while historical selections remain available."""
+    """Compact automatic display; show the history menu only on request."""
     if not snaps or not any(accepted(item.get('name','')) for item in snaps):
-        st.caption("Nessuna fotografia SPX disponibile: puoi importare una fotografia Cboe storica.")
+        st.caption("Nessuna fotografia SPX disponibile.")
         return
     names, latest = _sync_snapshot_selection(store, week, snaps, logs)
     selection_key = f'serafini_selected_snapshot_{week}'
@@ -728,29 +743,30 @@ def render_snapshot_selector(store, week, snaps, logs):
     st.checkbox(
         "Segui automaticamente l'ultimo rilevamento SPX",
         value=True, key=follow_key,
-        help="Attivo: il profilo principale passa all'ultimo download. "
-             "Scegliere uno storico disattiva il seguito automatico; "
-             "riattivare la casella per tornare all'ultimo rilevamento.",
-    )
-    labels = {}
-    for name in names:
-        readable_date = date_label(name) if accepted(name) else 'Data n.d.'
-        if getattr(store, 'object_path', None) == f'{week}/snapshots/{name}':
-            capture = 'Importazione locale'
-        else:
-            capture = _acquisition_label(store, week, logs, name)
-        labels[name] = f'{readable_date} · {source_label(name)} · {capture} · {name}'
-    st.selectbox(
-        'Fotografia SPX · fonte identificata', names, key=selection_key,
-        format_func=lambda name: labels.get(name, name),
-        on_change=_snapshot_choice_changed, args=(week, latest),
+        help="Disattiva per scegliere una fotografia storica. Riattiva per seguire l'ultimo download.",
     )
     if st.session_state.get(follow_key, True):
-        st.caption("Modalità automatica: NET GAMMA 0DTE e Weekly seguono l'ultimo download disponibile.")
-    else:
-        st.caption("Modalità storica: la fotografia scelta rimane attiva anche con nuovi download.")
-    if not logs:
-        st.caption("Orario download non verificabile dai registri: nessun orario viene inventato.")
+        st.caption(_compact_snapshot_label(store, week, logs, st.session_state[selection_key]))
+        return
+    widget_key = f'serafini_snapshot_menu_{week}'
+    st.session_state[widget_key] = st.session_state[selection_key]
+    labels = {name: _compact_snapshot_label(store, week, logs, name) for name in names}
+    # Keep otherwise identical display labels distinguishable without raw filenames.
+    counts = {}
+    for name in names:
+        label = labels[name]
+        counts[label] = counts.get(label, 0) + 1
+    seen = {}
+    for name in names:
+        label = labels[name]
+        if counts[label] > 1:
+            seen[label] = seen.get(label, 0) + 1
+            labels[name] = f"{label} · rilevamento {seen[label]}"
+    st.selectbox(
+        'Fotografia SPX · storico', names, key=widget_key,
+        format_func=lambda name: labels[name],
+        on_change=_historical_menu_changed, args=(week, latest),
+    )
 
 
 def render(store, week, snaps, logs, *, show_heading=True, selector_external=False):
@@ -956,7 +972,7 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
     if selector_external:
         st.caption(f'Rilevamento selezionato: {acquisition_label} · '
                    f'Timestamp sorgente: {timestamp or "n.d."} · '
-                   f'Qualità timestamp: {quality_label} · file {choice}')
+                   f'Qualità timestamp: {quality_label}')
     else:
         col_snapshot, col_snapshot_info = st.columns(
             [1.25, 2.75], gap='small', vertical_alignment='bottom')
@@ -966,7 +982,7 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
         with col_snapshot_info:
             st.caption(f'Rilevamento selezionato: {acquisition_label} · '
                        f'Timestamp sorgente: {timestamp or "n.d."} · '
-                       f'Qualità timestamp: {quality_label} · file {choice}')
+                       f'Qualità timestamp: {quality_label}')
     st.markdown('**Priorità operativa alle 0DTE:** Serafini richiama un peso numerico del '
                 '**60% per le 0DTE** e del **23% per le Weekly** e, in caso di dubbio, '
                 'privilegia i livelli 0DTE più marcati.')
