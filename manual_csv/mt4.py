@@ -74,13 +74,17 @@ def build_feed(doc,ref,basis,basis_info,source,saved,iv_label,now=None):
         if (report["sha256"]!=sha or g["expiry"]!=day.isoformat()
                 or datetime.fromisoformat(report["timestamp_utc"])!=stamp):
             raise ValueError("GEX fotografia diversa")
+        if stamp.astimezone(NY).hour*60+stamp.astimezone(NY).minute < 570:
+            if (report.get("spot_info") or {}).get("method")!="SPXW_0DTE_PUT_CALL_PARITY_R0_Q0":
+                raise ValueError("GEX mattutino non ricalcolato con parità SPXW")
+        sign={"positive":"Positive","negative":"Negative","neutral":"Zero"}[g["regime"]]
         net=float(g["net_gex"])
         if not math.isfinite(net): raise ValueError("GEX non valido")
         fields=[("gex_model","EDGE_0DTE"),("gex_source",SOURCE),
                 ("gex_quality","DIAGNOSTICO_NON_CERTIFICATO"),
                 ("gex_source_sha256",sha),("gex_source_timestamp_utc",stamp.isoformat()),
                 ("gex_cboe_timestamp",doc["timestamp"]),("gex_expiry",day.isoformat()),
-                ("gex_modeled_sign","Positive" if net>0 else "Negative" if net<0 else "Zero"),
+                ("gex_modeled_sign",sign),
                 ("gex_net_usd_billion_per_1pct",f"{net/1e9:.12f}")]
         for key,label in (("call_wall","call_wall"),("put_wall","put_wall"),("flip","gamma_flip")):
             if g.get(key) is None: continue
