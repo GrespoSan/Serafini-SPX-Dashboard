@@ -754,4 +754,4 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
                     st.caption('Usa l’icona Copia in alto a destra del codice per incollarlo in TradingView.')
                     st.code(script, language=None, wrap_lines=False)
 
-    return asia_panel
+    return {**asia_panel, 'reference_spx': ref, 'snapshot': snap, 'basis_info': auto_result}
