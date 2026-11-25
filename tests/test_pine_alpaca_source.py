@@ -24,6 +24,21 @@ class PineDerivedSourceTest(unittest.TestCase):
         self.assertIn("snapshot Cboe",make_pine(odte,weekly,40,"2026-11-23",""))
         self.assertNotIn("// Esportazione STATICA da uno snapshot Cboe",code)
 
+    def test_selected_pine_works_without_morning_and_uses_actual_clock(self):
+        odte, weekly = data()
+        for group in (odte, weekly):
+            core = group["rows"]
+            group["display_rows"] = sorted(core + [
+                {"strike_spx":float(k), "net_gamma":0.01} for k in range(126,276)
+            ],key=lambda x:x["strike_spx"])
+        script = make_pine(odte,weekly,16,"2026-11-23","",
+                           "16:16 Roma",data_source="ALPACA_INDICATIVE_OCC_OI",
+                           capture_clock="16:16")
+        self.assertIn("0DTE 16:16",script)
+        self.assertIn("Weekly 16:16",script)
+        self.assertNotIn("Mostra 0DTE precedente",script)
+        self.assertIn("MAX 200 per profilo",script)
+
     def test_comparison_keeps_same_provenance(self):
         odte,weekly=data()
         script=make_pine_comparison(

@@ -1337,6 +1337,36 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
         'level_context': asia_level_context,
         'es_spx_basis': offset if offset is not None and math.isfinite(offset) else None,
     }
+    st.subheader('Esporta su TradingView — fotografia selezionata')
+    # The current valid chart must export even with no morning or slot log.
+    # Use exactly the displayed real strikes and the applied basis.
+    try:
+        if offset is None or not math.isfinite(offset):
+            raise ValueError('Differenziale ES-SPX non disponibile')
+        current_profiles = {
+            title: dict(computed_profiles[title], display_rows=visual_profiles[title]['rows'])
+            for title in ('0DTE', 'Weekly')
+        }
+        current_source = ('ALPACA_INDICATIVE_OCC_OI' if kind == 'ALPACA' else 'CBOE_ORIGINAL')
+        current_label = (f'{download_clock} Roma · fotografia selezionata'
+                         if download_clock else 'Fotografia selezionata · ora download N/D')
+        selected_pine = make_pine(
+            current_profiles['0DTE'], current_profiles['Weekly'], offset,
+            day.isoformat(), timestamp if kind != 'ALPACA' else '',
+            current_label, data_source=current_source, capture_clock=download_clock)
+        if kind == 'ALPACA':
+            st.caption('Pine della stessa fotografia NET GAMMA visibile. GEX Alpaca diagnostico non esportato; nessuna fotografia mattutina richiesta.')
+        else:
+            st.caption('Pine della stessa fotografia NET GAMMA visibile, senza confronto con altri rilevamenti.')
+        st.download_button('Scarica Pine SPX · fotografia corrente',
+            data=selected_pine.encode('utf-8'),
+            file_name=f'Serafini_NET_GAMMA_{day:%Y-%m-%d}_{(download_clock or "ND").replace(":", "")}.pine',
+            mime='text/plain', key=f'pine_selected_{week}', on_click="ignore")
+        with st.expander('Visualizza e copia codice Pine · fotografia corrente'):
+            st.code(selected_pine, language='pine')
+    except (ValueError, TypeError, KeyError, RuntimeError) as exc:
+        st.info('Pine fotografia corrente non disponibile: ' + str(exc)[:180])
+
     st.subheader('Esporta i profili su TradingView — 5 situazioni')
     scripts = {}
     export_issues = {}
@@ -1367,9 +1397,16 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
                                            if slot == '14:46' and day < CUTOFF_1446 else
                                            f'Rilevamento {slot} non disponibile o incompleto')
                     continue
-                if preceding_slot and preceding_frame is None:
-                    export_issues[slot] = f'Manca 0DTE {preceding_slot}, confronto non esportabile'
-                    continue
+                if preceding_slot and (
+                    preceding_frame is None or
+                    preceding_frame.get('data_source') != current.get('data_source')
+                ):
+                    if current.get('data_source') == 'ALPACA_INDICATIVE_OCC_OI':
+                        # No fabricated morning frame and no cross-source comparison.
+                        preceding_slot = None
+                    else:
+                        export_issues[slot] = 'Fotografia precedente assente o fonte diversa; confronto non esportabile'
+                        continue
                 try:
                     current_p = current['profiles']
                     if preceding_slot:
@@ -1385,9 +1422,11 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
                         scripts[slot] = make_pine(
                             current_p['0DTE'], current_p['Weekly'], offset,
                             day.isoformat(), current.get('cboe_timestamp') or '',
-                            'Mattina 07:30' if slot == '07:30' else 'Sera 20:30',
+                            f'{slot} · fotografia corrente',
                             gex=current.get('gex_levels'),
-                            data_source=current.get('data_source','CBOE_ORIGINAL'))
+                            data_source=current.get('data_source','CBOE_ORIGINAL'),
+                            capture_clock=(datetime.fromisoformat(current['download_rome']).astimezone(ZoneInfo('Europe/Rome')).strftime('%H:%M')
+                                           if current.get('download_rome') else None))
                 except (ValueError, TypeError, KeyError, RuntimeError) as exc:
                     export_issues[slot] = str(exc)[:130]
         except Exception as exc:
@@ -1476,7 +1515,11 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
                     slot, 'Necessario il differenziale ES-SPX'),
                 on_click="ignore",
             )
-            st.caption(description)
+            if (script is not None and (sources.get(slot) or {}).get('data_source') == 'ALPACA_INDICATIVE_OCC_OI'
+                    and 'Mostra 0DTE precedente' not in script):
+                st.caption(f'{slot} · 0DTE + Weekly correnti, senza confronto')
+            else:
+                st.caption(description)
             if status_message:
                 st.caption(status_message)
             if script is not None:

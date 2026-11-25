@@ -56,7 +56,7 @@ def _initial_manual_scale(profiles):
     return ceil(minimum * 10.0 - 1e-8) / 10.0
 
 
-def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stamp: str, acquisition_label: str = '', *, current_only: bool = False, gex: dict | None = None, data_source: str = "CBOE_ORIGINAL") -> str:
+def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stamp: str, acquisition_label: str = '', *, current_only: bool = False, gex: dict | None = None, data_source: str = "CBOE_ORIGINAL", capture_clock: str | None = None) -> str:
     if not isfinite(offset):
         raise ValueError('Il differenziale non è finito')
     if not odte.get('rows') or not weekly.get('rows'):
@@ -65,8 +65,8 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
         if len(group['rows']) != 50:
             raise ValueError('Il profilo Serafini originale deve restare 25+25')
         visual = group.get('display_rows') or group['rows']
-        if not 50 <= len(visual) <= 140:
-            raise ValueError('Il Pine visivo ammette 50-140 strike per profilo')
+        if not 50 <= len(visual) <= 200:
+            raise ValueError('Il Pine visivo ammette 50-200 strike per profilo')
         core = {float(x['strike_spx']): float(x['net_gamma'])
                 for x in group['rows']}
         extended = {float(x['strike_spx']): float(x['net_gamma'])
@@ -129,7 +129,7 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
         )
     else:
         # Intestazioni associate allo slot realmente esportato, mai fisse a 07:30.
-        display_clock = '20:30' if '20:30' in clean_label else '07:30'
+        display_clock = capture_clock if capture_clock and re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d', capture_clock) else ('ora N/D' if is_alpaca else ('20:30' if '20:30' in clean_label else '07:30'))
         odte_heading = f'0DTE {display_clock}'
         weekly_heading = f'Weekly {display_clock}'
         indicator_title = f'Serafini SPX NET GAMMA | {date_text}{tag}'
@@ -144,7 +144,7 @@ indicator("{indicator_title}", overlay=true, max_lines_count=500, max_labels_cou
 {clock_note}// Data snapshot: {date_text} | 0DTE: {odte['expiry']} | Weekly: {weekly['expiry']}
 // Differenziale ES-SPX GIA' APPLICATO agli strike: {offset:.4f}
 // Formula originale: (OI_CALL+VOL_CALL)*GAMMA_CALL - (OI_PUT+VOL_PUT)*GAMMA_PUT.
-// Metodo Serafini INVARIATO: 25 strike SOPRA e 25 SOTTO per C1/P1 e analisi.\n// Estensione grafica: strike {extension_token} realmente presenti nella stessa fotografia, MAX 140 per profilo; non modifica i 50 originali.
+// Metodo Serafini INVARIATO: 25 strike SOPRA e 25 SOTTO per C1/P1 e analisi.\n// Estensione grafica: strike {extension_token} realmente presenti nella stessa fotografia, MAX 200 per profilo; non modifica i 50 originali.
 // Profili graficamente separati come slide 139: 0DTE vicino alle candele, Weekly piu' a destra.
 {warning}// Scala MANUALE, unica per tutti i profili e mai adattata dal codice.
 // Se la scala selezionata supera il limite grafico di TradingView (+500 barre),
