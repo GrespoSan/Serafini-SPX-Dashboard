@@ -261,7 +261,7 @@ def _strikes_chart(report, *, symbol, spot, es_spx_basis=None, window="±2%"):
         ("Call Wall", report["call_wall"], "#8fe10a", "solid", "#8fe10a", "#13210c"),
         ("Put Wall", report["put_wall"], "#9634db", "solid", "#9634db", "#ffffff"),
         ("Gamma Flip", report["flip"], "#c084fc", "dot", "#251237", "#e9c7ff"),
-        ("Spot fotografia", spot, "#e2e8f0", "dash", "#e2e8f0", "#111827"),
+        ("Spot modello GEX", spot, "#e2e8f0", "dash", "#e2e8f0", "#111827"),
     ]
     offscreen = []
     for label, raw, color, dash, background, foreground in markers:
@@ -423,6 +423,12 @@ def render_report(info, symbol, *, es_spx_basis=None):
     selected = st.radio("Scadenza GEX", ["0DTE", "Weekly"], horizontal=True,
                         key="csv_gex_selected_expiry")
     report = info["reports"][selected]
+    spot_info = info.get("spot_info") or {}
+    if spot_info.get("method") == "SPXW_0DTE_PUT_CALL_PARITY_R0_Q0":
+        st.caption(f"**SPX implicito dalle opzioni: {info['spot']:,.2f}** · "
+                   f"Last CSV (cash precedente): {info['csv_last']:,.2f} · "
+                   f"{spot_info['pairs']} coppie SPXW 0DTE coerenti · "
+                   "stima diagnostica, non quotazione cash live.")
     price_symbol = gex_price_label(symbol)
     basis_available = (symbol != "SPX" or
                        (es_spx_basis is not None and
@@ -507,14 +513,14 @@ def render_report(info, symbol, *, es_spx_basis=None):
         st.subheader("GEX by Strike · composizione Call / Put")
         st.caption(
             "**PUTS − a sinistra (viola)** · **CALLS + a destra (verde)**. "
-            "La linea bianca indica lo spot della fotografia "
+            "La linea bianca indica lo spot utilizzato dal modello GEX "
             + ("in equivalente ES; NON è la quotazione ES attuale."
                if symbol == "SPX" else "del sottostante.") +
             " Wall e Gamma Flip sono contrassegnati da linee orizzontali "
             "e cartellini a destra. I grafici utilizzano lo stesso report GEX."
         )
         selected_window = st.segmented_control(
-            "Intervallo di prezzo attorno allo spot della fotografia",
+            "Intervallo di prezzo attorno allo spot utilizzato dal modello GEX",
             options=list(GEX_STRIKE_WINDOWS),
             default="±2%", key="csv_gex_strike_window",
             help="Riduce solo gli strike visibili; non modifica GEX, "
