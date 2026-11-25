@@ -49,8 +49,19 @@ def _rome(value):
     except (ValueError, TypeError):
         return "N/D"
 
-def render(week, store, uploaded=None):
+def render(week, store, uploaded=None, *, manual_input=None):
     ctx = st.session_state.get(f"gamma_compare_context_{week}")
+    if manual_input is not None:
+        source = "CSV manuale"
+        if ctx and parse_name(ctx["snapshot"])[0] == "ALPACA":
+            source = st.radio("Fonte GEX", ["CSV manuale", "Alpaca automatico"],
+                              horizontal=True, key="spx_gex_display_source")
+        if source == "CSV manuale":
+            st.caption("Fonte GEX: fotografia CSV manuale caricata sopra.")
+            render_csv(manual_input["payload"], manual_input["symbol"],
+                       es_spx_basis=manual_input.get("es_spx_basis"),
+                       state_prefix="manual_")
+            return
     if not ctx:
         st.info("Seleziona prima una fotografia NET GAMMA valida.")
         return

@@ -98,6 +98,7 @@ def render(mt4_store=None):
                     type(exc).__name__ + ': ' + str(exc)[:250]
                 )
 
+            basis = None
             if market == "SP500":
                 store = load_local_snapshot(upload.name, upload.getvalue())
                 warning = csv_coverage_warning(store.import_provenance)
@@ -107,6 +108,7 @@ def render(mt4_store=None):
                 snaps = store.list(f"{week}/snapshots/")
                 st.session_state[f"manual_csv_serafini_selected_snapshot_{week}"] = store.filename
                 result = render_csv_net_gamma(store, week, snaps, [], show_heading=False, selector_external=True)
+                basis = result.get('es_spx_basis') if result else None
                 if mt4_store is not None and st.session_state.get("role")=="admin" and result:
                     st.caption("MT4: 100 strike reali per scadenza (50+50); il nucleo 25+25 resta invariato.")
                     if st.button("INVIA A MT4",type="primary",key="manual_csv_mt4_send"):
@@ -123,5 +125,6 @@ def render(mt4_store=None):
                             st.error("Invio MT4 non riuscito: "+(str(exc) if isinstance(exc,ValueError) else type(exc).__name__))
             else:
                 render_market(upload, symbol, equity)
+            return {'payload': csv_bytes, 'symbol': symbol, 'es_spx_basis': basis}
         except (InvalidLocalSnapshot, InvalidCboeCSV, ValueError) as exc:
             st.error(str(exc))

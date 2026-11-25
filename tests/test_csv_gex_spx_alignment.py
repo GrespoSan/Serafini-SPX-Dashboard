@@ -48,6 +48,28 @@ class AlignmentTests(unittest.TestCase):
         doc['source_provenance']['source']='CBOE'
         with self.assertRaises(ValueError):
             analyze_alpaca_snapshot(doc,d)
+    def test_manual_gex_without_automatic_snapshot(self):
+        from unittest.mock import patch
+        from spx_csv_gex_section import render
+        manual={"payload":b"csv", "symbol":"SPX", "es_spx_basis":16.0}
+        with patch("spx_csv_gex_section.st") as st, patch("spx_csv_gex_section.render_csv") as show, patch("spx_csv_gex_section._selected_snapshot") as archived:
+            st.session_state={}
+            render("2026-W48", None, manual_input=manual)
+            show.assert_called_once_with(b"csv","SPX",es_spx_basis=16.0,state_prefix="manual_")
+            archived.assert_not_called()
+
+    def test_manual_gex_selected_even_with_automatic_snapshot(self):
+        from unittest.mock import patch
+        from spx_csv_gex_section import render
+        manual={"payload":b"other", "symbol":"NDX", "es_spx_basis":None}
+        with patch("spx_csv_gex_section.st") as st, patch("spx_csv_gex_section.render_csv") as show, patch("spx_csv_gex_section._selected_snapshot") as archived:
+            st.session_state={"gamma_compare_context_2026-W48":{
+                "snapshot":"SPX_ALPACA_20261125_150000.json.gz","offset":16}}
+            st.radio.return_value="CSV manuale"
+            render("2026-W48",None,manual_input=manual)
+            show.assert_called_once_with(b"other","NDX",es_spx_basis=None,state_prefix="manual_")
+            archived.assert_not_called()
+
     def test_module_imports_and_binding(self):
         import csv_gex_panel, spx_csv_gex_section
         self.assertTrue(callable(csv_gex_panel.render_report))

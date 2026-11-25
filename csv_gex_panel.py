@@ -322,7 +322,7 @@ def _strikes_chart(report, *, symbol, spot, es_spx_basis=None, window="±2%"):
     return fig
 
 
-def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> None:
+def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None, state_prefix="") -> None:
     st.caption(
         "**Modulo GEX locale, modello Edge-style.** "
         "Dati di base dal CSV Cboe; Open Interest dal CSV oppure da OCC, "
@@ -338,7 +338,7 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
     st.selectbox(
         "Fonte Open Interest per il GEX",
         list(OI_LABELS),
-        key="csv_gex_oi_source",
+        key=state_prefix + "csv_gex_oi_source",
         help=("Auto: prova OCC solo sul CSV della seduta corrente; "
               "se la riconciliazione non supera il 95%, torna al CSV con avviso. "
               "OCC only: nessun fallback. La data OI non è certificata "
@@ -356,19 +356,19 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
     }
     choice = st.selectbox(
         "Unità della volatilità implicita nel CSV",
-        list(labels), key="csv_gex_iv_units",
+        list(labels), key=state_prefix + "csv_gex_iv_units",
         help="Rilevamento automatico predefinito. Se l'unità IV è ambigua, "
              "è possibile correggerla qui: l'app ricalcola da sola al cambio.",
     )
     mode = labels[choice]
-    oi_mode=OI_LABELS.get(st.session_state.get("csv_gex_oi_source",
+    oi_mode=OI_LABELS.get(st.session_state.get(state_prefix + "csv_gex_oi_source",
                                                DEFAULT_OI_LABEL),"auto")
     signature = (digest, symbol, mode, oi_mode)
     # Il report è stato preparato automaticamente prima dei Pine.
     # Qui si visualizza soltanto: nessun pulsante, rerun o secondo download.
-    saved = st.session_state.get("csv_gex_last_report")
+    saved = st.session_state.get(state_prefix + "csv_gex_last_report")
     if not saved or saved[0] != signature:
-        error = st.session_state.get("csv_gex_last_error")
+        error = st.session_state.get(state_prefix + "csv_gex_last_error")
         if error:
             st.warning("GEX non calcolabile da questo CSV: " + error)
         else:

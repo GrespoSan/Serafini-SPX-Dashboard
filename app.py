@@ -274,18 +274,18 @@ with st.expander('ANALISI NET GAMMA', expanded=False):
     asia_panel = render(store, week, snaps, logs, show_heading=False, selector_external=True)
 
 # Manual CSV is deliberately independent from automatic SPX archive state.
+manual_gex_input = None
 try:
     from manual_csv.panel import render as render_manual_csv_net_gamma
-    render_manual_csv_net_gamma(mt4_store=store if role == 'admin' else None)
+    manual_gex_input = render_manual_csv_net_gamma(mt4_store=store if role == 'admin' else None)
 except Exception as exc:
     st.warning("Analisi NET GAMMA CSV non disponibile: " + type(exc).__name__)
 
-# Shared CSV GEX mathematics and presentation. Selected NET GAMMA source
-# is the only input; retired Edge comparison no longer runs.
+# Shared GEX display: manual CSV by default when present; automatic archive selectable.
 with st.expander('ANALISI GEX · Edge-style — modulo indipendente', expanded=False):
     try:
         from spx_csv_gex_section import render as show_csv_gex
-        show_csv_gex(week, store)
+        show_csv_gex(week, store, manual_input=manual_gex_input)
     except Exception as exc:
         st.warning('GEX non disponibile: '+type(exc).__name__+
                    '. NET GAMMA rimane utilizzabile; nessun livello sostitutivo.')
