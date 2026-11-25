@@ -68,6 +68,16 @@ def build_feed(doc,ref,basis,basis_info,source,saved,iv_label,now=None):
           ("published_utc",now.isoformat()),("cboe_timestamp",doc["timestamp"]),
           ("snapshot_source",SOURCE),("snapshot_sha256",sha),
           ("source_timestamp_utc",stamp.isoformat()),("quote_age_mode","CSV_MANUAL")]
+    # Same unextended 25+25 core per expiry as the dashboard; never sum the 100-strike display.
+    core_profiles=[profile(doc,expiry,float(ref)) for expiry in (day,weekly_expiry(day))]
+    if any(len(group["rows"])!=50 or len({r["strike_spx"] for r in group["rows"]})!=50
+           for group in core_profiles):
+        raise ValueError("NET GAMMA 25+25 incompleto")
+    core_net=math.fsum(float(r["net_gamma"]) for group in core_profiles for r in group["rows"])
+    if not math.isfinite(core_net):
+        raise ValueError("NET GAMMA non finito")
+    meta.extend([("serafini_net_gamma_core_25x2",f"{core_net:.12f}"),
+                 ("serafini_net_gamma_core_strikes","100")])
     try:
         report,good=validate_result(saved,source,MODE_BY_LABEL.get(iv_label,"auto"))
         g=good["0DTE"]
