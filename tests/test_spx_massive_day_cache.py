@@ -124,13 +124,12 @@ class SPXMassiveCacheTests(unittest.TestCase):
         self.assertLess(app.index("snaps = store.list("),
                         app.index("context_data = render_vix_context"))
         self.assertIn("render_snapshot_selector(store, week, snaps, logs)",app)
-        # Edge still uses the same SPX snapshot and archive, but now
-        # copies a validated read-only summary into Trend Daily.
+        # Retired Edge and emergency Pine entrypoints stay absent.
         self.assertNotIn("show_edge_triptych(",app)
         self.assertNotIn("week, store, logs, on_valid_gex=trend_edge_gex.update",app)
-        self.assertIn("trend_edge_gex.clear()",app)
+        self.assertNotIn("trend_edge_gex.clear()",app)
         self.assertIn("render_gamma_replay(store, week, logs",app)
-        self.assertIn("render_emergency_pine()",app)
+        self.assertNotIn("render_emergency_pine()",app)
         self.assertIn("_fetch_massive_es.clear()",app)
 
 
