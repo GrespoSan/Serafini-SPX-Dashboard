@@ -212,8 +212,9 @@ with st.sidebar:
         refresh_current_data()
         st.toast('Aggiornamento richiesto: ricarico i dati disponibili.', icon='🔄')
     if st.button('Esci'):
-        for key in ('role',):
-            st.session_state.pop(key, None)
+        for key in list(st.session_state.keys()):
+            if key == 'role' or key.startswith('manual_csv_'):
+                st.session_state.pop(key, None)
         st.rerun()
 
 # Allineamento al layout Multi-Market: CONTEXTO collassato, NET GAMMA aperto,
@@ -228,6 +229,13 @@ st.markdown("""
     box-sizing: border-box;
     padding-left: clamp(1rem, 2vw, 3rem);
     padding-right: clamp(1rem, 2vw, 3rem);
+}
+.st-key-manual_csv_pine_download_control button,
+.st-key-manual_csv_pine_download_control button p,
+.st-key-manual_csv_pine_copy_container [data-testid="stExpander"] summary,
+.st-key-manual_csv_pine_copy_container [data-testid="stExpander"] summary p {
+    color: #ff626b !important;
+    font-weight: 750 !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -314,6 +322,13 @@ with st.expander('ANALISI NET GAMMA', expanded=True):
             st.info('Non sono presenti registri per questa settimana.')
 
         # I registri restano consultabili solo quando l'archivio è disponibile.
+
+# Manual CSV is deliberately independent from automatic SPX archive state.
+try:
+    from manual_csv.panel import render as render_manual_csv_net_gamma
+    render_manual_csv_net_gamma()
+except Exception as exc:
+    st.warning("Analisi NET GAMMA CSV non disponibile: " + type(exc).__name__)
 
 # Shared CSV GEX mathematics and presentation. Selected NET GAMMA source
 # is the only input; historical Cboe Edge comparison remains separate below.
