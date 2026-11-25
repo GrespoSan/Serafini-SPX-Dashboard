@@ -62,7 +62,7 @@ def render(week, store, uploaded=None):
         return
     choice = ctx["snapshot"]
     if parse_name(choice)[0] != "ALPACA":
-        st.info("Per JSON Cboe storico resta disponibile il pannello storico GEX EDGE sottostante. Il nuovo motore usa CSV originale o snapshot Alpaca con IV documentata.")
+        st.info("Il nuovo motore usa CSV originale o snapshot Alpaca con IV documentata; GEX storico JSON non disponibile in questo modulo.")
         return
     snap = _selected_snapshot(week, choice, store)
     info = _alpaca_report(snap, ctx["day"])
