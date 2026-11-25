@@ -200,16 +200,12 @@ class EmergencyPineTests(unittest.TestCase):
     def test_app_layout_and_no_legacy_cross_calls(self):
         app = (ROOT / "app.py").read_text()
         emg = (ROOT / "emergency_pine.py").read_text()
-        self.assertIn("PINE DI EMERGENZA — NET GAMMA CORRENTE", app)
-        self.assertIn("render_emergency_pine()", app)
-        self.assertLess(app.index("context_slot = st.empty()"),
-                        app.index("PINE DI EMERGENZA"))
-        self.assertLess(app.index("with st.expander('ANALISI NET GAMMA'"),
-                        app.index("PINE DI EMERGENZA"))
-        self.assertLess(app.index("with st.expander('REPLAY E CONFRONTO'"),
-                        app.index("PINE DI EMERGENZA"))
-        self.assertLess(app.index("with st.expander('REPORT GIORNALIERO AI'"),
-                        app.index("PINE DI EMERGENZA"))
+        self.assertNotIn("PINE DI EMERGENZA — NET GAMMA CORRENTE", app)
+        self.assertNotIn("render_emergency_pine()", app)
+        self.assertIn("context_slot = st.empty()", app)
+        self.assertIn("with st.expander('ANALISI NET GAMMA'", app)
+        self.assertIn("with st.expander('REPLAY E CONFRONTO'", app)
+        self.assertIn("with st.expander('REPORT GIORNALIERO AI'", app)
         self.assertNotIn("from storage import", emg)
         self.assertNotIn("Supabase", emg.replace("senza Supabase", "").replace(
             "Nessun Supabase", ""))  # no backend calls
